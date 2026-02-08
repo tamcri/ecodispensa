@@ -43,44 +43,35 @@ const recipeSchema = {
 
 export const generateRecipesFromPantry = async (items: PantryItem[]): Promise<Recipe[]> => {
   if (items.length === 0) return [];
-  if (!ai) return [];
 
-
-  const inventoryList = items.map(i => `${i.quantity} ${i.unit} di ${i.name} (scade il: ${i.expiryDate || 'N/A'})`).join(', ');
-
-  const prompt = `
-    Agisci come uno chef esperto di cucina sostenibile e anti-spreco.
-    Ho questi ingredienti nella mia dispensa: ${inventoryList}.
-    
-    Suggerisci 3 ricette gustose che posso preparare principalmente con questi ingredienti per evitare che scadano.
-    
-    IMPORTANTE:
-    - In "ingredientsUsed", devi indicare ESATTAMENTE il nome del prodotto presente in dispensa e la quantità necessaria per la ricetta.
-    - Se serve mezza bottiglia di latte e in dispensa c'è "Latte", scrivi quantity: 0.5, unit: l (o l'unità coerente).
-    - È accettabile suggerire di comprare 1-2 ingredienti freschi extra se necessario.
-    
-    Rispondi SOLO con un JSON array.
-  `;
+  const inventoryList = items
+    .map((i) => `${i.quantity} ${i.unit} di ${i.name} (scade il: ${i.expiryDate || "N/A"})`)
+    .join(", ");
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: recipeSchema
-      }
+    const r = await fetch("/api/recipes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inventoryList }),
     });
 
-    const text = response.text;
-    if (!text) return [];
-    return JSON.parse(text) as Recipe[];
+    const data = await r.json();
 
+    if (!r.ok) {
+      console.error("API /api/recipes error:", data);
+      return [];
+    }
+
+    const text = data?.text;
+    if (!text) return [];
+
+    return JSON.parse(text) as Recipe[];
   } catch (error) {
-    console.error("Errore Gemini:", error);
+    console.error("Errore OpenAI /api/recipes:", error);
     return [];
   }
 };
+
 
 export const generateRecipeFromIdea = async (idea: string, pantryItems: PantryItem[]): Promise<Recipe[]> => {
     const inventoryList = pantryItems.map(i => i.name).join(', ');
