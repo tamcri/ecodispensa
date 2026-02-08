@@ -1,0 +1,7 @@
+{
+  "name": "EcoDispensa",
+  "description": "Un'applicazione intelligente per gestire la dispensa, organizzare la spesa e ridurre gli sprechi alimentari con suggerimenti AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
