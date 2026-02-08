@@ -2,9 +2,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PantryItem, Recipe, Category } from "../types";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+const rawKey = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim() ?? "";
 
-const ai = new GoogleGenAI({ apiKey });
+const apiKey =
+  rawKey && rawKey !== "PLACEHOLDER_API_KEY" && rawKey.length > 20 ? rawKey : null;
+
+// ✅ Gemini è opzionale: se manca key, non inizializziamo nulla (niente crash)
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
 
 // Helper to get today's date for context
 const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -38,6 +43,8 @@ const recipeSchema = {
 
 export const generateRecipesFromPantry = async (items: PantryItem[]): Promise<Recipe[]> => {
   if (items.length === 0) return [];
+  if (!ai) return [];
+
 
   const inventoryList = items.map(i => `${i.quantity} ${i.unit} di ${i.name} (scade il: ${i.expiryDate || 'N/A'})`).join(', ');
 
@@ -77,7 +84,8 @@ export const generateRecipesFromPantry = async (items: PantryItem[]): Promise<Re
 
 export const generateRecipeFromIdea = async (idea: string, pantryItems: PantryItem[]): Promise<Recipe[]> => {
     const inventoryList = pantryItems.map(i => i.name).join(', ');
-  
+  if (!ai) return [];
+
     const prompt = `
       L'utente vuole cucinare: "${idea}".
       
@@ -116,6 +124,8 @@ export const suggestShoppingList = async (pantryItems: PantryItem[], history: st
 }
 
 export const identifyItemFromImage = async (base64Image: string): Promise<Partial<PantryItem> | null> => {
+  if (!ai) return null;
+
   const prompt = `
     Analizza questa immagine di un prodotto alimentare.
     Identifica il prodotto e restituisci un oggetto JSON con:
