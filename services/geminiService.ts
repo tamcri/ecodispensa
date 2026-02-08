@@ -62,10 +62,10 @@ export const generateRecipesFromPantry = async (items: PantryItem[]): Promise<Re
       return [];
     }
 
-    const text = data?.text;
-    if (!text) return [];
+    const recipes = data?.recipes;
+if (!recipes) return [];
+return recipes as Recipe[];
 
-    return JSON.parse(text) as Recipe[];
   } catch (error) {
     console.error("Errore OpenAI /api/recipes:", error);
     return [];

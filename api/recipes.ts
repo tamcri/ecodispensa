@@ -25,10 +25,9 @@ Ho questi ingredienti nella mia dispensa: ${inventoryList}.
 Suggerisci 3 ricette gustose che posso preparare principalmente con questi ingredienti per evitare che scadano.
 
 IMPORTANTE:
-- In "ingredientsUsed", devi indicare ESATTAMENTE il nome del prodotto presente in dispensa e la quantità necessaria per la ricetta.
-- È accettabile suggerire di comprare 1-2 ingredienti freschi extra se necessario.
-
-Rispondi SOLO con un JSON array con questa struttura:
+- Rispondi SOLO con un JSON array.
+- Nessun testo fuori dal JSON.
+- Struttura:
 [
   {
     "title": "...",
@@ -55,18 +54,45 @@ Rispondi SOLO con un JSON array con questa struttura:
     });
 
     const data = await r.json();
+
     if (!r.ok) {
+      console.error("OpenAI error:", data);
       return res.status(r.status).json({ error: data?.error ?? data });
     }
 
-    // Estrae testo dal Responses API
-    const text =
-      data?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text ??
-      data?.output_text ??
-      "";
+    // ✅ Estrazione testo robusta (non assumere output[0]...)
+    let text: string = data?.output_text ?? "";
 
-    return res.status(200).json({ text });
+    if (!text && Array.isArray(data?.output)) {
+      const parts: string[] = [];
+      for (const item of data.output) {
+        const content = item?.content;
+        if (!Array.isArray(content)) continue;
+        for (const c of content) {
+          if (c?.type === "output_text" && typeof c?.text === "string") {
+            parts.push(c.text);
+          }
+        }
+      }
+      text = parts.join("");
+    }
+
+    if (!text) {
+      console.error("OpenAI returned empty text:", data);
+      return res.status(200).json({ recipes: [], raw: data });
+    }
+
+    // ✅ Parse JSON e se fallisce dimmi cosa torna davvero
+    try {
+      const recipes = JSON.parse(text);
+      return res.status(200).json({ recipes });
+    } catch (e) {
+      console.error("JSON parse failed. Raw text:", text);
+      return res.status(200).json({ recipes: [], parse_error: true, text });
+    }
   } catch (e: any) {
+    console.error("Server error:", e);
     return res.status(500).json({ error: e?.message ?? "Server error" });
   }
 }
+
