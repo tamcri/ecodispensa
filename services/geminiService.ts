@@ -58,13 +58,21 @@ export const generateRecipesFromPantry = async (items: PantryItem[]): Promise<Re
     const data = await r.json();
 
     if (!r.ok) {
-      console.error("API /api/recipes error:", data);
-      return [];
-    }
+  const message =
+    data?.error?.message ||
+    data?.error?.error?.message ||
+    data?.error?.error ||
+    data?.error ||
+    `HTTP ${r.status}`;
 
-    const recipes = data?.recipes;
-if (!recipes) return [];
-return recipes as Recipe[];
+  // IMPORTANTISSIMO: fai esplodere l'errore così ChefView lo vede (e cooldown 429 funziona)
+  throw new Error(`${r.status} ${message}`);
+}
+
+const recipes = data?.recipes;
+if (!Array.isArray(recipes)) return [];
+return recipes;
+
 
   } catch (error) {
     console.error("Errore OpenAI /api/recipes:", error);
