@@ -60,7 +60,7 @@ IMPORTANTE:
       return res.status(r.status).json({ error: data?.error ?? data });
     }
 
-    // ✅ Estrazione testo robusta (non assumere output[0]...)
+    // Estrazione testo robusta
     let text: string = data?.output_text ?? "";
 
     if (!text && Array.isArray(data?.output)) {
@@ -82,9 +82,20 @@ IMPORTANTE:
       return res.status(200).json({ recipes: [], raw: data });
     }
 
-    // ✅ Parse JSON e se fallisce dimmi cosa torna davvero
+    // Parse JSON robusto (gestisce ```json ... ``` e testo extra)
     try {
-      const recipes = JSON.parse(text);
+      let cleaned = String(text).trim();
+
+      cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
+      cleaned = cleaned.replace(/\s*```$/i, "").trim();
+
+      const start = cleaned.indexOf("[");
+      const end = cleaned.lastIndexOf("]");
+      if (start !== -1 && end !== -1 && end > start) {
+        cleaned = cleaned.slice(start, end + 1);
+      }
+
+      const recipes = JSON.parse(cleaned);
       return res.status(200).json({ recipes });
     } catch (e) {
       console.error("JSON parse failed. Raw text:", text);
@@ -95,4 +106,3 @@ IMPORTANTE:
     return res.status(500).json({ error: e?.message ?? "Server error" });
   }
 }
-
