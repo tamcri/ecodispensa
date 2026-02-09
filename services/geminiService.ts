@@ -74,10 +74,11 @@ if (!Array.isArray(recipes)) return [];
 return recipes;
 
 
-  } catch (error) {
-    console.error("Errore OpenAI /api/recipes:", error);
-    return [];
-  }
+ } catch (error) {
+  console.error("Errore OpenAI /api/recipes:", error);
+  throw error; // ✅ importantissimo: lascia che ChefView gestisca 429/cooldown
+}
+
 };
 
 
