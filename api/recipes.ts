@@ -1,11 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
-/**
- * Cache in-memory (best effort su Vercel: funziona quando la lambda resta warm)
- * TTL: 60s
- * DEDUP: richieste identiche simultanee => 1 sola chiamata OpenAI
- */
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
 const MAX_ENTRIES = 100;
@@ -54,7 +49,7 @@ type PantryItem = {
   name: string;
   quantity?: number;
   unit?: string;
-  expiryDate?: string | null; // ISO date
+  expiryDate?: string | null;
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -63,7 +58,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // ---- ENV ----
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY not set" });
 
@@ -74,13 +68,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const token = getBearerToken(req);
-    if (!token) {
-      return res.status(401).json({ error: "Missing Authorization Bearer token" });
-    }
+    if (!token) return res.status(401).json({ error: "Missing Authorization Bearer token" });
 
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    // Client “utente” (RLS attiva) con access token
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
@@ -91,36 +82,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const user_id = userData.user.id;
 
-    // ---- BODY (compatibile: nuovo payload + vecchio inventoryList) ----
     const body = req.body ?? {};
-
-    // Nuovo formato preferito
-    const pantryItems: PantryItem[] | undefined = Array.isArray(body.pantryItems)
-      ? body.pantryItems
-      : undefined;
+    const pantryItems: PantryItem[] | undefined = Array.isArray(body.pantryItems) ? body.pantryItems : undefined;
 
     const constraints = body.constraints ?? {};
     const servings: number = Number(constraints.servings ?? body.servings ?? 2);
     const timeMinutes: number = Number(constraints.timeMinutes ?? body.timeMinutes ?? 30);
 
-    // Vecchio formato (fallback)
-    const inventoryList: string | undefined =
-      typeof body.inventoryList === "string" ? body.inventoryList : undefined;
+    const inventoryList: string | undefined = typeof body.inventoryList === "string" ? body.inventoryList : undefined;
 
     if ((!pantryItems || pantryItems.length === 0) && !inventoryList) {
       return res.status(400).json({ error: "Missing pantryItems or inventoryList" });
     }
 
-    // ---- Carica preferenze profilo (RLS: solo sue) ----
     const { data: profile, error: profileErr } = await supabase
       .from("user_profiles")
       .select("diet, lactose_free, avoid, allergies, default_servings, max_time_minutes_default")
       .eq("user_id", user_id)
       .maybeSingle();
 
-    if (profileErr) {
-      return res.status(500).json({ error: profileErr.message });
-    }
+    if (profileErr) return res.status(500).json({ error: profileErr.message });
 
     const diet = (profile?.diet ?? "omnivore") as string;
     const lactoseFree = Boolean(profile?.lactose_free ?? false);
@@ -130,9 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalServings = Number.isFinite(servings) && servings > 0 ? servings : Number(profile?.default_servings ?? 2);
     const finalTime = Number.isFinite(timeMinutes) && timeMinutes > 0 ? timeMinutes : Number(profile?.max_time_minutes_default ?? 30);
 
-    // ---- Costruisci una rappresentazione ingredienti con scadenze ----
     let pantryText = "";
-
     if (pantryItems && pantryItems.length > 0) {
       const normalized = pantryItems
         .map((it) => ({
@@ -143,7 +122,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
         .filter((it) => it.name.length > 0);
 
-      // Ordina per scadenza crescente (null in fondo)
       normalized.sort((a, b) => {
         const da = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.POSITIVE_INFINITY;
         const db = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.POSITIVE_INFINITY;
@@ -161,7 +139,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pantryText = inventoryList.trim();
     }
 
-    // ---- CACHE KEY (include pantry+constraints+preferences+model) ----
     const keyObj = {
       model,
       pantryItems: pantryItems ?? inventoryList ?? "",
@@ -180,19 +157,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ...cached.value, cached: true });
     }
 
-    // Dedup in-flight
     const existing = inflight.get(cacheKey);
     if (existing) {
       const value = await existing;
       return res.status(200).json({ ...value, deduped: true });
     }
 
-    // ---- CONSUMA 1 CREDITO (SOLO se NON era in cache) ----
-    // La funzione RPC scala 1 credito in modo atomico.
-    const { data: remainingCredits, error: creditErr } = await supabase.rpc("consume_eco_credit");
-
+    // Consuma 1 credito SOLO se non era cache
+    const { data: remainingAfterConsume, error: creditErr } = await supabase.rpc("consume_eco_credit");
     if (creditErr) {
-      // Se non hai crediti => 402 Payment Required
       if (String(creditErr.message || "").includes("NO_CREDITS")) {
         return res.status(402).json({
           error: "NO_CREDITS",
@@ -202,7 +175,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: creditErr.message });
     }
 
-    // ---- PROMPT “controllato” ----
     const rules: string[] = [];
     rules.push(`Diet: ${diet}.`);
     rules.push(`Lactose-free: ${lactoseFree ? "YES" : "NO"}.`);
@@ -241,7 +213,7 @@ OUTPUT (OBBLIGATORIO):
     "time": "es. 25 min",
     "servings": ${finalServings},
     "description": "...",
-    "expiresSoonUsed": ["..."], 
+    "expiresSoonUsed": ["..."],
     "ingredientsUsed": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz"}],
     "missingIngredients": ["..."],
     "steps": ["..."]
@@ -256,16 +228,19 @@ OUTPUT (OBBLIGATORIO):
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model,
-          input: prompt,
-        }),
+        body: JSON.stringify({ model, input: prompt }),
       });
 
       const data = await r.json();
 
       if (!r.ok) {
         console.error("OpenAI error:", data);
+
+        // Refund: se OpenAI fallisce, rimborsa 1 credito
+        const refundReason = `openai_error_${r.status}`;
+        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_credit", {
+          p_reason: refundReason,
+        });
 
         const errType = data?.error?.type;
         const status = r.status;
@@ -277,22 +252,19 @@ OUTPUT (OBBLIGATORIO):
             status === 429 && errType === "insufficient_quota"
               ? "Quota/billing API non attivo o crediti esauriti su OpenAI Platform."
               : undefined,
-          remainingCredits: typeof remainingCredits === "number" ? remainingCredits : null,
+          remainingCredits: typeof refunded === "number" ? refunded : remainingAfterConsume ?? null,
+          refunded: refundErr ? false : true,
         };
       }
 
-      // Estrazione testo robusta
       let text: string = data?.output_text ?? "";
-
       if (!text && Array.isArray(data?.output)) {
         const parts: string[] = [];
         for (const item of data.output) {
           const content = item?.content;
           if (!Array.isArray(content)) continue;
           for (const c of content) {
-            if (c?.type === "output_text" && typeof c?.text === "string") {
-              parts.push(c.text);
-            }
+            if (c?.type === "output_text" && typeof c?.text === "string") parts.push(c.text);
           }
         }
         text = parts.join("");
@@ -303,11 +275,10 @@ OUTPUT (OBBLIGATORIO):
         return {
           recipes: [],
           raw: data,
-          remainingCredits: typeof remainingCredits === "number" ? remainingCredits : null,
+          remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
       }
 
-      // Parse JSON robusto
       try {
         let cleaned = String(text).trim();
         cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
@@ -315,14 +286,12 @@ OUTPUT (OBBLIGATORIO):
 
         const start = cleaned.indexOf("[");
         const end = cleaned.lastIndexOf("]");
-        if (start !== -1 && end !== -1 && end > start) {
-          cleaned = cleaned.slice(start, end + 1);
-        }
+        if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
 
         const recipes = JSON.parse(cleaned);
         return {
           recipes,
-          remainingCredits: typeof remainingCredits === "number" ? remainingCredits : null,
+          remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
       } catch (e) {
         console.error("JSON parse failed. Raw text:", text);
@@ -330,20 +299,17 @@ OUTPUT (OBBLIGATORIO):
           recipes: [],
           parse_error: true,
           text,
-          remainingCredits: typeof remainingCredits === "number" ? remainingCredits : null,
+          remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
       }
     })();
 
     inflight.set(cacheKey, work);
-
     const value = await work.finally(() => inflight.delete(cacheKey));
 
-    // Salvo in cache anche errori per 60s, così eviti martellate
     cache.set(cacheKey, { ts: Date.now(), value });
     pruneCache();
 
-    // Propaga status OpenAI se c’è un errore
     if (value?.error && typeof value?.status === "number") {
       return res.status(value.status).json(value);
     }

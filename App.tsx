@@ -1,12 +1,12 @@
-import { LogOut } from "lucide-react";
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import { useState, useEffect } from "react";
-import { Refrigerator, ShoppingCart, ChefHat, Bell, BellOff } from "lucide-react";
+import { Refrigerator, ShoppingCart, ChefHat, User } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
+import { ProfileSheet } from "./components/ProfileSheet";
 
 const App = () => {
   const [view, setView] = useState<ViewState>("pantry");
@@ -14,6 +14,8 @@ const App = () => {
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermission>("default");
+
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // ✅ Supabase session
   const [session, setSession] = useState<any>(null);
@@ -419,28 +421,16 @@ if (!session) return <AuthView />;
           <h1 className="font-bold text-xl tracking-tight">EcoDispensa</h1>
         </div>
 
-        {/* Notification Bell */}
+        {/* Profilo */}
         <button
-          onClick={requestNotificationPermission}
-          className={`p-2 rounded-full transition-colors ${
-            notificationPermission === "granted"
-              ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-              : "text-gray-400 bg-gray-100 hover:bg-gray-200"
-          }`}
-          title={notificationPermission === "granted" ? "Notifiche attive" : "Attiva notifiche scadenza"}
+          onClick={() => setProfileOpen(true)}
+          className="p-2 rounded-full text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+          title="Profilo"
+          type="button"
         >
-          {notificationPermission === "granted" ? <Bell size={20} /> : <BellOff size={20} />}
+          <User size={20} />
         </button>
-<button
-  onClick={handleLogout}
-  className="p-2 rounded-full text-gray-400 bg-gray-100 hover:bg-gray-200 transition-colors"
-  title="Esci"
->
-  <LogOut size={20} />
-</button>
-
-
-      </header>
+</header>
 
       {/* Content */}
       <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
@@ -491,6 +481,16 @@ if (!session) return <AuthView />;
           </button>
         </div>
       </nav>
+
+      <ProfileSheet
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        userEmail={session?.user?.email ?? null}
+        notificationPermission={notificationPermission}
+        onRequestNotificationPermission={requestNotificationPermission}
+        onLogout={handleLogout}
+      />
+
     </div>
   );
 };

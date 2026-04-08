@@ -38,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const user_id = userData.user.id;
 
+    console.log("USER FROM TOKEN:", userData.user.id);
+
     // Legge crediti (se la riga non esiste, torna 0)
     const { data, error } = await supabase
       .from("user_credits")
