@@ -133,7 +133,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         .from("user_profiles")
         .select("diet,lactose_free,avoid,allergies")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle()
 
       if (selErr) {
         const { error: upsertErr } = await supabase
@@ -146,7 +146,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
           .from("user_profiles")
           .select("diet,lactose_free,avoid,allergies")
           .eq("user_id", userId)
-          .single();
+          .maybeSingle()
 
         if (selErr2) throw selErr2;
 
