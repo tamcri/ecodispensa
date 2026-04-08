@@ -132,20 +132,20 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       const { data, error: selErr } = await supabase
         .from("user_profiles")
         .select("diet,lactose_free,avoid,allergies")
-        .eq("id", userId)
+        .eq("user_id", userId)
         .single();
 
       if (selErr) {
         const { error: upsertErr } = await supabase
           .from("user_profiles")
-          .upsert({ id: userId }, { onConflict: "id" });
+          .upsert({ user_id: userId }, { onConflict: "user_id" });
 
         if (upsertErr) throw upsertErr;
 
         const { data: data2, error: selErr2 } = await supabase
           .from("user_profiles")
           .select("diet,lactose_free,avoid,allergies")
-          .eq("id", userId)
+          .eq("user_id", userId)
           .single();
 
         if (selErr2) throw selErr2;
@@ -214,15 +214,15 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       const { error: upsertErr } = await supabase
         .from("user_profiles")
         .upsert(
-          {
-            id: userId,
-            diet: updated.diet,
-            lactose_free: updated.lactose_free,
-            avoid: updated.avoid,
-            allergies: updated.allergies,
-          },
-          { onConflict: "id" }
-        );
+  {
+    user_id: userId,
+    diet: updated.diet,
+    lactose_free: updated.lactose_free,
+    avoid: updated.avoid,
+    allergies: updated.allergies,
+  },
+  { onConflict: "user_id" }
+);
 
       if (upsertErr) throw upsertErr;
 
