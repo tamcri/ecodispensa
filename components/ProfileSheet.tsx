@@ -47,9 +47,13 @@ function toCommaString(arr: string[]): string {
 }
 
 async function getAccessToken(): Promise<string | null> {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token ?? null;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) return null;
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return null;
+
+  return sessionData.session?.access_token ?? null;
 }
 
 async function fetchCredits(): Promise<CreditsResponse> {
@@ -223,14 +227,25 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   };
 
   useEffect(() => {
-    if (!open) return;
-    // When opened, load everything once
-    loadPreferences();
-    refreshCredits();
-    // reset tab for a predictable UX
+  if (!open) return;
+
+  const init = async () => {
+    await loadPreferences();
+
+    const token = await getAccessToken();
+    if (token) {
+      await refreshCredits();
+    } else {
+      setEcoCredits(null);
+    }
+
     setTab("profilo");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  };
+
+  init();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [open]);
 
   if (!open) return null;
 
