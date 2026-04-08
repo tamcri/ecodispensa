@@ -65,10 +65,19 @@ async function fetchCredits(): Promise<CreditsResponse> {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  const body = await r.json();
+  const text = await r.text();
+
+  let body: any;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("INVALID_JSON_RESPONSE");
+  }
+
   if (!r.ok) {
     throw new Error(body?.error ?? "CREDITS_FETCH_FAILED");
   }
+
   return body as CreditsResponse;
 }
 
@@ -91,14 +100,12 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 }) => {
   const [tab, setTab] = useState<"profilo" | "preferenze">("profilo");
 
-  // EcoChef preferences
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefs, setPrefs] = useState<UserChefPreferences>(DEFAULT_PREFS);
   const [avoidText, setAvoidText] = useState("");
   const [allergiesText, setAllergiesText] = useState("");
 
-  // Credits in profile (nice-to-have)
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
 
@@ -112,14 +119,15 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     try {
       setPrefsLoading(true);
 
-      const { data: sess } = await supabase.auth.getSession();
-      const userId = sess.session?.user?.id ?? null;
-      if (!userId) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
         setPrefs(DEFAULT_PREFS);
         setAvoidText("");
         setAllergiesText("");
         return;
       }
+
+      const userId = userData.user.id;
 
       const { data, error: selErr } = await supabase
         .from("user_profiles")
@@ -128,10 +136,10 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         .single();
 
       if (selErr) {
-        // create row if missing, then re-read
         const { error: upsertErr } = await supabase
           .from("user_profiles")
           .upsert({ id: userId }, { onConflict: "id" });
+
         if (upsertErr) throw upsertErr;
 
         const { data: data2, error: selErr2 } = await supabase
@@ -139,6 +147,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
           .select("diet,lactose_free,avoid,allergies")
           .eq("id", userId)
           .single();
+
         if (selErr2) throw selErr2;
 
         const loaded2: UserChefPreferences = {
@@ -191,8 +200,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     try {
       setPrefsSaving(true);
 
-      const { data: sess } = await supabase.auth.getSession();
-      const userId = sess.session?.user?.id ?? null;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const userId = userError || !userData?.user ? null : userData.user.id;
       if (!userId) return;
 
       const updated: UserChefPreferences = {
@@ -227,32 +236,37 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   };
 
   useEffect(() => {
-  if (!open) return;
+    if (!open) return;
 
-  const init = async () => {
-    await loadPreferences();
+    const init = async () => {
+      await loadPreferences();
 
-    const token = await getAccessToken();
-    if (token) {
-      await refreshCredits();
-    } else {
-      setEcoCredits(null);
-    }
+      let token: string | null = null;
+      for (let i = 0; i < 5; i++) {
+        token = await getAccessToken();
+        if (token) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
 
-    setTab("profilo");
-  };
+      if (token) {
+        await refreshCredits();
+      } else {
+        setEcoCredits(null);
+      }
 
-  init();
+      setTab("profilo");
+    };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [open]);
+    init();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white w-full max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col shadow-2xl">
-        {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10 sm:rounded-t-2xl rounded-t-2xl">
           <div className="min-w-0 flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
@@ -264,12 +278,15 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
             </div>
           </div>
 
-          <button onClick={onClose} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors" title="Chiudi">
+          <button
+            onClick={onClose}
+            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            title="Chiudi"
+          >
             <X size={20} />
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="p-4 pb-0">
           <div className="flex p-1 bg-gray-100 rounded-xl">
             <button
@@ -296,7 +313,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         <div className="p-6 space-y-6 flex-1 overflow-y-auto">
           {tab === "profilo" && (
             <>
-              {/* Account */}
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Mail size={16} className="text-emerald-600" />
@@ -309,7 +325,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 </div>
               </div>
 
-              {/* Piano */}
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CreditCard size={16} className="text-emerald-600" />
@@ -337,7 +352,9 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                     <Settings size={16} className="text-emerald-600" />
                     <div>
                       <div className="text-xs text-gray-400">Crediti EcoChef</div>
-                      <div className="font-bold text-gray-800">{creditsLoading ? "…" : ecoCredits === null ? "—" : ecoCredits}</div>
+                      <div className="font-bold text-gray-800">
+                        {creditsLoading ? "…" : ecoCredits === null ? "—" : ecoCredits}
+                      </div>
                     </div>
                   </div>
 
@@ -351,7 +368,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 </div>
               </div>
 
-              {/* Notifiche */}
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   {notificationPermission === "granted" ? (
@@ -389,7 +405,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 )}
               </div>
 
-              {/* Privacy */}
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield size={16} className="text-emerald-600" />
@@ -401,7 +416,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 </div>
               </div>
 
-              {/* Logout */}
               <button
                 onClick={onLogout}
                 className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
@@ -415,100 +429,100 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
           )}
 
           {tab === "preferenze" && (
-            <>
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Settings size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Preferenze EcoChef</div>
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Settings size={16} className="text-emerald-600" />
+                <div className="text-sm font-bold text-gray-800">Preferenze EcoChef</div>
+              </div>
+
+              {prefsLoading ? (
+                <div className="text-center py-6">
+                  <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
+                  <p className="text-gray-500 text-sm font-medium">Caricamento...</p>
                 </div>
-
-                {prefsLoading ? (
-                  <div className="text-center py-6">
-                    <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
-                    <p className="text-gray-500 text-sm font-medium">Caricamento...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    <div>
-                      <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Dieta</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(["omnivore", "veg", "vegan"] as Diet[]).map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => setPrefs((p) => ({ ...p, diet: d }))}
-                            className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${
-                              prefs.diet === d
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : "bg-white text-gray-700 border-gray-200 hover:border-emerald-300"
-                            }`}
-                          >
-                            {d === "omnivore" ? "Onnivora" : d === "veg" ? "Vegetariana" : "Vegana"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-4">
-                      <div>
-                        <div className="text-sm font-bold text-gray-800">Senza lattosio</div>
-                        <div className="text-xs text-gray-500">Evita ingredienti con lattosio.</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPrefs((p) => ({ ...p, lactose_free: !p.lactose_free }))}
-                        className={`w-14 h-8 rounded-full transition-colors relative ${
-                          prefs.lactose_free ? "bg-emerald-600" : "bg-gray-300"
-                        }`}
-                        aria-label="toggle senza lattosio"
-                      >
-                        <span
-                          className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${
-                            prefs.lactose_free ? "left-7" : "left-1"
+              ) : (
+                <div className="space-y-5">
+                  <div>
+                    <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Dieta</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["omnivore", "veg", "vegan"] as Diet[]).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setPrefs((p) => ({ ...p, diet: d }))}
+                          className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${
+                            prefs.diet === d
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-white text-gray-700 border-gray-200 hover:border-emerald-300"
                           }`}
-                        />
-                      </button>
+                        >
+                          {d === "omnivore" ? "Onnivora" : d === "veg" ? "Vegetariana" : "Vegana"}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
+                  <div className="flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-4">
                     <div>
-                      <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">
-                        Ingredienti da evitare (opzionale)
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="es. cipolla, aglio, peperoncino"
-                        className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
-                        value={avoidText}
-                        onChange={(e) => setAvoidText(e.target.value)}
-                      />
-                      <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
+                      <div className="text-sm font-bold text-gray-800">Senza lattosio</div>
+                      <div className="text-xs text-gray-500">Evita ingredienti con lattosio.</div>
                     </div>
-
-                    <div>
-                      <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Allergie (opzionale)</div>
-                      <input
-                        type="text"
-                        placeholder="es. arachidi, crostacei"
-                        className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
-                        value={allergiesText}
-                        onChange={(e) => setAllergiesText(e.target.value)}
-                      />
-                      <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
-                    </div>
-
                     <button
                       type="button"
-                      onClick={savePreferences}
-                      disabled={prefsSaving || prefsLoading}
-                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 disabled:opacity-50"
+                      onClick={() => setPrefs((p) => ({ ...p, lactose_free: !p.lactose_free }))}
+                      className={`w-14 h-8 rounded-full transition-colors relative ${
+                        prefs.lactose_free ? "bg-emerald-600" : "bg-gray-300"
+                      }`}
+                      aria-label="toggle senza lattosio"
                     >
-                      {prefsSaving ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                      Salva preferenze
+                      <span
+                        className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${
+                          prefs.lactose_free ? "left-7" : "left-1"
+                        }`}
+                      />
                     </button>
                   </div>
-                )}
-              </div>
-            </>
+
+                  <div>
+                    <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">
+                      Ingredienti da evitare (opzionale)
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="es. cipolla, aglio, peperoncino"
+                      className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                      value={avoidText}
+                      onChange={(e) => setAvoidText(e.target.value)}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">
+                      Allergie (opzionale)
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="es. arachidi, crostacei"
+                      className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                      value={allergiesText}
+                      onChange={(e) => setAllergiesText(e.target.value)}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={savePreferences}
+                    disabled={prefsSaving || prefsLoading}
+                    className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 disabled:opacity-50"
+                  >
+                    {prefsSaving ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                    Salva preferenze
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
