@@ -111,13 +111,28 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
   const noCredits = (ecoCredits ?? 0) <= 0;
 
-  const expiringItemsCount = useMemo(() => {
-    return items.filter((i) => {
-      if (!i.expiryDate) return false;
-      const days = Math.ceil((new Date(i.expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
-      return days <= 3;
-    }).length;
-  }, [items]);
+  const { expiringItemsCount, expiredItemsCount } = useMemo(() => {
+  let expiring = 0;
+  let expired = 0;
+
+  items.forEach((i) => {
+    if (!i.expiryDate) return;
+
+    const diff = new Date(i.expiryDate).getTime() - new Date().getTime();
+    const days = Math.ceil(diff / (1000 * 3600 * 24));
+
+    if (days < 0) {
+      expired++;
+    } else if (days <= 3) {
+      expiring++;
+    }
+  });
+
+  return {
+    expiringItemsCount: expiring,
+    expiredItemsCount: expired,
+  };
+}, [items]);
 
   const refreshCredits = async () => {
     try {
@@ -427,12 +442,19 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
       {/* CONTENT: Suggest Mode */}
       {mode === "suggest" && (
         <div className="space-y-4 animate-fade-in">
-          {expiringItemsCount > 0 && (
-            <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-yellow-700">
-              <AlertTriangle size={16} />
-              Hai {expiringItemsCount} prodotti in scadenza da usare!
-            </div>
-          )}
+          {expiredItemsCount > 0 && (
+  <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-red-700">
+    <AlertTriangle size={16} />
+    Hai {expiredItemsCount} prodotti scaduti ⚠️
+  </div>
+)}
+
+{expiringItemsCount > 0 && (
+  <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-yellow-700">
+    <AlertTriangle size={16} />
+    Hai {expiringItemsCount} prodotti in scadenza da usare!
+  </div>
+)}
 
           {recipes.length === 0 && !loading && (
             <div className="text-center py-8">
