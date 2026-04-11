@@ -310,11 +310,15 @@ const payload = {
       }
 
       if (status >= 400) {
-        const msg = (body as any)?.message || (body as any)?.hint || "Errore durante la generazione delle ricette.";
-        setError(String(msg));
-        await refreshCredits();
-        return;
-      }
+  const msg =
+    (body as any)?.message ||
+    (body as any)?.hint ||
+    (body as any)?.error ||
+    "Errore durante la generazione delle ricette.";
+  setError(String(msg));
+  await refreshCredits();
+  return;
+}
 
       const recipesResp = body as any;
       const result: Recipe[] = Array.isArray(recipesResp?.recipes) ? recipesResp.recipes : [];
@@ -404,11 +408,15 @@ const payload = {
       }
 
       if (status >= 400) {
-        const msg = (body as any)?.message || (body as any)?.hint || "Errore durante la ricerca ricette.";
-        setError(String(msg));
-        await refreshCredits();
-        return;
-      }
+  const msg =
+    (body as any)?.message ||
+    (body as any)?.hint ||
+    (body as any)?.error ||
+    "Errore durante la ricerca ricette.";
+  setError(String(msg));
+  await refreshCredits();
+  return;
+}
 
       const recipesResp = body as any;
       const result: Recipe[] = Array.isArray(recipesResp?.recipes) ? recipesResp.recipes : [];

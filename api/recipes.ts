@@ -98,8 +98,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : undefined;
 
     if ((!pantryItems || pantryItems.length === 0) && !inventoryList) {
-      return res.status(400).json({ error: "Missing pantryItems or inventoryList" });
-    }
+  if (idea) {
+    // In modalità ricerca specifica permettiamo comunque la generazione,
+    // anche senza ingredienti validi in dispensa.
+  } else {
+    return res.status(400).json({
+      error: "Non ci sono ingredienti validi in dispensa. Rimuovi i prodotti scaduti o aggiungi nuovi prodotti.",
+    });
+  }
+}
 
     const { data: profile, error: profileErr } = await supabase
       .from("user_profiles")
@@ -122,72 +129,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let expiringSoonPantryText = "";
 
     if (pantryItems && pantryItems.length > 0) {
-      const nowDate = new Date();
-      nowDate.setHours(0, 0, 0, 0);
+  const nowDate = new Date();
+  nowDate.setHours(0, 0, 0, 0);
 
-      const soonThreshold = new Date(nowDate);
-      soonThreshold.setDate(soonThreshold.getDate() + 3);
+  const soonThreshold = new Date(nowDate);
+  soonThreshold.setDate(soonThreshold.getDate() + 3);
 
-      const normalized = pantryItems
-        .map((it) => {
-          const name = String(it.name ?? "").trim();
-          const quantity = typeof it.quantity === "number" ? it.quantity : undefined;
-          const unit = typeof it.unit === "string" ? it.unit : undefined;
-          const expiryDate = it.expiryDate ? String(it.expiryDate) : null;
+  const normalized = pantryItems
+    .map((it) => {
+      const name = String(it.name ?? "").trim();
+      const quantity = typeof it.quantity === "number" ? it.quantity : undefined;
+      const unit = typeof it.unit === "string" ? it.unit : undefined;
+      const expiryDate = it.expiryDate ? String(it.expiryDate) : null;
 
-          let expiryTs: number | null = null;
-          if (expiryDate) {
-            const parsed = new Date(expiryDate);
-            const ts = parsed.getTime();
-            if (!Number.isNaN(ts)) {
-              parsed.setHours(0, 0, 0, 0);
-              expiryTs = parsed.getTime();
-            }
-          }
+      let expiryTs: number | null = null;
+      if (expiryDate) {
+        const parsed = new Date(expiryDate);
+        const ts = parsed.getTime();
+        if (!Number.isNaN(ts)) {
+          parsed.setHours(0, 0, 0, 0);
+          expiryTs = parsed.getTime();
+        }
+      }
 
-          return {
-            name,
-            quantity,
-            unit,
-            expiryDate,
-            expiryTs,
-          };
-        })
-        .filter((it) => it.name.length > 0);
-
-      normalized.sort((a, b) => {
-        const da = a.expiryTs ?? Number.POSITIVE_INFINITY;
-        const db = b.expiryTs ?? Number.POSITIVE_INFINITY;
-        return da - db;
-      });
-
-      const availableItems = normalized.filter((it) => {
-        if (it.expiryTs == null) return true;
-        return it.expiryTs >= nowDate.getTime();
-      });
-
-      const expiredItems = normalized.filter((it) => {
-        if (it.expiryTs == null) return false;
-        return it.expiryTs < nowDate.getTime();
-      });
-
-      const expiringSoonItems = availableItems.filter((it) => {
-        if (it.expiryTs == null) return false;
-        return it.expiryTs <= soonThreshold.getTime();
-      });
-
-      const formatItem = (it: { name: string; quantity?: number; unit?: string; expiryDate?: string | null }) => {
-        const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
-        const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
-        return `• ${it.name}${qty}${exp}`;
+      return {
+        name,
+        quantity,
+        unit,
+        expiryDate,
+        expiryTs,
       };
+    })
+    .filter((it) => it.name.length > 0);
 
-      pantryText = availableItems.map(formatItem).join("\n");
-      expiredPantryText = expiredItems.map(formatItem).join("\n");
-      expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
-    } else if (inventoryList) {
-      pantryText = inventoryList.trim();
-    }
+  normalized.sort((a, b) => {
+    const da = a.expiryTs ?? Number.POSITIVE_INFINITY;
+    const db = b.expiryTs ?? Number.POSITIVE_INFINITY;
+    return da - db;
+  });
+
+  const availableItems = normalized.filter((it) => {
+    if (it.expiryTs == null) return true;
+    return it.expiryTs >= nowDate.getTime();
+  });
+
+  const expiredItems = normalized.filter((it) => {
+    if (it.expiryTs == null) return false;
+    return it.expiryTs < nowDate.getTime();
+  });
+
+  const expiringSoonItems = availableItems.filter((it) => {
+    if (it.expiryTs == null) return false;
+    return it.expiryTs <= soonThreshold.getTime();
+  });
+
+  const formatItem = (it: { name: string; quantity?: number; unit?: string; expiryDate?: string | null }) => {
+    const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
+    const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
+    return `• ${it.name}${qty}${exp}`;
+  };
+
+  pantryText = availableItems.map(formatItem).join("\n");
+  expiredPantryText = expiredItems.map(formatItem).join("\n");
+  expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
+} else if (inventoryList) {
+  pantryText = inventoryList.trim();
+}
+
+if (!pantryText && idea) {
+  pantryText = "Nessun ingrediente valido disponibile in dispensa.";
+}
 
     const keyObj = {
       model,
