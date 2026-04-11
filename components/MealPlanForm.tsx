@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MealPlanComplexity, MealPlanRequest } from "../types";
 
 interface MealPlanFormProps {
@@ -7,66 +7,90 @@ interface MealPlanFormProps {
   initialValues?: Partial<MealPlanRequest>;
 }
 
-function formatTodayDDMMYYYY() {
+function formatTodayISO() {
   const today = new Date();
-  const dd = String(today.getDate()).padStart(2, "0");
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
   const yyyy = String(today.getFullYear());
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function isoToDisplay(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const [, yyyy, mm, dd] = match;
   return `${dd}-${mm}-${yyyy}`;
 }
 
-function isValidStartDate(value: string) {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (!match) return false;
+function displayToISO(value: string): string | null {
+  const match = value.trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
 
   const [, dd, mm, yyyy] = match;
   const iso = `${yyyy}-${mm}-${dd}`;
   const date = new Date(`${iso}T00:00:00`);
 
-  if (Number.isNaN(date.getTime())) return false;
+  if (Number.isNaN(date.getTime())) return null;
 
-  return (
-    date.getUTCFullYear() === Number(yyyy) &&
-    date.getUTCMonth() + 1 === Number(mm) &&
-    date.getUTCDate() === Number(dd)
-  );
+  if (
+    date.getUTCFullYear() !== Number(yyyy) ||
+    date.getUTCMonth() + 1 !== Number(mm) ||
+    date.getUTCDate() !== Number(dd)
+  ) {
+    return null;
+  }
+
+  return iso;
 }
 
 export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormProps) => {
-  const resolvedInitialValues = useMemo(
-    () => ({
-      startDate: initialValues?.startDate ?? formatTodayDDMMYYYY(),
+  const resolvedInitialValues = useMemo(() => {
+    const initialStartDateIso =
+      initialValues?.startDate && displayToISO(initialValues.startDate)
+        ? displayToISO(initialValues.startDate)!
+        : formatTodayISO();
+
+    return {
+      startDateIso: initialStartDateIso,
       days: initialValues?.days ?? 3,
       meals: {
         lunch: initialValues?.meals?.lunch ?? true,
         dinner: initialValues?.meals?.dinner ?? true,
       },
       people: initialValues?.people ?? 2,
-      budget:
-        initialValues?.budget == null
-          ? ""
-          : String(initialValues.budget),
+      budget: initialValues?.budget == null ? "" : String(initialValues.budget),
       complexity: initialValues?.complexity ?? "mixed",
       notes: initialValues?.notes ?? "",
-    }),
-    [initialValues]
-  );
+    };
+  }, [initialValues]);
 
-  const [startDate, setStartDate] = useState(resolvedInitialValues.startDate);
+  const [startDateIso, setStartDateIso] = useState(resolvedInitialValues.startDateIso);
   const [days, setDays] = useState<1 | 2 | 3 | 5 | 7>(resolvedInitialValues.days as 1 | 2 | 3 | 5 | 7);
   const [lunch, setLunch] = useState(resolvedInitialValues.meals.lunch);
   const [dinner, setDinner] = useState(resolvedInitialValues.meals.dinner);
   const [people, setPeople] = useState(resolvedInitialValues.people);
   const [budget, setBudget] = useState<string>(resolvedInitialValues.budget);
-  const [complexity, setComplexity] = useState<MealPlanComplexity>(resolvedInitialValues.complexity as MealPlanComplexity);
+  const [complexity, setComplexity] = useState<MealPlanComplexity>(
+    resolvedInitialValues.complexity as MealPlanComplexity
+  );
   const [notes, setNotes] = useState(resolvedInitialValues.notes);
+
+  useEffect(() => {
+    setStartDateIso(resolvedInitialValues.startDateIso);
+    setDays(resolvedInitialValues.days as 1 | 2 | 3 | 5 | 7);
+    setLunch(resolvedInitialValues.meals.lunch);
+    setDinner(resolvedInitialValues.meals.dinner);
+    setPeople(resolvedInitialValues.people);
+    setBudget(resolvedInitialValues.budget);
+    setComplexity(resolvedInitialValues.complexity as MealPlanComplexity);
+    setNotes(resolvedInitialValues.notes);
+  }, [resolvedInitialValues]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!isValidStartDate(startDate)) {
-      alert("Inserisci una data di inizio valida nel formato DD-MM-YYYY.");
+    if (!startDateIso) {
+      alert("Seleziona una data di inizio.");
       return;
     }
 
@@ -83,7 +107,7 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
     }
 
     await onSubmit({
-      startDate: startDate.trim(),
+      startDate: isoToDisplay(startDateIso),
       days,
       meals: {
         lunch,
@@ -105,14 +129,13 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
           </label>
           <input
             id="meal-plan-start-date"
-            type="text"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            placeholder="DD-MM-YYYY"
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400"
+            type="date"
+            value={startDateIso}
+            onChange={(e) => setStartDateIso(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
           />
           <p className="text-xs text-gray-500 mt-2">
-            Inserisci la data nel formato DD-MM-YYYY.
+            Data selezionata: {startDateIso ? isoToDisplay(startDateIso) : "—"}
           </p>
         </div>
 
