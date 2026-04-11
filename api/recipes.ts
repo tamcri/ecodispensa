@@ -257,7 +257,9 @@ ${expiringSoonPantryText}
 Agisci come uno chef esperto di cucina sostenibile e anti-spreco.
 
 OBIETTIVO:
-- Suggerisci 3 ricette gustose usando soprattutto gli ingredienti disponibili.
+${idea
+  ? "- Genera UNA SOLA ricetta esattamente coerente con la richiesta utente."
+  : "- Suggerisci 3 ricette gustose usando soprattutto gli ingredienti disponibili."}
 - Dai priorità agli ingredienti già presenti in dispensa.
 - Dai priorità ancora più alta agli ingredienti in scadenza a breve.
 - Rispetta in modo rigido preferenze, allergie, intolleranze e ingredienti da evitare.
@@ -287,11 +289,14 @@ REGOLE DIETETICHE E DI SICUREZZA ALIMENTARE (IMPORTANTI):
 - Usa come "expiresSoonUsed" solo ingredienti realmente presenti in dispensa e non scaduti.
 - "missingIngredients" deve contenere solo ingredienti davvero non presenti o chiaramente non sufficienti rispetto alla ricetta proposta.
 - Non inventare disponibilità in dispensa che non è stata fornita.
+- Se un ingrediente NON è nella lista DISPENSA DISPONIBILE, deve essere inserito in "missingIngredients".
+- NON assumere mai che un ingrediente sia disponibile se non è esplicitamente elencato.
 
 OUTPUT (OBBLIGATORIO):
 - Rispondi SOLO con un JSON array valido.
 - Nessun testo fuori dal JSON.
-- Restituisci esattamente 3 ricette.
+${idea ? "- Restituisci esattamente 1 ricetta." : "- Restituisci esattamente 3 ricette."}
+${idea ? "- La ricetta deve essere focalizzata solo sulla richiesta utente, senza alternative non richieste." : ""}
 - Struttura:
 [
   {

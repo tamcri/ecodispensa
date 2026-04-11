@@ -151,11 +151,9 @@ async function fetchActiveMealPlan(): Promise<MealPlanResponse | null> {
     estimatedMinBudget: Number(body.plan.estimatedMinBudget ?? 0),
     plan: Array.isArray(body.plan.plan) ? body.plan.plan : [],
     shoppingListPreview: Array.isArray(body.plan.shoppingListPreview) ? body.plan.shoppingListPreview : [],
-    pantryCoverage: {
+    pantryCoverage: body.plan.pantryCoverage ?? {
       usedPantryIngredients: [],
-      missingPantryIngredients: Array.isArray(body.plan.shoppingListPreview)
-        ? body.plan.shoppingListPreview.map((item: any) => item.name)
-        : [],
+      missingPantryIngredients: [],
     },
     remainingCredits: null,
     status: body.plan.status,
@@ -188,6 +186,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [addingMissing, setAddingMissing] = useState(false);
   const [loadingSavedMealPlan, setLoadingSavedMealPlan] = useState(false);
   const [hasFetchedSavedMealPlan, setHasFetchedSavedMealPlan] = useState(false);
+  const [shoppingListAdded, setShoppingListAdded] = useState(false);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
   const noCredits = (ecoCredits ?? 0) <= 0;
@@ -275,15 +274,25 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setMealPlanError(null);
 
     try {
-      const payload = {
-        pantryItems: items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          unit: i.unit,
-          expiryDate: i.expiryDate ?? null,
-        })),
-        constraints: { servings, timeMinutes },
-      };
+      const now = new Date();
+now.setHours(0, 0, 0, 0);
+
+const validPantryItems = items.filter((i) => {
+  if (!i.expiryDate) return true;
+  const d = new Date(i.expiryDate);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() >= now.getTime();
+});
+
+const payload = {
+  pantryItems: validPantryItems.map((i) => ({
+    name: i.name,
+    quantity: i.quantity,
+    unit: i.unit,
+    expiryDate: i.expiryDate ?? null,
+  })),
+  constraints: { servings, timeMinutes },
+};
 
       const { status, body } = await postRecipes(payload);
 
@@ -358,16 +367,26 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setMealPlanError(null);
 
     try {
-      const payload = {
-        pantryItems: items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          unit: i.unit,
-          expiryDate: i.expiryDate ?? null,
-        })),
-        constraints: { servings, timeMinutes, idea: searchQuery.trim() },
-        idea: searchQuery.trim(),
-      };
+      const now = new Date();
+now.setHours(0, 0, 0, 0);
+
+const validPantryItems = items.filter((i) => {
+  if (!i.expiryDate) return true;
+  const d = new Date(i.expiryDate);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() >= now.getTime();
+});
+
+const payload = {
+  pantryItems: validPantryItems.map((i) => ({
+    name: i.name,
+    quantity: i.quantity,
+    unit: i.unit,
+    expiryDate: i.expiryDate ?? null,
+  })),
+  constraints: { servings, timeMinutes, idea: searchQuery.trim() },
+  idea: searchQuery.trim(),
+};
 
       const { status, body } = await postRecipes(payload);
 
@@ -439,6 +458,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setMealPlanResult(null);
     setRecipes([]);
     setError(null);
+    setShoppingListAdded(false);
 
     try {
       const { status, body } = await postMealPlan(payload);
@@ -564,6 +584,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
       }));
 
       await onAddShoppingItems(rows);
+      setShoppingListAdded(true);
       alert("Ingredienti mancanti aggiunti alla lista della spesa.");
     } catch (e: any) {
       console.error("Add missing shopping items error:", e);
@@ -810,6 +831,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
               result={mealPlanResult}
               onAddMissingToShoppingList={handleAddMissingToShoppingList}
               addingToShoppingList={addingMissing}
+              shoppingListAlreadyAdded={shoppingListAdded}
             />
           )}
         </div>
