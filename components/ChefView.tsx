@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState, type FormEvent } from "react";
-import { PantryItem, Recipe, IngredientUsage } from "../types";
+import {
+  PantryItem,
+  Recipe,
+  IngredientUsage,
+  MealPlanRequest,
+  MealPlanResponse,
+  Category,
+} from "../types";
 import { supabase } from "../services/supabaseClient";
+import { MealPlanForm } from "./MealPlanForm";
+import { MealPlanResult } from "./MealPlanResult";
 import {
   ChefHat,
   Clock,
@@ -13,14 +22,23 @@ import {
   ChevronRight,
   CheckCircle2,
   Utensils,
+  CalendarDays,
 } from "lucide-react";
 
 interface ChefViewProps {
   items: PantryItem[];
   onCook?: (ingredients: IngredientUsage[]) => void;
+  onAddShoppingItems?: (
+    items: Array<{
+      name: string;
+      category: Category;
+      quantity?: number | null;
+      unit?: string | null;
+    }>
+  ) => Promise<void>;
 }
 
-type ChefMode = "suggest" | "search";
+type ChefMode = "suggest" | "search" | "mealPlan";
 
 type CreditsResponse = {
   eco_credits: number;
@@ -87,7 +105,24 @@ async function postRecipes(payload: any): Promise<{ status: number; body: ApiRec
   return { status: r.status, body };
 }
 
-export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
+async function postMealPlan(payload: MealPlanRequest): Promise<{ status: number; body: any }> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("SESSION_MISSING");
+
+  const r = await fetch("/api/meal-plan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await r.json();
+  return { status: r.status, body };
+}
+
+export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems }) => {
   const [mode, setMode] = useState<ChefMode>("suggest");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,43 +131,45 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // State for selected recipe modal
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [isCooked, setIsCooked] = useState(false);
 
-  // Credits
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
 
-  // Constraints UI
   const [servings, setServings] = useState<number>(2);
   const [timeMinutes, setTimeMinutes] = useState<number>(25);
+
+  const [mealPlanLoading, setMealPlanLoading] = useState(false);
+  const [mealPlanError, setMealPlanError] = useState<string | null>(null);
+  const [mealPlanResult, setMealPlanResult] = useState<MealPlanResponse | null>(null);
+  const [addingMissing, setAddingMissing] = useState(false);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
   const noCredits = (ecoCredits ?? 0) <= 0;
 
   const { expiringItemsCount, expiredItemsCount } = useMemo(() => {
-  let expiring = 0;
-  let expired = 0;
+    let expiring = 0;
+    let expired = 0;
 
-  items.forEach((i) => {
-    if (!i.expiryDate) return;
+    items.forEach((i) => {
+      if (!i.expiryDate) return;
 
-    const diff = new Date(i.expiryDate).getTime() - new Date().getTime();
-    const days = Math.ceil(diff / (1000 * 3600 * 24));
+      const diff = new Date(i.expiryDate).getTime() - new Date().getTime();
+      const days = Math.ceil(diff / (1000 * 3600 * 24));
 
-    if (days < 0) {
-      expired++;
-    } else if (days <= 3) {
-      expiring++;
-    }
-  });
+      if (days < 0) {
+        expired++;
+      } else if (days <= 3) {
+        expiring++;
+      }
+    });
 
-  return {
-    expiringItemsCount: expiring,
-    expiredItemsCount: expired,
-  };
-}, [items]);
+    return {
+      expiringItemsCount: expiring,
+      expiredItemsCount: expired,
+    };
+  }, [items]);
 
   const refreshCredits = async () => {
     try {
@@ -140,7 +177,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
       const c = await fetchCredits();
       setEcoCredits(c.eco_credits ?? 0);
     } catch (e: any) {
-      // Non blocco la UI per crediti, ma loggo
       console.error("credits load error:", e?.message ?? e);
       setEcoCredits(null);
     } finally {
@@ -150,7 +186,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
 
   useEffect(() => {
     refreshCredits();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGenerateSuggestions = async () => {
@@ -171,6 +206,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
     setLoading(true);
     setError(null);
     setRecipes([]);
+    setMealPlanError(null);
 
     try {
       const payload = {
@@ -194,7 +230,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
       if (status === 429) {
         setCooldownUntil(Date.now() + 30_000);
         setError("Hai fatto troppe richieste. Aspetta 30 secondi e riprova.");
-        // opzionale: aggiorno crediti se il backend fa refund
         await refreshCredits();
         return;
       }
@@ -217,7 +252,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
 
       setRecipes(result);
 
-      // Se il backend ci dà remainingCredits, aggiorno subito
       if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
       } else {
@@ -255,11 +289,9 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
     setLoading(true);
     setError(null);
     setRecipes([]);
+    setMealPlanError(null);
 
     try {
-      // Nota: al momento il backend genera 3 ricette in base alla dispensa.
-      // Qui passiamo anche l'idea (searchQuery) come contesto: se in futuro estendiamo /api/recipes,
-      // lo avrai già pronto.
       const payload = {
         pantryItems: items.map((i) => ({
           name: i.name,
@@ -322,6 +354,158 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
     }
   };
 
+  const handleGenerateMealPlan = async (payload: MealPlanRequest) => {
+    if (mealPlanLoading) return;
+
+    if (inCooldown) {
+      const sec = Math.ceil(((cooldownUntil as number) - Date.now()) / 1000);
+      setMealPlanError(`Troppi tentativi. Riprova tra ${sec} secondi.`);
+      return;
+    }
+
+    if (noCredits) {
+      setMealPlanError("Crediti EcoChef esauriti. Ricarica per generare un piano pasti.");
+      return;
+    }
+
+    setMealPlanLoading(true);
+    setMealPlanError(null);
+    setMealPlanResult(null);
+    setRecipes([]);
+    setError(null);
+
+    try {
+      const { status, body } = await postMealPlan(payload);
+
+      if (status === 402) {
+        setMealPlanError("Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.");
+        await refreshCredits();
+        return;
+      }
+
+      if (status === 429) {
+        setCooldownUntil(Date.now() + 30_000);
+        setMealPlanError("Hai fatto troppe richieste. Aspetta 30 secondi e riprova.");
+        await refreshCredits();
+        return;
+      }
+
+      if (status >= 400) {
+        const msg = body?.message || body?.hint || body?.error || "Errore durante la generazione del piano pasti.";
+        setMealPlanError(String(msg));
+        await refreshCredits();
+        return;
+      }
+
+      if (!Array.isArray(body?.plan) || !Array.isArray(body?.shoppingListPreview)) {
+        setMealPlanError("Risposta piano pasti non valida.");
+        await refreshCredits();
+        return;
+      }
+
+      setMealPlanResult(body as MealPlanResponse);
+
+      if (typeof body?.remainingCredits === "number") {
+        setEcoCredits(body.remainingCredits);
+      } else {
+        await refreshCredits();
+      }
+    } catch (e: any) {
+      const msg = String(e?.message ?? "");
+      if (msg.includes("SESSION_MISSING")) {
+        setMealPlanError("Sessione scaduta. Fai logout e login di nuovo.");
+      } else {
+        setMealPlanError("Impossibile generare il piano pasti. Riprova.");
+      }
+      await refreshCredits();
+    } finally {
+      setMealPlanLoading(false);
+    }
+  };
+
+  const inferCategoryFromName = (name: string): Category => {
+    const value = name.toLowerCase();
+
+    if (
+      value.includes("latte") ||
+      value.includes("mozzarella") ||
+      value.includes("parmig") ||
+      value.includes("yogurt") ||
+      value.includes("burro") ||
+      value.includes("formaggio")
+    ) {
+      return Category.DAIRY;
+    }
+
+    if (
+      value.includes("pollo") ||
+      value.includes("manzo") ||
+      value.includes("pesce") ||
+      value.includes("tonno") ||
+      value.includes("salmone") ||
+      value.includes("uova")
+    ) {
+      return Category.MEAT_FISH;
+    }
+
+    if (value.includes("gelato") || value.includes("surgel") || value.includes("ghiacci")) {
+      return Category.FROZEN;
+    }
+
+    if (
+      value.includes("detersivo") ||
+      value.includes("spugna") ||
+      value.includes("sacchetto") ||
+      value.includes("carta")
+    ) {
+      return Category.HOUSEHOLD;
+    }
+
+    if (
+      value.includes("pasta") ||
+      value.includes("riso") ||
+      value.includes("farina") ||
+      value.includes("passata") ||
+      value.includes("olio") ||
+      value.includes("sale") ||
+      value.includes("zucchero") ||
+      value.includes("legumi")
+    ) {
+      return Category.PANTRY;
+    }
+
+    return Category.FRUIT_VEG;
+  };
+
+  const handleAddMissingToShoppingList = async () => {
+    if (!mealPlanResult || mealPlanResult.shoppingListPreview.length === 0) return;
+    if (addingMissing) return;
+
+    if (!onAddShoppingItems) {
+      alert("Funzione lista spesa non disponibile.");
+      return;
+    }
+
+    setAddingMissing(true);
+
+    try {
+      const rows = mealPlanResult.shoppingListPreview.map((item) => ({
+        name: item.name,
+        category: inferCategoryFromName(item.name),
+        quantity: item.quantity,
+        unit: item.unit,
+      }));
+
+      await onAddShoppingItems(rows);
+      alert("Ingredienti mancanti aggiunti alla lista della spesa.");
+    } catch (e: any) {
+      console.error("Add missing shopping items error:", e);
+      alert(e?.message ?? "Errore durante l'aggiunta alla lista della spesa.");
+    } finally {
+      setAddingMissing(false);
+    }
+  };
+
   const handleConfirmCook = () => {
     if (selectedRecipe && onCook) {
       onCook(selectedRecipe.ingredientsUsed);
@@ -351,7 +535,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Header Card */}
       <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 rounded-2xl text-white relative overflow-hidden">
         <div className="absolute -right-6 -top-6 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl"></div>
         <div className="relative z-10">
@@ -367,38 +550,39 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
             <CreditsPill />
           </div>
 
-          {/* Constraints */}
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            <div className="bg-white/10 border border-white/15 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Porzioni</div>
-              <select
-                value={servings}
-                onChange={(e) => setServings(Number(e.target.value))}
-                className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
-              >
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <option key={n} value={n} className="text-gray-900">
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {mode !== "mealPlan" && (
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <div className="bg-white/10 border border-white/15 rounded-xl p-3">
+                <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Porzioni</div>
+                <select
+                  value={servings}
+                  onChange={(e) => setServings(Number(e.target.value))}
+                  className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n} className="text-gray-900">
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="bg-white/10 border border-white/15 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Tempo max</div>
-              <select
-                value={timeMinutes}
-                onChange={(e) => setTimeMinutes(Number(e.target.value))}
-                className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
-              >
-                {[10, 15, 20, 25, 30, 40, 60].map((n) => (
-                  <option key={n} value={n} className="text-gray-900">
-                    {n} min
-                  </option>
-                ))}
-              </select>
+              <div className="bg-white/10 border border-white/15 rounded-xl p-3">
+                <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Tempo max</div>
+                <select
+                  value={timeMinutes}
+                  onChange={(e) => setTimeMinutes(Number(e.target.value))}
+                  className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
+                >
+                  {[10, 15, 20, 25, 30, 40, 60].map((n) => (
+                    <option key={n} value={n} className="text-gray-900">
+                      {n} min
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {ecoCredits !== null && ecoCredits <= 0 && (
             <div className="mt-4 bg-black/20 border border-white/20 rounded-xl p-3 text-xs">
@@ -411,13 +595,13 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex p-1 bg-gray-100 rounded-xl">
         <button
           onClick={() => {
             setMode("suggest");
             setRecipes([]);
             setError(null);
+            setMealPlanError(null);
           }}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
             mode === "suggest" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -430,6 +614,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
             setMode("search");
             setRecipes([]);
             setError(null);
+            setMealPlanError(null);
           }}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
             mode === "search" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -437,24 +622,39 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
         >
           Cerca & Pianifica
         </button>
+        <button
+          onClick={() => {
+            setMode("mealPlan");
+            setRecipes([]);
+            setError(null);
+            setMealPlanError(null);
+          }}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+            mode === "mealPlan" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <span className="inline-flex items-center justify-center gap-1">
+            <CalendarDays size={14} />
+            Piano Pasti
+          </span>
+        </button>
       </div>
 
-      {/* CONTENT: Suggest Mode */}
       {mode === "suggest" && (
         <div className="space-y-4 animate-fade-in">
           {expiredItemsCount > 0 && (
-  <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-red-700">
-    <AlertTriangle size={16} />
-    Hai {expiredItemsCount} prodotti scaduti ⚠️
-  </div>
-)}
+            <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-red-700">
+              <AlertTriangle size={16} />
+              Hai {expiredItemsCount} prodotti scaduti ⚠️
+            </div>
+          )}
 
-{expiringItemsCount > 0 && (
-  <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-yellow-700">
-    <AlertTriangle size={16} />
-    Hai {expiringItemsCount} prodotti in scadenza da usare!
-  </div>
-)}
+          {expiringItemsCount > 0 && (
+            <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-yellow-700">
+              <AlertTriangle size={16} />
+              Hai {expiringItemsCount} prodotti in scadenza da usare!
+            </div>
+          )}
 
           {recipes.length === 0 && !loading && (
             <div className="text-center py-8">
@@ -477,7 +677,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
         </div>
       )}
 
-      {/* CONTENT: Search Mode */}
       {mode === "search" && (
         <div className="space-y-4 animate-fade-in">
           <form onSubmit={handleSearchRecipe} className="flex gap-2">
@@ -500,7 +699,35 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
         </div>
       )}
 
-      {/* Loading State */}
+      {mode === "mealPlan" && (
+        <div className="space-y-4 animate-fade-in">
+          <MealPlanForm onSubmit={handleGenerateMealPlan} loading={mealPlanLoading} />
+
+          {mealPlanLoading && (
+            <div className="text-center py-10">
+              <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={32} />
+              <p className="text-gray-500 text-sm font-medium">
+                Sto organizzando il tuo piano pasti...
+              </p>
+            </div>
+          )}
+
+          {mealPlanError && (
+            <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm text-center border border-red-100">
+              {mealPlanError}
+            </div>
+          )}
+
+          {mealPlanResult && !mealPlanLoading && (
+            <MealPlanResult
+              result={mealPlanResult}
+              onAddMissingToShoppingList={handleAddMissingToShoppingList}
+              addingToShoppingList={addingMissing}
+            />
+          )}
+        </div>
+      )}
+
       {loading && (
         <div className="text-center py-10">
           <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={32} />
@@ -510,85 +737,83 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
         </div>
       )}
 
-      {/* Error State */}
-      {error && (
+      {error && mode !== "mealPlan" && (
         <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm text-center border border-red-100">
           {error}
         </div>
       )}
 
-      {/* Recipe List */}
-      <div className="space-y-4">
-        {recipes.map((recipe, idx) => (
-          <div
-            key={idx}
-            onClick={() => setSelectedRecipe(recipe)}
-            className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-emerald-300 transition-all cursor-pointer group active:scale-[0.99]"
-          >
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-xl font-bold text-gray-800 leading-tight group-hover:text-emerald-700 transition-colors">
-                  {recipe.title}
-                </h3>
-                <span
-                  className={`text-[10px] px-2 py-1 rounded-full uppercase font-bold tracking-wide border
-                    ${
-                      recipe.difficulty === "Facile"
-                        ? "bg-green-50 text-green-700 border-green-100"
-                        : recipe.difficulty === "Media"
-                        ? "bg-yellow-50 text-yellow-700 border-yellow-100"
-                        : "bg-red-50 text-red-700 border-red-100"
-                    }`}
-                >
-                  {recipe.difficulty}
-                </span>
-              </div>
+      {mode !== "mealPlan" && (
+        <div className="space-y-4">
+          {recipes.map((recipe, idx) => (
+            <div
+              key={idx}
+              onClick={() => setSelectedRecipe(recipe)}
+              className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-emerald-300 transition-all cursor-pointer group active:scale-[0.99]"
+            >
+              <div className="p-5">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-xl font-bold text-gray-800 leading-tight group-hover:text-emerald-700 transition-colors">
+                    {recipe.title}
+                  </h3>
+                  <span
+                    className={`text-[10px] px-2 py-1 rounded-full uppercase font-bold tracking-wide border
+                      ${
+                        recipe.difficulty === "Facile"
+                          ? "bg-green-50 text-green-700 border-green-100"
+                          : recipe.difficulty === "Media"
+                          ? "bg-yellow-50 text-yellow-700 border-yellow-100"
+                          : "bg-red-50 text-red-700 border-red-100"
+                      }`}
+                  >
+                    {recipe.difficulty}
+                  </span>
+                </div>
 
-              <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
-                <span className="flex items-center gap-1">
-                  <Clock size={14} /> {recipe.time}
-                </span>
-                <span className="flex items-center gap-1">
-                  <BarChart size={14} /> {recipe.ingredientsUsed.length} ingr. usati
-                </span>
-              </div>
+                <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
+                  <span className="flex items-center gap-1">
+                    <Clock size={14} /> {recipe.time}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <BarChart size={14} /> {recipe.ingredientsUsed.length} ingr. usati
+                  </span>
+                </div>
 
-              <p className="text-gray-600 text-sm mb-4 leading-relaxed line-clamp-2">{recipe.description}</p>
+                <p className="text-gray-600 text-sm mb-4 leading-relaxed line-clamp-2">{recipe.description}</p>
 
-              <div className="flex gap-2 mb-2">
-                <div className="flex-1">
-                  <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full"
-                      style={{
-                        width: `${
-                          (recipe.ingredientsUsed.length /
-                            (recipe.ingredientsUsed.length + recipe.missingIngredients.length || 1)) *
-                          100
-                        }%`,
-                      }}
-                    />
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1">
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full"
+                        style={{
+                          width: `${
+                            (recipe.ingredientsUsed.length /
+                              (recipe.ingredientsUsed.length + recipe.missingIngredients.length || 1)) *
+                            100
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 text-right">
+                      Hai {recipe.ingredientsUsed.length} su{" "}
+                      {recipe.ingredientsUsed.length + recipe.missingIngredients.length} ingredienti
+                    </p>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1 text-right">
-                    Hai {recipe.ingredientsUsed.length} su{" "}
-                    {recipe.ingredientsUsed.length + recipe.missingIngredients.length} ingredienti
-                  </p>
+                </div>
+
+                <div className="flex items-center justify-end text-emerald-600 text-sm font-medium mt-2 group-hover:gap-2 transition-all">
+                  Vedi Ricetta <ChevronRight size={16} />
                 </div>
               </div>
-
-              <div className="flex items-center justify-end text-emerald-600 text-sm font-medium mt-2 group-hover:gap-2 transition-all">
-                Vedi Ricetta <ChevronRight size={16} />
-              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Recipe Detail Modal */}
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col shadow-2xl">
-            {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10 rounded-t-2xl">
               <h3 className="font-bold text-lg text-gray-800 truncate pr-4">{selectedRecipe.title}</h3>
               <button
@@ -600,7 +825,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
             </div>
 
             <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-              {/* Meta Info */}
               <div className="flex gap-4 text-sm text-gray-500 border-b border-gray-50 pb-4">
                 <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
                   <Clock size={16} /> {selectedRecipe.time}
@@ -610,7 +834,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
                 </span>
               </div>
 
-              {/* Ingredients Section */}
               <div className="grid grid-cols-1 gap-6">
                 <div>
                   <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -654,7 +877,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
                 </div>
               </div>
 
-              {/* Instructions Section */}
               <div>
                 <h4 className="text-lg font-bold text-gray-800 mb-4">Preparazione</h4>
                 <div className="space-y-4">
@@ -674,7 +896,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
               </div>
             </div>
 
-            {/* Cook Button Footer */}
             <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
               {isCooked ? (
                 <div className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 animate-bounce">
@@ -698,7 +919,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook }) => {
   );
 };
 
-// Simple Icon component for local use
 const ShoppingBagIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

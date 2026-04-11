@@ -90,6 +90,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const timeMinutes: number = Number(constraints.timeMinutes ?? body.timeMinutes ?? 30);
 
     const inventoryList: string | undefined = typeof body.inventoryList === "string" ? body.inventoryList : undefined;
+    const idea: string | undefined =
+      typeof constraints.idea === "string"
+        ? constraints.idea.trim()
+        : typeof body.idea === "string"
+          ? body.idea.trim()
+          : undefined;
 
     if ((!pantryItems || pantryItems.length === 0) && !inventoryList) {
       return res.status(400).json({ error: "Missing pantryItems or inventoryList" });
@@ -112,29 +118,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalTime = Number.isFinite(timeMinutes) && timeMinutes > 0 ? timeMinutes : Number(profile?.max_time_minutes_default ?? 30);
 
     let pantryText = "";
+    let expiredPantryText = "";
+    let expiringSoonPantryText = "";
+
     if (pantryItems && pantryItems.length > 0) {
+      const nowDate = new Date();
+      nowDate.setHours(0, 0, 0, 0);
+
+      const soonThreshold = new Date(nowDate);
+      soonThreshold.setDate(soonThreshold.getDate() + 3);
+
       const normalized = pantryItems
-        .map((it) => ({
-          name: String(it.name ?? "").trim(),
-          quantity: typeof it.quantity === "number" ? it.quantity : undefined,
-          unit: typeof it.unit === "string" ? it.unit : undefined,
-          expiryDate: it.expiryDate ? String(it.expiryDate) : null,
-        }))
+        .map((it) => {
+          const name = String(it.name ?? "").trim();
+          const quantity = typeof it.quantity === "number" ? it.quantity : undefined;
+          const unit = typeof it.unit === "string" ? it.unit : undefined;
+          const expiryDate = it.expiryDate ? String(it.expiryDate) : null;
+
+          let expiryTs: number | null = null;
+          if (expiryDate) {
+            const parsed = new Date(expiryDate);
+            const ts = parsed.getTime();
+            if (!Number.isNaN(ts)) {
+              parsed.setHours(0, 0, 0, 0);
+              expiryTs = parsed.getTime();
+            }
+          }
+
+          return {
+            name,
+            quantity,
+            unit,
+            expiryDate,
+            expiryTs,
+          };
+        })
         .filter((it) => it.name.length > 0);
 
       normalized.sort((a, b) => {
-        const da = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.POSITIVE_INFINITY;
-        const db = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.POSITIVE_INFINITY;
+        const da = a.expiryTs ?? Number.POSITIVE_INFINITY;
+        const db = b.expiryTs ?? Number.POSITIVE_INFINITY;
         return da - db;
       });
 
-      pantryText = normalized
-        .map((it) => {
-          const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
-          const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
-          return `• ${it.name}${qty}${exp}`;
-        })
-        .join("\n");
+      const availableItems = normalized.filter((it) => {
+        if (it.expiryTs == null) return true;
+        return it.expiryTs >= nowDate.getTime();
+      });
+
+      const expiredItems = normalized.filter((it) => {
+        if (it.expiryTs == null) return false;
+        return it.expiryTs < nowDate.getTime();
+      });
+
+      const expiringSoonItems = availableItems.filter((it) => {
+        if (it.expiryTs == null) return false;
+        return it.expiryTs <= soonThreshold.getTime();
+      });
+
+      const formatItem = (it: { name: string; quantity?: number; unit?: string; expiryDate?: string | null }) => {
+        const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
+        const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
+        return `• ${it.name}${qty}${exp}`;
+      };
+
+      pantryText = availableItems.map(formatItem).join("\n");
+      expiredPantryText = expiredItems.map(formatItem).join("\n");
+      expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
     } else if (inventoryList) {
       pantryText = inventoryList.trim();
     }
@@ -148,6 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       lactoseFree,
       avoid,
       allergies,
+      idea: idea ?? "",
     };
     const cacheKey = stableStringify(keyObj);
 
@@ -181,30 +232,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (avoid.length) rules.push(`Avoid ingredients: ${avoid.join(", ")}.`);
     if (allergies.length) rules.push(`Allergies: ${allergies.join(", ")}.`);
 
+    const userRequestBlock = idea
+      ? `
+RICHIESTA UTENTE:
+- ${idea}
+`.trim()
+      : "";
+
+    const expiredBlock = expiredPantryText
+      ? `
+INGREDIENTI SCADUTI (NON USARLI MAI):
+${expiredPantryText}
+`.trim()
+      : "";
+
+    const expiringSoonBlock = expiringSoonPantryText
+      ? `
+INGREDIENTI IN SCADENZA A BREVE (DA PRIORITIZZARE):
+${expiringSoonPantryText}
+`.trim()
+      : "";
+
     const prompt = `
 Agisci come uno chef esperto di cucina sostenibile e anti-spreco.
 
 OBIETTIVO:
 - Suggerisci 3 ricette gustose usando soprattutto gli ingredienti disponibili.
-- Dai PRIORITÀ assoluta agli ingredienti con scadenza più vicina.
-- Rispetta in modo RIGIDO preferenze e vincoli.
+- Dai priorità agli ingredienti già presenti in dispensa.
+- Dai priorità ancora più alta agli ingredienti in scadenza a breve.
+- Rispetta in modo rigido preferenze, allergie, intolleranze e ingredienti da evitare.
+- Non usare mai ingredienti scaduti.
 
 VINCOLI:
 - Porzioni: ${finalServings}
 - Tempo massimo: ${finalTime} minuti
 - ${rules.join(" ")}
 
-DISPENSA (con quantità e scadenze quando disponibili):
-${pantryText}
+DISPENSA DISPONIBILE (con quantità e scadenze quando disponibili):
+${pantryText || "Nessun dettaglio strutturato disponibile."}
 
-REGOLE DIETETICHE (IMPORTANTI):
-- Se lactose-free = YES: evita latte, burro, panna, yogurt, formaggi. Se serve, proponi alternative (olio, latte vegetale, ecc).
-- Se diet = veg: niente carne/pesce. Uova ok SOLO se lactose-free = NO.
-- Se diet = vegan: niente prodotti animali (uova, latte, formaggi, miele). (Se diet non è vegan, non applicare.)
+${expiringSoonBlock}
+
+${expiredBlock}
+
+${userRequestBlock}
+
+REGOLE DIETETICHE E DI SICUREZZA ALIMENTARE (IMPORTANTI):
+- Se lactose-free = YES: evita ingredienti con lattosio come latte, burro, panna, yogurt e formaggi tradizionali. Se utile, proponi alternative compatibili.
+- Se diet = veg: niente carne e niente pesce. Uova e latticini sono consentiti solo se compatibili con gli altri vincoli attivi.
+- Se diet = vegan: niente ingredienti di origine animale, incluse uova, latte, formaggi, burro, yogurt e miele.
+- Non usare ingredienti presenti in "Avoid ingredients".
+- Non usare ingredienti presenti in "Allergies".
+- Se un ingrediente è incompatibile con anche uno solo dei vincoli attivi, non deve comparire nella ricetta.
+- Usa come "expiresSoonUsed" solo ingredienti realmente presenti in dispensa e non scaduti.
+- "missingIngredients" deve contenere solo ingredienti davvero non presenti o chiaramente non sufficienti rispetto alla ricetta proposta.
+- Non inventare disponibilità in dispensa che non è stata fornita.
 
 OUTPUT (OBBLIGATORIO):
-- Rispondi SOLO con un JSON array.
+- Rispondi SOLO con un JSON array valido.
 - Nessun testo fuori dal JSON.
+- Restituisci esattamente 3 ricette.
 - Struttura:
 [
   {
