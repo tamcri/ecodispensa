@@ -13,6 +13,16 @@ export const MealPlanResult = ({
 }: MealPlanResultProps) => {
   return (
     <div className="space-y-5">
+      {(result.startDate || result.endDate) && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="text-sm text-gray-500 mb-1">Periodo piano</div>
+          <div className="text-lg font-bold text-gray-800">
+            {result.startDate ?? "—"}
+            {result.endDate ? ` → ${result.endDate}` : ""}
+          </div>
+        </div>
+      )}
+
       {result.warning && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
           {result.warning}

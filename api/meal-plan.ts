@@ -63,10 +63,40 @@ function normalizeIngredientName(name: string): string {
     .replace(/\s+/g, " ");
 }
 
+function singularizeItalianFoodName(name: string): string {
+  let value = normalizeIngredientName(name);
+
+  if (value.endsWith("che")) value = value.slice(0, -3) + "ca";
+  else if (value.endsWith("ghi")) value = value.slice(0, -3) + "go";
+  else if (value.endsWith("ie")) value = value.slice(0, -2) + "ia";
+  else if (value.endsWith("i") && value.length > 3) value = value.slice(0, -1) + "o";
+  else if (value.endsWith("e") && value.length > 3) value = value.slice(0, -1) + "a";
+
+  return value;
+}
+
+function buildIngredientAliases(name: string): string[] {
+  const normalized = normalizeIngredientName(name);
+  const singular = singularizeItalianFoodName(name);
+  return [...new Set([normalized, singular])];
+}
+
 function parseUnit(value: unknown): string {
   if (typeof value !== "string") return "pz";
   const trimmed = value.trim();
   return trimmed.length ? trimmed : "pz";
+}
+
+function normalizeUnit(unit: string): string {
+  const value = parseUnit(unit).toLowerCase();
+
+  if (value === "grammi" || value === "gr" || value === "grammo") return "g";
+  if (value === "kilogrammi" || value === "kilogrammo") return "kg";
+  if (value === "litri" || value === "litro") return "l";
+  if (value === "millilitri" || value === "millilitro") return "ml";
+  if (value === "pezzi" || value === "pezzo") return "pz";
+
+  return value;
 }
 
 function parseQuantity(value: unknown): number {
@@ -94,6 +124,43 @@ function estimateMinimumBudget(
   const totalMealServings = days * mealsPerDay * people;
   const perServingCost = perServingCostMap[complexity];
   return Number((totalMealServings * perServingCost).toFixed(2));
+}
+
+function parseStartDateDDMMYYYY(value: unknown): { iso: string; date: Date } | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
+
+  const [, dd, mm, yyyy] = match;
+  const iso = `${yyyy}-${mm}-${dd}`;
+  const date = new Date(`${iso}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  if (
+    date.getUTCFullYear() !== Number(yyyy) ||
+    date.getUTCMonth() + 1 !== Number(mm) ||
+    date.getUTCDate() !== Number(dd)
+  ) {
+    return null;
+  }
+
+  return { iso, date };
+}
+
+function formatDateToISO(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const clone = new Date(date);
+  clone.setDate(clone.getDate() + days);
+  return clone;
 }
 
 type DbPantryItem = {
@@ -142,6 +209,40 @@ type MealPlanDay = {
     dinner?: MealPlanRecipe;
   };
 };
+
+type PantryAvailabilityBucket = {
+  displayName: string;
+  canonicalKey: string;
+  totalBaseQty: number;
+  originalUnit: string;
+};
+
+type PantryCoverage = {
+  usedPantryIngredients: string[];
+  missingPantryIngredients: string[];
+};
+
+function unitToBase(quantity: number, unit: string): { qty: number; unit: string } {
+  const normalizedUnit = normalizeUnit(unit);
+
+  if (normalizedUnit === "kg") return { qty: quantity * 1000, unit: "g" };
+  if (normalizedUnit === "g") return { qty: quantity, unit: "g" };
+  if (normalizedUnit === "l") return { qty: quantity * 1000, unit: "ml" };
+  if (normalizedUnit === "ml") return { qty: quantity, unit: "ml" };
+
+  return { qty: quantity, unit: normalizedUnit || "pz" };
+}
+
+function baseToDisplay(quantity: number, unit: string): { qty: number; unit: string } {
+  if (unit === "g" && quantity >= 1000) {
+    return { qty: Number((quantity / 1000).toFixed(2)), unit: "kg" };
+  }
+  if (unit === "ml" && quantity >= 1000) {
+    return { qty: Number((quantity / 1000).toFixed(2)), unit: "l" };
+  }
+
+  return { qty: Number(quantity.toFixed(2)), unit };
+}
 
 function normalizeDbPantryItems(rows: DbPantryItem[]) {
   const nowDate = new Date();
@@ -232,7 +333,7 @@ function sanitizeRecipe(input: any, fallbackServings: number): MealPlanRecipe {
         quantity: parseQuantity(it?.quantity),
         unit: parseUnit(it?.unit),
       }))
-      .filter((it: any) => it.name.length > 0),
+      .filter((it: any) => it.name.length > 0 && it.quantity > 0),
     missingIngredients: rawMissingIngredients
       .map((it: any) => ({
         name: cleanText(it?.name) ?? "",
@@ -248,7 +349,6 @@ function sanitizeRecipe(input: any, fallbackServings: number): MealPlanRecipe {
 
 function sanitizePlan(rawPlan: any, people: number, days: number, includeLunch: boolean, includeDinner: boolean): MealPlanDay[] {
   const rawDays = Array.isArray(rawPlan) ? rawPlan : [];
-
   const result: MealPlanDay[] = [];
 
   for (let i = 0; i < days; i += 1) {
@@ -274,6 +374,113 @@ function sanitizePlan(rawPlan: any, people: number, days: number, includeLunch: 
   return result;
 }
 
+function buildPantryAvailabilityMap(availablePantryItems: AvailablePantryItem[]) {
+  const map = new Map<string, PantryAvailabilityBucket>();
+
+  for (const item of availablePantryItems) {
+    if (item.quantity <= 0) continue;
+
+    const base = unitToBase(item.quantity, item.unit);
+    const aliases = buildIngredientAliases(item.name);
+
+    for (const alias of aliases) {
+      const key = `${alias}__${base.unit}`;
+      const existing = map.get(key);
+
+      if (existing) {
+        existing.totalBaseQty = Number((existing.totalBaseQty + base.qty).toFixed(2));
+      } else {
+        map.set(key, {
+          displayName: item.name,
+          canonicalKey: key,
+          totalBaseQty: Number(base.qty.toFixed(2)),
+          originalUnit: base.unit,
+        });
+      }
+    }
+  }
+
+  return map;
+}
+
+function recalculateMissingIngredients(
+  plan: MealPlanDay[],
+  availablePantryItems: AvailablePantryItem[]
+): MealPlanDay[] {
+  const pantryAvailability = buildPantryAvailabilityMap(availablePantryItems);
+
+  const consumeFromAvailability = (ingredientName: string, quantity: number, unit: string) => {
+    const base = unitToBase(quantity, unit);
+    const aliases = buildIngredientAliases(ingredientName);
+
+    for (const alias of aliases) {
+      const key = `${alias}__${base.unit}`;
+      const bucket = pantryAvailability.get(key);
+      if (!bucket) continue;
+
+      const usableQty = Math.min(bucket.totalBaseQty, base.qty);
+      bucket.totalBaseQty = Number((bucket.totalBaseQty - usableQty).toFixed(2));
+      return Number((base.qty - usableQty).toFixed(2));
+    }
+
+    return Number(base.qty.toFixed(2));
+  };
+
+  return plan.map((day) => {
+    const clonedDay: MealPlanDay = {
+      day: day.day,
+      meals: {},
+    };
+
+    const processRecipe = (recipe?: MealPlanRecipe): MealPlanRecipe | undefined => {
+      if (!recipe) return undefined;
+
+      const recalculatedMissing: MissingIngredient[] = [];
+
+      for (const ingredient of recipe.ingredientsUsed) {
+        const missingBaseQty = consumeFromAvailability(ingredient.name, ingredient.quantity, ingredient.unit);
+
+        if (missingBaseQty > 0) {
+          const base = unitToBase(ingredient.quantity, ingredient.unit);
+          const display = baseToDisplay(missingBaseQty, base.unit);
+
+          recalculatedMissing.push({
+            name: ingredient.name,
+            quantity: display.qty,
+            unit: display.unit,
+          });
+        }
+      }
+
+      const aggregatedMissing = new Map<string, MissingIngredient>();
+      for (const ingredient of recalculatedMissing) {
+        const key = `${normalizeIngredientName(ingredient.name)}__${normalizeUnit(ingredient.unit)}`;
+        const existing = aggregatedMissing.get(key);
+
+        if (existing) {
+          existing.quantity = Number((existing.quantity + ingredient.quantity).toFixed(2));
+        } else {
+          aggregatedMissing.set(key, {
+            name: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+          });
+        }
+      }
+
+      return {
+        ...recipe,
+        missingIngredients: [...aggregatedMissing.values()],
+      };
+    };
+
+    clonedDay.meals.lunch = processRecipe(day.meals.lunch);
+    clonedDay.meals.dinner = processRecipe(day.meals.dinner);
+
+    return clonedDay;
+  });
+}
+
 function aggregateShoppingList(plan: MealPlanDay[]): MissingIngredient[] {
   const aggregated = new Map<string, MissingIngredient>();
 
@@ -283,7 +490,7 @@ function aggregateShoppingList(plan: MealPlanDay[]): MissingIngredient[] {
     for (const recipe of recipes) {
       for (const ingredient of recipe.missingIngredients) {
         const normalizedName = normalizeIngredientName(ingredient.name);
-        const unit = parseUnit(ingredient.unit);
+        const unit = normalizeUnit(ingredient.unit);
         const key = `${normalizedName}__${unit}`;
 
         const existing = aggregated.get(key);
@@ -303,17 +510,27 @@ function aggregateShoppingList(plan: MealPlanDay[]): MissingIngredient[] {
   return [...aggregated.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 }
 
-function buildPantryCoverage(plan: MealPlanDay[], availablePantryItems: AvailablePantryItem[]) {
-  const pantryNames = new Set(availablePantryItems.map((it) => it.normalizedName));
+function buildPantryCoverage(plan: MealPlanDay[], availablePantryItems: AvailablePantryItem[]): PantryCoverage {
+  const pantryAliasMap = new Map<string, string>();
+
+  for (const item of availablePantryItems) {
+    for (const alias of buildIngredientAliases(item.name)) {
+      pantryAliasMap.set(alias, item.name);
+    }
+  }
+
   const usedPantryNames = new Set<string>();
 
   for (const day of plan) {
     const recipes = [day.meals.lunch, day.meals.dinner].filter(Boolean) as MealPlanRecipe[];
     for (const recipe of recipes) {
       for (const ingredient of recipe.ingredientsUsed) {
-        const normalized = normalizeIngredientName(ingredient.name);
-        if (pantryNames.has(normalized)) {
-          usedPantryNames.add(ingredient.name.trim());
+        for (const alias of buildIngredientAliases(ingredient.name)) {
+          const originalName = pantryAliasMap.get(alias);
+          if (originalName) {
+            usedPantryNames.add(originalName);
+            break;
+          }
         }
       }
     }
@@ -359,11 +576,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user_id = userData.user.id;
     const body = req.body ?? {};
 
+    const startDateParsed = parseStartDateDDMMYYYY(body.startDate);
+    if (!startDateParsed) {
+      return res.status(400).json({ error: "Invalid startDate. Expected format: DD-MM-YYYY" });
+    }
+
     const days = Math.round(toNumber(body.days, 0));
     const allowedDays = [1, 2, 3, 5, 7];
     if (!allowedDays.includes(days)) {
       return res.status(400).json({ error: "Invalid days. Allowed values: 1, 2, 3, 5, 7" });
     }
+
+    const startDateIso = startDateParsed.iso;
+    const endDateIso = formatDateToISO(addDays(startDateParsed.date, Math.max(0, days - 1)));
 
     const meals = body.meals ?? {};
     const includeLunch = Boolean(meals.lunch);
@@ -414,6 +639,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const keyObj = {
       model,
+      startDateIso,
+      endDateIso,
       days,
       includeLunch,
       includeDinner,
@@ -468,6 +695,7 @@ Agisci come un meal planner esperto di cucina sostenibile, anti-spreco e organiz
 
 OBIETTIVO:
 - Genera un piano pasti di ${days} giorni.
+- Il piano inizia il ${startDateIso} e termina il ${endDateIso}.
 - Prevedi ${includeLunch ? "pranzo" : ""}${includeLunch && includeDinner ? " e " : ""}${includeDinner ? "cena" : ""}.
 - Il piano è per ${people} persone.
 - Riutilizza il più possibile gli ingredienti già presenti in dispensa.
@@ -498,13 +726,11 @@ REGOLE IMPORTANTI:
 - Se lactose-free = YES: evita ingredienti con lattosio.
 - Non usare ingredienti presenti in "Avoid ingredients".
 - Non usare ingredienti presenti in "Allergies".
-- Se un ingrediente è già presente in dispensa in quantità sufficiente, non metterlo nei missingIngredients.
-- Se la quantità in dispensa non basta, metti in missingIngredients SOLO la quantità aggiuntiva da comprare.
-- MissingIngredients deve essere espresso sempre come array di oggetti con name, quantity, unit.
 - IngredientsUsed deve contenere gli ingredienti realmente usati dalla ricetta con quantità e unità.
 - Le ricette devono essere realistiche, semplici da eseguire e coerenti con il numero di persone.
 - Non inserire pasti vuoti nei giorni richiesti.
 - Non scrivere testo fuori dal JSON.
+- Anche se un ingrediente esiste solo tra gli scaduti, consideralo NON disponibile.
 
 OUTPUT OBBLIGATORIO:
 Restituisci SOLO un JSON object valido, con questa struttura esatta:
@@ -592,6 +818,9 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         return {
           warning: budgetWarning,
           estimatedMinBudget,
+          startDate: body.startDate,
+          startDateIso,
+          endDate: endDateIso,
           plan: [],
           shoppingListPreview: [],
           pantryCoverage: {
@@ -615,23 +844,70 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         }
 
         const parsed = JSON.parse(cleaned);
-        const plan = sanitizePlan(parsed?.plan, people, days, includeLunch, includeDinner);
-        const shoppingListPreview = aggregateShoppingList(plan);
-        const pantryCoverage = buildPantryCoverage(plan, availableItems);
+        const aiPlan = sanitizePlan(parsed?.plan, people, days, includeLunch, includeDinner);
+        const correctedPlan = recalculateMissingIngredients(aiPlan, availableItems);
+        const shoppingListPreview = aggregateShoppingList(correctedPlan);
+        const pantryCoverage = buildPantryCoverage(correctedPlan, availableItems);
+
+        await supabase
+          .from("meal_plans")
+          .update({ status: "archived" })
+          .eq("user_id", user_id)
+          .eq("status", "active");
+
+        const { data: savedPlan, error: saveErr } = await supabase
+          .from("meal_plans")
+          .insert({
+            user_id,
+            start_date: startDateIso,
+            end_date: endDateIso,
+            days,
+            meals: {
+              lunch: includeLunch,
+              dinner: includeDinner,
+            },
+            people,
+            budget,
+            complexity,
+            notes: notes || null,
+            warning: budgetWarning,
+            estimated_min_budget: estimatedMinBudget,
+            plan_json: correctedPlan,
+            shopping_list_json: shoppingListPreview,
+            pantry_coverage_json: pantryCoverage,
+            status: "active",
+          })
+          .select("id, start_date, end_date, days, meals, people, budget, complexity, notes, warning, estimated_min_budget, plan_json, shopping_list_json, pantry_coverage_json, status, created_at, updated_at")
+          .single();
+
+        if (saveErr) {
+          console.error("Meal plan save error:", saveErr);
+          throw new Error(saveErr.message);
+        }
 
         return {
+          id: savedPlan.id,
           warning: budgetWarning,
           estimatedMinBudget,
-          plan,
+          startDate: body.startDate,
+          startDateIso,
+          endDate: endDateIso,
+          plan: correctedPlan,
           shoppingListPreview,
           pantryCoverage,
+          status: savedPlan.status,
+          createdAt: savedPlan.created_at,
+          updatedAt: savedPlan.updated_at,
           remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
-      } catch (e) {
-        console.error("Meal-plan JSON parse failed. Raw text:", text);
+      } catch (e: any) {
+        console.error("Meal-plan JSON/save failed. Raw text:", text, e);
         return {
           warning: budgetWarning,
           estimatedMinBudget,
+          startDate: body.startDate,
+          startDateIso,
+          endDate: endDateIso,
           plan: [],
           shoppingListPreview: [],
           pantryCoverage: {
@@ -640,6 +916,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
           },
           parse_error: true,
           text,
+          error: e?.message ?? null,
           remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
       }

@@ -1,22 +1,74 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { MealPlanComplexity, MealPlanRequest } from "../types";
 
 interface MealPlanFormProps {
   onSubmit: (payload: MealPlanRequest) => Promise<void> | void;
   loading: boolean;
+  initialValues?: Partial<MealPlanRequest>;
 }
 
-export const MealPlanForm = ({ onSubmit, loading }: MealPlanFormProps) => {
-  const [days, setDays] = useState<1 | 2 | 3 | 5 | 7>(3);
-  const [lunch, setLunch] = useState(true);
-  const [dinner, setDinner] = useState(true);
-  const [people, setPeople] = useState(2);
-  const [budget, setBudget] = useState<string>("");
-  const [complexity, setComplexity] = useState<MealPlanComplexity>("mixed");
-  const [notes, setNotes] = useState("");
+function formatTodayDDMMYYYY() {
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(today.getFullYear());
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+function isValidStartDate(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return false;
+
+  const [, dd, mm, yyyy] = match;
+  const iso = `${yyyy}-${mm}-${dd}`;
+  const date = new Date(`${iso}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) return false;
+
+  return (
+    date.getUTCFullYear() === Number(yyyy) &&
+    date.getUTCMonth() + 1 === Number(mm) &&
+    date.getUTCDate() === Number(dd)
+  );
+}
+
+export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormProps) => {
+  const resolvedInitialValues = useMemo(
+    () => ({
+      startDate: initialValues?.startDate ?? formatTodayDDMMYYYY(),
+      days: initialValues?.days ?? 3,
+      meals: {
+        lunch: initialValues?.meals?.lunch ?? true,
+        dinner: initialValues?.meals?.dinner ?? true,
+      },
+      people: initialValues?.people ?? 2,
+      budget:
+        initialValues?.budget == null
+          ? ""
+          : String(initialValues.budget),
+      complexity: initialValues?.complexity ?? "mixed",
+      notes: initialValues?.notes ?? "",
+    }),
+    [initialValues]
+  );
+
+  const [startDate, setStartDate] = useState(resolvedInitialValues.startDate);
+  const [days, setDays] = useState<1 | 2 | 3 | 5 | 7>(resolvedInitialValues.days as 1 | 2 | 3 | 5 | 7);
+  const [lunch, setLunch] = useState(resolvedInitialValues.meals.lunch);
+  const [dinner, setDinner] = useState(resolvedInitialValues.meals.dinner);
+  const [people, setPeople] = useState(resolvedInitialValues.people);
+  const [budget, setBudget] = useState<string>(resolvedInitialValues.budget);
+  const [complexity, setComplexity] = useState<MealPlanComplexity>(resolvedInitialValues.complexity as MealPlanComplexity);
+  const [notes, setNotes] = useState(resolvedInitialValues.notes);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!isValidStartDate(startDate)) {
+      alert("Inserisci una data di inizio valida nel formato DD-MM-YYYY.");
+      return;
+    }
 
     if (!lunch && !dinner) {
       alert("Seleziona almeno pranzo o cena.");
@@ -31,6 +83,7 @@ export const MealPlanForm = ({ onSubmit, loading }: MealPlanFormProps) => {
     }
 
     await onSubmit({
+      startDate: startDate.trim(),
       days,
       meals: {
         lunch,
@@ -46,6 +99,23 @@ export const MealPlanForm = ({ onSubmit, loading }: MealPlanFormProps) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-4">
+        <div>
+          <label htmlFor="meal-plan-start-date" className="block text-sm font-medium text-gray-700 mb-2">
+            Data inizio
+          </label>
+          <input
+            id="meal-plan-start-date"
+            type="text"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            placeholder="DD-MM-YYYY"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400"
+          />
+          <p className="text-xs text-gray-500 mt-2">
+            Inserisci la data nel formato DD-MM-YYYY.
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Durata piano</label>
           <div className="grid grid-cols-5 gap-2">

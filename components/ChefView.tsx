@@ -122,6 +122,48 @@ async function postMealPlan(payload: MealPlanRequest): Promise<{ status: number;
   return { status: r.status, body };
 }
 
+async function fetchActiveMealPlan(): Promise<MealPlanResponse | null> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("SESSION_MISSING");
+
+  const r = await fetch("/api/meal-plan-active", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const body = await r.json();
+
+  if (!r.ok) {
+    throw new Error(body?.error || "ACTIVE_MEAL_PLAN_FETCH_FAILED");
+  }
+
+  if (!body?.plan) return null;
+
+  return {
+    id: body.plan.id,
+    startDate: body.plan.startDate ?? null,
+    startDateIso: body.plan.startDateIso ?? null,
+    endDate: body.plan.endDate ?? null,
+    endDateIso: body.plan.endDateIso ?? null,
+    warning: body.plan.warning ?? null,
+    estimatedMinBudget: Number(body.plan.estimatedMinBudget ?? 0),
+    plan: Array.isArray(body.plan.plan) ? body.plan.plan : [],
+    shoppingListPreview: Array.isArray(body.plan.shoppingListPreview) ? body.plan.shoppingListPreview : [],
+    pantryCoverage: {
+      usedPantryIngredients: [],
+      missingPantryIngredients: Array.isArray(body.plan.shoppingListPreview)
+        ? body.plan.shoppingListPreview.map((item: any) => item.name)
+        : [],
+    },
+    remainingCredits: null,
+    status: body.plan.status,
+    createdAt: body.plan.createdAt ?? null,
+    updatedAt: body.plan.updatedAt ?? null,
+  };
+}
+
 export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems }) => {
   const [mode, setMode] = useState<ChefMode>("suggest");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -144,6 +186,8 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [mealPlanError, setMealPlanError] = useState<string | null>(null);
   const [mealPlanResult, setMealPlanResult] = useState<MealPlanResponse | null>(null);
   const [addingMissing, setAddingMissing] = useState(false);
+  const [loadingSavedMealPlan, setLoadingSavedMealPlan] = useState(false);
+  const [hasFetchedSavedMealPlan, setHasFetchedSavedMealPlan] = useState(false);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
   const noCredits = (ecoCredits ?? 0) <= 0;
@@ -187,6 +231,28 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   useEffect(() => {
     refreshCredits();
   }, []);
+
+  useEffect(() => {
+    if (mode !== "mealPlan") return;
+    if (hasFetchedSavedMealPlan) return;
+
+    const loadSavedMealPlan = async () => {
+      try {
+        setLoadingSavedMealPlan(true);
+        const savedPlan = await fetchActiveMealPlan();
+        if (savedPlan) {
+          setMealPlanResult(savedPlan);
+        }
+      } catch (e: any) {
+        console.error("active meal plan load error:", e);
+      } finally {
+        setLoadingSavedMealPlan(false);
+        setHasFetchedSavedMealPlan(true);
+      }
+    };
+
+    loadSavedMealPlan();
+  }, [mode, hasFetchedSavedMealPlan]);
 
   const handleGenerateSuggestions = async () => {
     if (items.length === 0) return;
@@ -404,6 +470,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
       }
 
       setMealPlanResult(body as MealPlanResponse);
+      setHasFetchedSavedMealPlan(true);
 
       if (typeof body?.remainingCredits === "number") {
         setEcoCredits(body.remainingCredits);
@@ -532,6 +599,13 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
       </button>
     </div>
   );
+
+  const initialMealPlanValues: Partial<MealPlanRequest> | undefined = mealPlanResult
+    ? {
+        startDate: mealPlanResult.startDate ?? undefined,
+        days: (mealPlanResult.plan?.length as 1 | 2 | 3 | 5 | 7 | undefined) ?? undefined,
+      }
+    : undefined;
 
   return (
     <div className="space-y-6 pb-24">
@@ -701,7 +775,20 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
 
       {mode === "mealPlan" && (
         <div className="space-y-4 animate-fade-in">
-          <MealPlanForm onSubmit={handleGenerateMealPlan} loading={mealPlanLoading} />
+          <MealPlanForm
+            onSubmit={handleGenerateMealPlan}
+            loading={mealPlanLoading}
+            initialValues={initialMealPlanValues}
+          />
+
+          {loadingSavedMealPlan && (
+            <div className="text-center py-6">
+              <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
+              <p className="text-gray-500 text-sm font-medium">
+                Sto recuperando il tuo piano attivo...
+              </p>
+            </div>
+          )}
 
           {mealPlanLoading && (
             <div className="text-center py-10">

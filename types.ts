@@ -45,14 +45,10 @@ export interface Recipe {
 
 export type ViewState = 'pantry' | 'shopping' | 'chef';
 
-
-// =========================
-// 🆕 MEAL PLAN TYPES
-// =========================
-
 export type MealPlanComplexity = "easy" | "medium" | "hard" | "mixed";
 
 export interface MealPlanRequest {
+  startDate: string; // DD-MM-YYYY
   days: 1 | 2 | 3 | 5 | 7;
   meals: {
     lunch: boolean;
@@ -96,6 +92,11 @@ export interface MealPlanShoppingItem {
 }
 
 export interface MealPlanResponse {
+  id?: string;
+  startDate?: string | null;
+  startDateIso?: string | null;
+  endDate?: string | null;
+  endDateIso?: string | null;
   warning: string | null;
   estimatedMinBudget: number;
   plan: MealPlanDay[];
@@ -105,4 +106,7 @@ export interface MealPlanResponse {
     missingPantryIngredients: string[];
   };
   remainingCredits: number | null;
+  status?: "active" | "archived";
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
