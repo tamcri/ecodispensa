@@ -12,6 +12,9 @@ import {
   Shield,
   CreditCard,
   Mail,
+  Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 type Diet = "omnivore" | "veg" | "vegan";
@@ -109,6 +112,14 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
 
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   const notifLabel = useMemo(() => {
     if (notificationPermission === "granted") return "Attive";
     if (notificationPermission === "denied") return "Bloccate";
@@ -133,7 +144,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         .from("user_profiles")
         .select("diet,lactose_free,avoid,allergies")
         .eq("user_id", userId)
-        .maybeSingle()
+        .maybeSingle();
 
       if (selErr) {
         const { error: upsertErr } = await supabase
@@ -146,7 +157,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
           .from("user_profiles")
           .select("diet,lactose_free,avoid,allergies")
           .eq("user_id", userId)
-          .maybeSingle()
+          .maybeSingle();
 
         if (selErr2) throw selErr2;
 
@@ -211,18 +222,16 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         allergies: parseCommaList(allergiesText),
       };
 
-      const { error: upsertErr } = await supabase
-        .from("user_profiles")
-        .upsert(
-  {
-    user_id: userId,
-    diet: updated.diet,
-    lactose_free: updated.lactose_free,
-    avoid: updated.avoid,
-    allergies: updated.allergies,
-  },
-  { onConflict: "user_id" }
-);
+      const { error: upsertErr } = await supabase.from("user_profiles").upsert(
+        {
+          user_id: userId,
+          diet: updated.diet,
+          lactose_free: updated.lactose_free,
+          avoid: updated.avoid,
+          allergies: updated.allergies,
+        },
+        { onConflict: "user_id" }
+      );
 
       if (upsertErr) throw upsertErr;
 
@@ -232,6 +241,52 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       console.error("prefs save error:", e);
     } finally {
       setPrefsSaving(false);
+    }
+  };
+
+  const resetPasswordForm = () => {
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordMessage(null);
+    setPasswordError(null);
+    setShowPassword(false);
+  };
+
+  const changePassword = async () => {
+    try {
+      setPasswordSaving(true);
+      setPasswordMessage(null);
+      setPasswordError(null);
+
+      const cleanPassword = newPassword.trim();
+      const cleanConfirm = confirmPassword.trim();
+
+      if (cleanPassword.length < 8) {
+        setPasswordError("La nuova password deve contenere almeno 8 caratteri.");
+        return;
+      }
+
+      if (cleanPassword !== cleanConfirm) {
+        setPasswordError("Le password non coincidono.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: cleanPassword,
+      });
+
+      if (error) throw error;
+
+      setPasswordMessage("Password aggiornata correttamente.");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowPassword(false);
+      setShowPasswordForm(false);
+    } catch (e: any) {
+      console.error("password update error:", e);
+      setPasswordError(e?.message ?? "Errore durante l'aggiornamento della password.");
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -255,6 +310,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       }
 
       setTab("profilo");
+      resetPasswordForm();
+      setShowPasswordForm(false);
     };
 
     init();
@@ -282,6 +339,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
             onClick={onClose}
             className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
             title="Chiudi"
+            type="button"
           >
             <X size={20} />
           </button>
@@ -323,6 +381,100 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                   <div className="text-xs text-gray-400 mb-1">Email</div>
                   <div className="font-semibold text-gray-800">{userEmail ?? "—"}</div>
                 </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lock size={16} className="text-emerald-600" />
+                  <div className="text-sm font-bold text-gray-800">Sicurezza</div>
+                </div>
+
+                <div className="text-sm text-gray-600 mb-4">
+                  Puoi modificare la password dell'account attualmente connesso.
+                </div>
+
+                {!showPasswordForm ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetPasswordForm();
+                      setShowPasswordForm(true);
+                    }}
+                    className="w-full bg-white border border-gray-200 text-gray-800 py-3 rounded-xl font-bold hover:border-emerald-300 hover:text-emerald-700 transition-all"
+                  >
+                    Cambia password
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-500 font-bold mb-1 block">Nuova password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full p-3 pr-11 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                          placeholder="Almeno 8 caratteri"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          title={showPassword ? "Nascondi password" : "Mostra password"}
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 font-bold mb-1 block">Conferma password</label>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                        placeholder="Ripeti la nuova password"
+                      />
+                    </div>
+
+                    {passwordError && (
+                      <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-3">
+                        {passwordError}
+                      </div>
+                    )}
+
+                    {passwordMessage && (
+                      <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                        {passwordMessage}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={changePassword}
+                        disabled={passwordSaving}
+                        className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {passwordSaving ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                        Salva
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetPasswordForm();
+                          setShowPasswordForm(false);
+                        }}
+                        disabled={passwordSaving}
+                        className="px-4 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-300 transition-all disabled:opacity-50"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
