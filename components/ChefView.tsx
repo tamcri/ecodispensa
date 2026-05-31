@@ -122,6 +122,31 @@ async function postMealPlan(payload: MealPlanRequest): Promise<{ status: number;
   return { status: r.status, body };
 }
 
+async function saveRecipe(
+  source: "suggest" | "search" | "meal_plan",
+  recipe: Recipe
+): Promise<void> {
+  const token = await getAccessToken();
+
+  if (!token) return;
+
+  try {
+    await fetch("/api/save-recipe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        source,
+        recipe,
+      }),
+    });
+  } catch (e) {
+    console.error("save recipe error:", e);
+  }
+}
+
 async function fetchActiveMealPlan(): Promise<MealPlanResponse | null> {
   const token = await getAccessToken();
   if (!token) throw new Error("SESSION_MISSING");
@@ -162,6 +187,18 @@ async function fetchActiveMealPlan(): Promise<MealPlanResponse | null> {
   };
 }
 
+function getValidPantryItems(items: PantryItem[]) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  return items.filter((i) => {
+    if (!i.expiryDate) return true;
+    const d = new Date(i.expiryDate);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() >= now.getTime();
+  });
+}
+
 export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems }) => {
   const [mode, setMode] = useState<ChefMode>("suggest");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -172,7 +209,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [isCooked, setIsCooked] = useState(false);
+  const [cookedRecipeTitle, setCookedRecipeTitle] = useState<string | null>(null);
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -272,27 +309,21 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setError(null);
     setRecipes([]);
     setMealPlanError(null);
+    setSelectedRecipe(null);
+    setCookedRecipeTitle(null);
 
     try {
-      const now = new Date();
-now.setHours(0, 0, 0, 0);
+      const validPantryItems = getValidPantryItems(items);
 
-const validPantryItems = items.filter((i) => {
-  if (!i.expiryDate) return true;
-  const d = new Date(i.expiryDate);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime() >= now.getTime();
-});
-
-const payload = {
-  pantryItems: validPantryItems.map((i) => ({
-    name: i.name,
-    quantity: i.quantity,
-    unit: i.unit,
-    expiryDate: i.expiryDate ?? null,
-  })),
-  constraints: { servings, timeMinutes },
-};
+      const payload = {
+        pantryItems: validPantryItems.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          expiryDate: i.expiryDate ?? null,
+        })),
+        constraints: { servings, timeMinutes },
+      };
 
       const { status, body } = await postRecipes(payload);
 
@@ -310,15 +341,15 @@ const payload = {
       }
 
       if (status >= 400) {
-  const msg =
-    (body as any)?.message ||
-    (body as any)?.hint ||
-    (body as any)?.error ||
-    "Errore durante la generazione delle ricette.";
-  setError(String(msg));
-  await refreshCredits();
-  return;
-}
+        const msg =
+          (body as any)?.message ||
+          (body as any)?.hint ||
+          (body as any)?.error ||
+          "Errore durante la generazione delle ricette.";
+        setError(String(msg));
+        await refreshCredits();
+        return;
+      }
 
       const recipesResp = body as any;
       const result: Recipe[] = Array.isArray(recipesResp?.recipes) ? recipesResp.recipes : [];
@@ -331,7 +362,11 @@ const payload = {
 
       setRecipes(result);
 
-      if (typeof recipesResp?.remainingCredits === "number") {
+for (const recipe of result) {
+  await saveRecipe("suggest", recipe);
+}
+
+if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
       } else {
         await refreshCredits();
@@ -369,28 +404,22 @@ const payload = {
     setError(null);
     setRecipes([]);
     setMealPlanError(null);
+    setSelectedRecipe(null);
+    setCookedRecipeTitle(null);
 
     try {
-      const now = new Date();
-now.setHours(0, 0, 0, 0);
+      const validPantryItems = getValidPantryItems(items);
 
-const validPantryItems = items.filter((i) => {
-  if (!i.expiryDate) return true;
-  const d = new Date(i.expiryDate);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime() >= now.getTime();
-});
-
-const payload = {
-  pantryItems: validPantryItems.map((i) => ({
-    name: i.name,
-    quantity: i.quantity,
-    unit: i.unit,
-    expiryDate: i.expiryDate ?? null,
-  })),
-  constraints: { servings, timeMinutes, idea: searchQuery.trim() },
-  idea: searchQuery.trim(),
-};
+      const payload = {
+        pantryItems: validPantryItems.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          expiryDate: i.expiryDate ?? null,
+        })),
+        constraints: { servings, timeMinutes, idea: searchQuery.trim() },
+        idea: searchQuery.trim(),
+      };
 
       const { status, body } = await postRecipes(payload);
 
@@ -408,15 +437,15 @@ const payload = {
       }
 
       if (status >= 400) {
-  const msg =
-    (body as any)?.message ||
-    (body as any)?.hint ||
-    (body as any)?.error ||
-    "Errore durante la ricerca ricette.";
-  setError(String(msg));
-  await refreshCredits();
-  return;
-}
+        const msg =
+          (body as any)?.message ||
+          (body as any)?.hint ||
+          (body as any)?.error ||
+          "Errore durante la ricerca ricette.";
+        setError(String(msg));
+        await refreshCredits();
+        return;
+      }
 
       const recipesResp = body as any;
       const result: Recipe[] = Array.isArray(recipesResp?.recipes) ? recipesResp.recipes : [];
@@ -429,7 +458,11 @@ const payload = {
 
       setRecipes(result);
 
-      if (typeof recipesResp?.remainingCredits === "number") {
+for (const recipe of result) {
+  await saveRecipe("search", recipe);
+}
+
+if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
       } else {
         await refreshCredits();
@@ -466,7 +499,9 @@ const payload = {
     setMealPlanResult(null);
     setRecipes([]);
     setError(null);
+    setSelectedRecipe(null);
     setShoppingListAdded(false);
+    setCookedRecipeTitle(null);
 
     try {
       const { status, body } = await postMealPlan(payload);
@@ -602,15 +637,18 @@ const payload = {
     }
   };
 
-  const handleConfirmCook = () => {
-    if (selectedRecipe && onCook) {
-      onCook(selectedRecipe.ingredientsUsed);
-      setIsCooked(true);
-      setTimeout(() => {
-        setIsCooked(false);
+  const handleCookRecipe = (recipe: Recipe) => {
+    if (!onCook) return;
+
+    onCook(recipe.ingredientsUsed);
+    setCookedRecipeTitle(recipe.title);
+
+    setTimeout(() => {
+      setCookedRecipeTitle(null);
+      if (selectedRecipe?.title === recipe.title) {
         setSelectedRecipe(null);
-      }, 2000);
-    }
+      }
+    }, 2000);
   };
 
   const CreditsPill = () => (
@@ -705,6 +743,7 @@ const payload = {
             setRecipes([]);
             setError(null);
             setMealPlanError(null);
+            setSelectedRecipe(null);
           }}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
             mode === "suggest" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -718,12 +757,13 @@ const payload = {
             setRecipes([]);
             setError(null);
             setMealPlanError(null);
+            setSelectedRecipe(null);
           }}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
             mode === "search" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          Cerca & Pianifica
+          Cerca Ricetta
         </button>
         <button
           onClick={() => {
@@ -731,6 +771,7 @@ const payload = {
             setRecipes([]);
             setError(null);
             setMealPlanError(null);
+            setSelectedRecipe(null);
           }}
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
             mode === "mealPlan" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -785,7 +826,7 @@ const payload = {
           <form onSubmit={handleSearchRecipe} className="flex gap-2">
             <input
               type="text"
-              placeholder="Cosa vuoi cucinare oggi? (es. Carbonara, Torta di mele)"
+              placeholder="Cerca una ricetta, es. Spaghetti alle Vongole"
               className="flex-1 p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -799,6 +840,19 @@ const payload = {
               <Search size={20} />
             </button>
           </form>
+
+          {recipes.length > 0 && !loading && (
+            <div className="space-y-4">
+              {recipes.map((recipe, idx) => (
+                <RecipeInlineView
+                  key={`${recipe.title}-${idx}`}
+                  recipe={recipe}
+                  isCooked={cookedRecipeTitle === recipe.title}
+                  onCook={() => handleCookRecipe(recipe)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -813,18 +867,14 @@ const payload = {
           {loadingSavedMealPlan && (
             <div className="text-center py-6">
               <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
-              <p className="text-gray-500 text-sm font-medium">
-                Sto recuperando il tuo piano attivo...
-              </p>
+              <p className="text-gray-500 text-sm font-medium">Sto recuperando il tuo piano attivo...</p>
             </div>
           )}
 
           {mealPlanLoading && (
             <div className="text-center py-10">
               <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={32} />
-              <p className="text-gray-500 text-sm font-medium">
-                Sto organizzando il tuo piano pasti...
-              </p>
+              <p className="text-gray-500 text-sm font-medium">Sto organizzando il tuo piano pasti...</p>
             </div>
           )}
 
@@ -860,7 +910,7 @@ const payload = {
         </div>
       )}
 
-      {mode !== "mealPlan" && (
+      {mode === "suggest" && (
         <div className="space-y-4">
           {recipes.map((recipe, idx) => (
             <div
@@ -873,18 +923,7 @@ const payload = {
                   <h3 className="text-xl font-bold text-gray-800 leading-tight group-hover:text-emerald-700 transition-colors">
                     {recipe.title}
                   </h3>
-                  <span
-                    className={`text-[10px] px-2 py-1 rounded-full uppercase font-bold tracking-wide border
-                      ${
-                        recipe.difficulty === "Facile"
-                          ? "bg-green-50 text-green-700 border-green-100"
-                          : recipe.difficulty === "Media"
-                          ? "bg-yellow-50 text-yellow-700 border-yellow-100"
-                          : "bg-red-50 text-red-700 border-red-100"
-                      }`}
-                  >
-                    {recipe.difficulty}
-                  </span>
+                  <DifficultyPill difficulty={recipe.difficulty} />
                 </div>
 
                 <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
@@ -928,7 +967,7 @@ const payload = {
         </div>
       )}
 
-      {selectedRecipe && (
+      {selectedRecipe && mode === "suggest" && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col shadow-2xl">
             <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10 rounded-t-2xl">
@@ -936,93 +975,24 @@ const payload = {
               <button
                 onClick={() => setSelectedRecipe(null)}
                 className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                type="button"
               >
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-              <div className="flex gap-4 text-sm text-gray-500 border-b border-gray-50 pb-4">
-                <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-                  <Clock size={16} /> {selectedRecipe.time}
-                </span>
-                <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-                  <BarChart size={16} /> {selectedRecipe.difficulty}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6">
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <CheckCircle2 size={14} /> In Dispensa
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedRecipe.ingredientsUsed.map((ing, i) => (
-                      <span
-                        key={i}
-                        className="text-sm bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-100"
-                      >
-                        <span className="font-bold">
-                          {ing.quantity} {ing.unit}
-                        </span>{" "}
-                        {ing.name}
-                      </span>
-                    ))}
-                    {selectedRecipe.ingredientsUsed.length === 0 && (
-                      <span className="text-sm text-gray-400 italic">Nessun ingrediente in dispensa.</span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <ShoppingBagIcon /> Da Comprare
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedRecipe.missingIngredients.map((ing, i) => (
-                      <span
-                        key={i}
-                        className="text-sm bg-orange-50 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-100"
-                      >
-                        {ing}
-                      </span>
-                    ))}
-                    {selectedRecipe.missingIngredients.length === 0 && (
-                      <span className="text-sm text-gray-400 italic">Hai tutto il necessario!</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-lg font-bold text-gray-800 mb-4">Preparazione</h4>
-                <div className="space-y-4">
-                  {selectedRecipe.steps && selectedRecipe.steps.length > 0 ? (
-                    selectedRecipe.steps.map((step, idx) => (
-                      <div key={idx} className="flex gap-4">
-                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs mt-0.5">
-                          {idx + 1}
-                        </div>
-                        <p className="text-gray-600 text-sm leading-relaxed">{step}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-sm italic">{selectedRecipe.description}</p>
-                  )}
-                </div>
-              </div>
+              <RecipeContent recipe={selectedRecipe} />
             </div>
 
             <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-              {isCooked ? (
-                <div className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 animate-bounce">
-                  <CheckCircle2 size={24} />
-                  <span className="font-bold">Ottimo! Dispensa aggiornata.</span>
-                </div>
+              {cookedRecipeTitle === selectedRecipe.title ? (
+                <CookedConfirmation />
               ) : (
                 <button
-                  onClick={handleConfirmCook}
+                  onClick={() => handleCookRecipe(selectedRecipe)}
                   className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200"
+                  type="button"
                 >
                   <Utensils size={20} />
                   Ho cucinato questo piatto! 🍳
@@ -1035,6 +1005,143 @@ const payload = {
     </div>
   );
 };
+
+const DifficultyPill = ({ difficulty }: { difficulty: string }) => (
+  <span
+    className={`text-[10px] px-2 py-1 rounded-full uppercase font-bold tracking-wide border
+      ${
+        difficulty === "Facile"
+          ? "bg-green-50 text-green-700 border-green-100"
+          : difficulty === "Media"
+          ? "bg-yellow-50 text-yellow-700 border-yellow-100"
+          : "bg-red-50 text-red-700 border-red-100"
+      }`}
+  >
+    {difficulty}
+  </span>
+);
+
+const CookedConfirmation = () => (
+  <div className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 animate-bounce">
+    <CheckCircle2 size={24} />
+    <span className="font-bold">Ottimo! Dispensa aggiornata.</span>
+  </div>
+);
+
+const RecipeInlineView = ({
+  recipe,
+  isCooked,
+  onCook,
+}: {
+  recipe: Recipe;
+  isCooked: boolean;
+  onCook: () => void;
+}) => (
+  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+    <div className="p-5 space-y-5">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-emerald-700 font-bold mb-1">Ricetta trovata</div>
+          <h3 className="text-2xl font-bold text-gray-800 leading-tight">{recipe.title}</h3>
+        </div>
+        <DifficultyPill difficulty={recipe.difficulty} />
+      </div>
+
+      <RecipeContent recipe={recipe} />
+    </div>
+
+    <div className="p-4 border-t border-gray-100 bg-gray-50">
+      {isCooked ? (
+        <CookedConfirmation />
+      ) : (
+        <button
+          onClick={onCook}
+          className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
+          type="button"
+        >
+          <Utensils size={20} />
+          Ho cucinato questo piatto! 🍳
+        </button>
+      )}
+    </div>
+  </div>
+);
+
+const RecipeContent = ({ recipe }: { recipe: Recipe }) => (
+  <div className="space-y-6">
+    <div className="flex gap-4 text-sm text-gray-500 border-b border-gray-50 pb-4">
+      <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
+        <Clock size={16} /> {recipe.time}
+      </span>
+      <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
+        <BarChart size={16} /> {recipe.difficulty}
+      </span>
+    </div>
+
+    {recipe.description && <p className="text-gray-600 text-sm leading-relaxed">{recipe.description}</p>}
+
+    <div className="grid grid-cols-1 gap-6">
+      <div>
+        <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <CheckCircle2 size={14} /> In Dispensa
+        </h4>
+        <div className="flex flex-wrap gap-2">
+          {recipe.ingredientsUsed.map((ing, i) => (
+            <span
+              key={`${ing.name}-${i}`}
+              className="text-sm bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-100"
+            >
+              <span className="font-bold">
+                {ing.quantity} {ing.unit}
+              </span>{" "}
+              {ing.name}
+            </span>
+          ))}
+          {recipe.ingredientsUsed.length === 0 && (
+            <span className="text-sm text-gray-400 italic">Nessun ingrediente in dispensa.</span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <ShoppingBagIcon /> Da Comprare
+        </h4>
+        <div className="flex flex-wrap gap-2">
+          {recipe.missingIngredients.map((ing, i) => (
+            <span
+              key={`${ing}-${i}`}
+              className="text-sm bg-orange-50 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-100"
+            >
+              {ing}
+            </span>
+          ))}
+          {recipe.missingIngredients.length === 0 && (
+            <span className="text-sm text-gray-400 italic">Hai tutto il necessario!</span>
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h4 className="text-lg font-bold text-gray-800 mb-4">Preparazione</h4>
+      <div className="space-y-4">
+        {recipe.steps && recipe.steps.length > 0 ? (
+          recipe.steps.map((step, idx) => (
+            <div key={idx} className="flex gap-4">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs mt-0.5">
+                {idx + 1}
+              </div>
+              <p className="text-gray-600 text-sm leading-relaxed">{step}</p>
+            </div>
+          ))
+        ) : (
+          <p className="text-gray-500 text-sm italic">{recipe.description}</p>
+        )}
+      </div>
+    </div>
+  </div>
+);
 
 const ShoppingBagIcon = () => (
   <svg

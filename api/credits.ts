@@ -26,7 +26,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: "Missing SUPABASE_URL or SUPABASE_ANON_KEY" });
     }
 
-    // Client “utente” (RLS attiva) usando access token
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
@@ -37,10 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const user_id = userData.user.id;
+    const user_email = userData.user.email ?? null;
 
-    console.log("USER FROM TOKEN:", userData.user.id);
+    console.log("USER FROM TOKEN:", user_id, user_email);
 
-    // Legge crediti (se la riga non esiste, torna 0)
     const { data, error } = await supabase
       .from("user_credits")
       .select("eco_credits, updated_at")
@@ -48,12 +47,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .maybeSingle();
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({
+        error: error.message,
+        debug_user_id: user_id,
+        debug_email: user_email,
+      });
     }
 
     return res.status(200).json({
       eco_credits: data?.eco_credits ?? 0,
       updated_at: data?.updated_at ?? null,
+
+      // DEBUG temporaneo: rimuoveremo dopo aver verificato
+      debug_user_id: user_id,
+      debug_email: user_email,
+      debug_has_row: Boolean(data),
     });
   } catch (e: any) {
     console.error("credits api error:", e);

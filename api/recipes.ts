@@ -80,8 +80,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (userErr || !userData?.user) {
       return res.status(401).json({ error: "Invalid session", details: userErr?.message });
     }
-    const user_id = userData.user.id;
 
+    const user_id = userData.user.id;
     const body = req.body ?? {};
     const pantryItems: PantryItem[] | undefined = Array.isArray(body.pantryItems) ? body.pantryItems : undefined;
 
@@ -98,15 +98,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : undefined;
 
     if ((!pantryItems || pantryItems.length === 0) && !inventoryList) {
-  if (idea) {
-    // In modalità ricerca specifica permettiamo comunque la generazione,
-    // anche senza ingredienti validi in dispensa.
-  } else {
-    return res.status(400).json({
-      error: "Non ci sono ingredienti validi in dispensa. Rimuovi i prodotti scaduti o aggiungi nuovi prodotti.",
-    });
-  }
-}
+      if (!idea) {
+        return res.status(400).json({
+          error: "Non ci sono ingredienti validi in dispensa. Rimuovi i prodotti scaduti o aggiungi nuovi prodotti.",
+        });
+      }
+    }
 
     const { data: profile, error: profileErr } = await supabase
       .from("user_profiles")
@@ -129,76 +126,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let expiringSoonPantryText = "";
 
     if (pantryItems && pantryItems.length > 0) {
-  const nowDate = new Date();
-  nowDate.setHours(0, 0, 0, 0);
+      const nowDate = new Date();
+      nowDate.setHours(0, 0, 0, 0);
 
-  const soonThreshold = new Date(nowDate);
-  soonThreshold.setDate(soonThreshold.getDate() + 3);
+      const soonThreshold = new Date(nowDate);
+      soonThreshold.setDate(soonThreshold.getDate() + 3);
 
-  const normalized = pantryItems
-    .map((it) => {
-      const name = String(it.name ?? "").trim();
-      const quantity = typeof it.quantity === "number" ? it.quantity : undefined;
-      const unit = typeof it.unit === "string" ? it.unit : undefined;
-      const expiryDate = it.expiryDate ? String(it.expiryDate) : null;
+      const normalized = pantryItems
+        .map((it) => {
+          const name = String(it.name ?? "").trim();
+          const quantity = typeof it.quantity === "number" ? it.quantity : undefined;
+          const unit = typeof it.unit === "string" ? it.unit : undefined;
+          const expiryDate = it.expiryDate ? String(it.expiryDate) : null;
 
-      let expiryTs: number | null = null;
-      if (expiryDate) {
-        const parsed = new Date(expiryDate);
-        const ts = parsed.getTime();
-        if (!Number.isNaN(ts)) {
-          parsed.setHours(0, 0, 0, 0);
-          expiryTs = parsed.getTime();
-        }
-      }
+          let expiryTs: number | null = null;
+          if (expiryDate) {
+            const parsed = new Date(expiryDate);
+            const ts = parsed.getTime();
+            if (!Number.isNaN(ts)) {
+              parsed.setHours(0, 0, 0, 0);
+              expiryTs = parsed.getTime();
+            }
+          }
 
-      return {
-        name,
-        quantity,
-        unit,
-        expiryDate,
-        expiryTs,
+          return { name, quantity, unit, expiryDate, expiryTs };
+        })
+        .filter((it) => it.name.length > 0);
+
+      normalized.sort((a, b) => {
+        const da = a.expiryTs ?? Number.POSITIVE_INFINITY;
+        const db = b.expiryTs ?? Number.POSITIVE_INFINITY;
+        return da - db;
+      });
+
+      const availableItems = normalized.filter((it) => {
+        if (it.expiryTs == null) return true;
+        return it.expiryTs >= nowDate.getTime();
+      });
+
+      const expiredItems = normalized.filter((it) => {
+        if (it.expiryTs == null) return false;
+        return it.expiryTs < nowDate.getTime();
+      });
+
+      const expiringSoonItems = availableItems.filter((it) => {
+        if (it.expiryTs == null) return false;
+        return it.expiryTs <= soonThreshold.getTime();
+      });
+
+      const formatItem = (it: { name: string; quantity?: number; unit?: string; expiryDate?: string | null }) => {
+        const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
+        const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
+        return `• ${it.name}${qty}${exp}`;
       };
-    })
-    .filter((it) => it.name.length > 0);
 
-  normalized.sort((a, b) => {
-    const da = a.expiryTs ?? Number.POSITIVE_INFINITY;
-    const db = b.expiryTs ?? Number.POSITIVE_INFINITY;
-    return da - db;
-  });
+      pantryText = availableItems.map(formatItem).join("\n");
+      expiredPantryText = expiredItems.map(formatItem).join("\n");
+      expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
+    } else if (inventoryList) {
+      pantryText = inventoryList.trim();
+    }
 
-  const availableItems = normalized.filter((it) => {
-    if (it.expiryTs == null) return true;
-    return it.expiryTs >= nowDate.getTime();
-  });
-
-  const expiredItems = normalized.filter((it) => {
-    if (it.expiryTs == null) return false;
-    return it.expiryTs < nowDate.getTime();
-  });
-
-  const expiringSoonItems = availableItems.filter((it) => {
-    if (it.expiryTs == null) return false;
-    return it.expiryTs <= soonThreshold.getTime();
-  });
-
-  const formatItem = (it: { name: string; quantity?: number; unit?: string; expiryDate?: string | null }) => {
-    const qty = it.quantity != null ? ` - qty: ${it.quantity}${it.unit ? " " + it.unit : ""}` : "";
-    const exp = it.expiryDate ? ` - expiry: ${it.expiryDate}` : "";
-    return `• ${it.name}${qty}${exp}`;
-  };
-
-  pantryText = availableItems.map(formatItem).join("\n");
-  expiredPantryText = expiredItems.map(formatItem).join("\n");
-  expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
-} else if (inventoryList) {
-  pantryText = inventoryList.trim();
-}
-
-if (!pantryText && idea) {
-  pantryText = "Nessun ingrediente valido disponibile in dispensa.";
-}
+    if (!pantryText && idea) {
+      pantryText = "Nessun ingrediente valido disponibile in dispensa.";
+    }
 
     const keyObj = {
       model,
@@ -225,7 +216,6 @@ if (!pantryText && idea) {
       return res.status(200).json({ ...value, deduped: true });
     }
 
-    // Consuma 1 credito SOLO se non era cache
     const { data: remainingAfterConsume, error: creditErr } = await supabase.rpc("consume_eco_credit");
     if (creditErr) {
       if (String(creditErr.message || "").includes("NO_CREDITS")) {
@@ -265,24 +255,27 @@ ${expiringSoonPantryText}
       : "";
 
     const prompt = `
-Agisci come uno chef esperto di cucina sostenibile e anti-spreco.
+Sei EcoChef, uno chef personale esperto di cucina italiana, cucina quotidiana, anti-spreco e ricette spiegate passo-passo.
 
-OBIETTIVO:
+OBIETTIVO PRINCIPALE:
 ${idea
-  ? "- Genera UNA SOLA ricetta esattamente coerente con la richiesta utente."
-  : "- Suggerisci 3 ricette gustose usando soprattutto gli ingredienti disponibili."}
-- Dai priorità agli ingredienti già presenti in dispensa.
-- Dai priorità ancora più alta agli ingredienti in scadenza a breve.
-- Rispetta in modo rigido preferenze, allergie, intolleranze e ingredienti da evitare.
-- Non usare mai ingredienti scaduti.
+  ? `- Genera UNA SOLA ricetta completa e coerente con questa richiesta: "${idea}".`
+  : "- Suggerisci 3 ricette complete usando soprattutto gli ingredienti disponibili in dispensa."}
+- La ricetta deve essere coerente: titolo, descrizione, ingredienti e passaggi devono appartenere allo stesso piatto.
+- Ogni ricetta deve accompagnare l'utente dall'inizio alla fine, come farebbe uno chef con una persona inesperta.
+- Non generare mai passaggi scollegati dal titolo della ricetta.
+- Non mescolare ingredienti dolci e salati in modo incoerente. Esempio: se il titolo è "Torta di mele", non usare mozzarella, guanciale, pasta, vongole, carne o ingredienti salati non pertinenti.
+- Non usare ingredienti scaduti.
+- Dai priorità agli ingredienti disponibili e non scaduti.
+- Se mancano ingredienti necessari alla ricetta richiesta, inseriscili in "missingIngredients".
 
 VINCOLI:
 - Porzioni: ${finalServings}
-- Tempo massimo: ${finalTime} minuti
+- Tempo massimo indicativo: ${finalTime} minuti
 - ${rules.join(" ")}
 
-DISPENSA DISPONIBILE (con quantità e scadenze quando disponibili):
-${pantryText || "Nessun dettaglio strutturato disponibile."}
+DISPENSA DISPONIBILE:
+${pantryText || "Nessun ingrediente valido disponibile in dispensa."}
 
 ${expiringSoonBlock}
 
@@ -290,36 +283,71 @@ ${expiredBlock}
 
 ${userRequestBlock}
 
-REGOLE DIETETICHE E DI SICUREZZA ALIMENTARE (IMPORTANTI):
-- Se lactose-free = YES: evita ingredienti con lattosio come latte, burro, panna, yogurt e formaggi tradizionali. Se utile, proponi alternative compatibili.
-- Se diet = veg: niente carne e niente pesce. Uova e latticini sono consentiti solo se compatibili con gli altri vincoli attivi.
-- Se diet = vegan: niente ingredienti di origine animale, incluse uova, latte, formaggi, burro, yogurt e miele.
+REGOLE DIETETICHE E DI SICUREZZA:
+- Se lactose-free = YES: evita latte, burro, panna, yogurt e formaggi tradizionali, salvo alternative senza lattosio.
+- Se diet = veg: niente carne e niente pesce.
+- Se diet = vegan: niente carne, pesce, uova, latte, burro, formaggi, yogurt, miele o altri ingredienti animali.
 - Non usare ingredienti presenti in "Avoid ingredients".
 - Non usare ingredienti presenti in "Allergies".
 - Se un ingrediente è incompatibile con anche uno solo dei vincoli attivi, non deve comparire nella ricetta.
-- Usa come "expiresSoonUsed" solo ingredienti realmente presenti in dispensa e non scaduti.
-- "missingIngredients" deve contenere solo ingredienti davvero non presenti o chiaramente non sufficienti rispetto alla ricetta proposta.
-- Non inventare disponibilità in dispensa che non è stata fornita.
-- Se un ingrediente NON è nella lista DISPENSA DISPONIBILE, deve essere inserito in "missingIngredients".
-- NON assumere mai che un ingrediente sia disponibile se non è esplicitamente elencato.
+- Usa come "expiresSoonUsed" solo ingredienti realmente presenti in dispensa, non scaduti.
+- Non inventare disponibilità in dispensa.
+- Se un ingrediente NON è nella DISPENSA DISPONIBILE, deve stare in "missingIngredients".
+- Se la dispensa è vuota, "ingredientsUsed" deve essere [] e tutti gli ingredienti necessari devono stare in "missingIngredients".
 
-OUTPUT (OBBLIGATORIO):
+REGOLE DI QUALITÀ DELLA RICETTA:
+- La ricetta deve sembrare cucinabile davvero, non una descrizione generica.
+- "description" deve essere breve, chiara e coerente con il titolo.
+- "ingredientsUsed" deve contenere solo ingredienti realmente disponibili in dispensa.
+- "missingIngredients" deve contenere ingredienti specifici e acquistabili.
+- Non usare mai nomi vaghi come "pasta avanzata", "pasta a scelta", "formaggio a piacere", "verdure miste", "ingredienti vari", "condimento pronto".
+- Per la pasta specifica sempre il formato: spaghetti, penne, rigatoni, fusilli, linguine, tagliatelle, ecc.
+- Per il riso specifica il tipo se rilevante: Carnaroli, Arborio, riso basmati, riso originario, ecc.
+- Per dolci, usa ingredienti coerenti da pasticceria.
+- Per primi piatti, spiega chiaramente acqua, sale, cottura, condimento e mantecatura.
+- Per risotti, spiega tostatura, aggiunta graduale del brodo, tempo di cottura e mantecatura.
+- Per carne/pesce, indica cottura, temperatura/fiamma e controllo della cottura.
+- Per piatti al forno, indica temperatura, preriscaldamento e tempo indicativo.
+
+REGOLE SUI PASSAGGI:
+- "steps" deve contenere almeno 7 passaggi pratici.
+- Ogni passaggio deve essere autonomo, concreto e utile.
+- Ogni passaggio deve spiegare cosa fare, con tempi, fiamma, temperatura o consistenza quando utile.
+- Non usare frasi generiche tipo "prepara la ricetta", "cuoci tutto", "mescola gli ingredienti" senza spiegare come.
+- Non ripetere la descrizione come passaggio.
+- L'utente deve poter cucinare seguendo solo i passaggi.
+- I passaggi devono essere ordinati cronologicamente.
+- L'ultimo passaggio deve spiegare come completare, impiattare o servire.
+
+OUTPUT OBBLIGATORIO:
 - Rispondi SOLO con un JSON array valido.
 - Nessun testo fuori dal JSON.
 ${idea ? "- Restituisci esattamente 1 ricetta." : "- Restituisci esattamente 3 ricette."}
-${idea ? "- La ricetta deve essere focalizzata solo sulla richiesta utente, senza alternative non richieste." : ""}
-- Struttura:
+${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alternative non richieste." : ""}
+- Ogni oggetto deve rispettare questa struttura:
 [
   {
-    "title": "...",
+    "title": "Nome coerente della ricetta",
     "difficulty": "Facile|Media|Difficile",
-    "time": "es. 25 min",
+    "time": "es. 35 min",
     "servings": ${finalServings},
-    "description": "...",
-    "expiresSoonUsed": ["..."],
-    "ingredientsUsed": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz"}],
-    "missingIngredients": ["..."],
-    "steps": ["..."]
+    "description": "Descrizione breve e coerente con il piatto.",
+    "expiresSoonUsed": ["solo ingredienti in scadenza usati davvero"],
+    "ingredientsUsed": [
+      {"name":"ingrediente disponibile", "quantity": 100, "unit":"g|kg|l|ml|pz"}
+    ],
+    "missingIngredients": [
+      "ingrediente mancante specifico con quantità indicativa"
+    ],
+    "steps": [
+      "Prepara tutti gli ingredienti: lava, pesa, taglia o misura ciò che serve.",
+      "Esegui il primo passaggio operativo spiegando cosa fare e per quanto tempo.",
+      "Prosegui con la preparazione principale indicando fiamma, temperatura o consistenza.",
+      "Aggiungi gli ingredienti nel giusto ordine spiegando quando e perché.",
+      "Completa la cottura indicando tempi indicativi e segnali visivi.",
+      "Regola sapore e consistenza con istruzioni pratiche.",
+      "Impiatta e servi spiegando come completare il piatto."
+    ]
   }
 ]
 `.trim();
@@ -339,7 +367,6 @@ ${idea ? "- La ricetta deve essere focalizzata solo sulla richiesta utente, senz
       if (!r.ok) {
         console.error("OpenAI error:", data);
 
-        // Refund: se OpenAI fallisce, rimborsa 1 credito
         const refundReason = `openai_error_${r.status}`;
         const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_credit", {
           p_reason: refundReason,

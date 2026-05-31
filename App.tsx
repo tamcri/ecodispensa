@@ -1,12 +1,13 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import { useState, useEffect } from "react";
-import { Refrigerator, ShoppingCart, ChefHat, User } from "lucide-react";
+import { Refrigerator, ShoppingCart, ChefHat, User, BookOpen } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
 import { ProfileSheet } from "./components/ProfileSheet";
+import { RecipeBookView } from "./components/RecipeBookView";
 
 const normalizeShoppingKey = (name: string, unit?: string | null) =>
   `${name.trim().toLowerCase()}__${(unit ?? "").trim().toLowerCase()}`;
@@ -538,6 +539,7 @@ const App = () => {
             onAddShoppingItems={addShoppingItemsBulk}
           />
         )}
+        {view === "recipeBook" && <RecipeBookView />}
       </main>
 
       <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 pb-safe">
@@ -569,6 +571,15 @@ const App = () => {
             <ChefHat size={24} strokeWidth={view === "chef" ? 2.5 : 2} />
             <span className="text-[10px] font-medium">EcoChef</span>
           </button>
+          <button
+  onClick={() => setView("recipeBook")}
+  className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
+    view === "recipeBook" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
+  }`}
+>
+  <BookOpen size={24} strokeWidth={view === "recipeBook" ? 2.5 : 2} />
+  <span className="text-[10px] font-medium">Ricettario</span>
+</button>
         </div>
       </nav>
 
