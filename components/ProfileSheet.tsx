@@ -38,6 +38,17 @@ type CreditsResponse = {
   updated_at: string | null;
 };
 
+type BillingProduct = {
+  code: string;
+  type: "credits_pack" | "subscription";
+  name: string;
+  description: string | null;
+  price_cents: number;
+  currency: string;
+  credits_amount: number;
+  is_active: boolean;
+};
+
 function parseCommaList(input: string): string[] {
   return input
     .split(",")
@@ -84,6 +95,31 @@ async function fetchCredits(): Promise<CreditsResponse> {
   return body as CreditsResponse;
 }
 
+async function fetchBillingProducts(): Promise<BillingProduct[]> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("SESSION_MISSING");
+
+  const r = await fetch("/api/billing-products", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const text = await r.text();
+
+  let body: any;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("INVALID_JSON_RESPONSE");
+  }
+
+  if (!r.ok) {
+    throw new Error(body?.error ?? "BILLING_PRODUCTS_FETCH_FAILED");
+  }
+
+  return Array.isArray(body?.products) ? body.products : [];
+}
+
 export type ProfileSheetProps = {
   open: boolean;
   onClose: () => void;
@@ -113,6 +149,9 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [planType, setPlanType] = useState<"free" | "premium">("free");
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
+  const [billingProducts, setBillingProducts] = useState<BillingProduct[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [showBillingPanel, setShowBillingPanel] = useState(false);
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -213,6 +252,50 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     }
   };
 
+  const loadBillingProducts = async () => {
+  try {
+    setBillingLoading(true);
+    const products = await fetchBillingProducts();
+    setBillingProducts(products);
+  } catch (e) {
+    console.error("billing products load error:", e);
+    setBillingProducts([]);
+  } finally {
+    setBillingLoading(false);
+  }
+};
+
+const startCheckout = async (productCode: string) => {
+  try {
+    const token = await getAccessToken();
+
+    if (!token) {
+      alert("Sessione scaduta. Effettua di nuovo il login.");
+      return;
+    }
+
+    const r = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ productCode }),
+    });
+
+    const body = await r.json();
+
+    if (!r.ok || !body?.url) {
+      throw new Error(body?.error ?? "CHECKOUT_SESSION_FAILED");
+    }
+
+    window.location.href = body.url;
+  } catch (e: any) {
+    console.error("checkout error:", e);
+    alert(e?.message ?? "Errore durante l'apertura del checkout.");
+  }
+};
+
   const savePreferences = async () => {
     try {
       setPrefsSaving(true);
@@ -311,6 +394,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
       if (token) {
         await refreshCredits();
+        await loadBillingProducts();
       } else {
         setEcoCredits(null);
       }
@@ -328,6 +412,16 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const premiumUntilLabel = premiumUntil
   ? new Date(premiumUntil).toLocaleDateString("it-IT")
   : null;
+
+  const creditProducts = billingProducts.filter((product) => product.type === "credits_pack");
+const subscriptionProducts = billingProducts.filter((product) => product.type === "subscription");
+
+const formatPrice = (priceCents: number, currency: string) => {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency,
+  }).format(priceCents / 100);
+};
 
   if (!open) return null;
 
@@ -515,12 +609,12 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     </div>
 
     <button
-      type="button"
-      className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
-      onClick={() => alert("Disponibile nello STEP Stripe")}
-    >
-      Gestisci piano
-    </button>
+  type="button"
+  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
+  onClick={() => setShowBillingPanel((value) => !value)}
+>
+  {showBillingPanel ? "Chiudi" : "Gestisci piano"}
+</button>
   </div>
 
   <div className="mt-4 flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-3">
@@ -544,22 +638,102 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   </div>
 
   <div className="grid grid-cols-2 gap-2 mt-3">
-    <button
-      type="button"
-      onClick={() => alert("STEP Acquista Crediti")}
-      className="py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm hover:bg-emerald-100"
-    >
-      Acquista crediti
-    </button>
+  <button
+  type="button"
+  onClick={() => setShowBillingPanel(true)}
+  className="w-full mt-3 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm hover:bg-emerald-100"
+>
+  Visualizza pacchetti
+</button>
+</div>
+{showBillingPanel && (
+  <div className="mt-4 space-y-4">
+    <div className="bg-white border border-gray-100 rounded-xl p-4">
+      <div className="text-sm font-bold text-gray-800 mb-1">
+        Pacchetti crediti
+      </div>
+      <div className="text-xs text-gray-500 mb-3">
+        Acquista crediti da usare per EcoChef e le funzioni AI.
+      </div>
 
-    <button
-      type="button"
-      onClick={() => alert("STEP Premium")}
-      className="py-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-bold text-sm hover:bg-amber-100"
-    >
-      Passa a Premium
-    </button>
+      {billingLoading ? (
+        <div className="text-sm text-gray-500">Caricamento prodotti...</div>
+      ) : creditProducts.length === 0 ? (
+        <div className="text-sm text-gray-500">Nessun pacchetto disponibile.</div>
+      ) : (
+        <div className="space-y-2">
+          {creditProducts.map((product) => (
+            <div
+              key={product.code}
+              className="border border-gray-100 rounded-xl p-3 flex items-center justify-between gap-3"
+            >
+              <div>
+                <div className="font-bold text-gray-800">{product.name}</div>
+                <div className="text-xs text-gray-500">
+                  {product.credits_amount} crediti
+                </div>
+                {product.description && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    {product.description}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => startCheckout(product.code)}
+                className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700"
+              >
+                {formatPrice(product.price_cents, product.currency)}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <div className="bg-white border border-amber-100 rounded-xl p-4">
+      <div className="text-sm font-bold text-gray-800 mb-1">
+        Premium
+      </div>
+      <div className="text-xs text-gray-500 mb-3">
+        Piano mensile per usare EcoDispensa in modo avanzato.
+      </div>
+
+      {billingLoading ? (
+        <div className="text-sm text-gray-500">Caricamento piano...</div>
+      ) : subscriptionProducts.length === 0 ? (
+        <div className="text-sm text-gray-500">Nessun piano Premium disponibile.</div>
+      ) : (
+        <div className="space-y-2">
+          {subscriptionProducts.map((product) => (
+            <div
+              key={product.code}
+              className="border border-amber-100 rounded-xl p-3 flex items-center justify-between gap-3"
+            >
+              <div>
+                <div className="font-bold text-gray-800">{product.name}</div>
+                {product.description && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {product.description}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => startCheckout(product.code)}
+                className="px-3 py-2 rounded-xl bg-amber-500 text-white font-bold text-sm hover:bg-amber-600"
+              >
+                {formatPrice(product.price_cents, product.currency)}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   </div>
+)}
 </div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
