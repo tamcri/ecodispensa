@@ -111,6 +111,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
+  const [planType, setPlanType] = useState<"free" | "premium">("free");
+  const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -142,7 +144,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
       const { data, error: selErr } = await supabase
         .from("user_profiles")
-        .select("diet,lactose_free,avoid,allergies")
+        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -155,7 +157,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
         const { data: data2, error: selErr2 } = await supabase
           .from("user_profiles")
-          .select("diet,lactose_free,avoid,allergies")
+          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until")
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -171,6 +173,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         setPrefs(loaded2);
         setAvoidText(toCommaString(loaded2.avoid));
         setAllergiesText(toCommaString(loaded2.allergies));
+        setPlanType((data2?.plan_type as "free" | "premium") ?? "free");
+        setPremiumUntil(data2?.premium_until ?? null);
         return;
       }
 
@@ -184,6 +188,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setPrefs(loaded);
       setAvoidText(toCommaString(loaded.avoid));
       setAllergiesText(toCommaString(loaded.allergies));
+      setPlanType((data?.plan_type as "free" | "premium") ?? "free");
+      setPremiumUntil(data?.premium_until ?? null);
     } catch (e) {
       console.error("prefs load error:", e);
       setPrefs(DEFAULT_PREFS);
@@ -318,6 +324,10 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const premiumUntilLabel = premiumUntil
+  ? new Date(premiumUntil).toLocaleDateString("it-IT")
+  : null;
 
   if (!open) return null;
 
@@ -478,47 +488,79 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
               </div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <CreditCard size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Piano</div>
-                </div>
+  <div className="flex items-center gap-2 mb-3">
+    <CreditCard size={16} className="text-emerald-600" />
+    <div className="text-sm font-bold text-gray-800">Piano</div>
+  </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs text-gray-400 mb-1">Stato</div>
-                    <div className="font-semibold text-gray-800">Free</div>
-                  </div>
+  <div className="flex items-center justify-between gap-3">
+    <div>
+      <div className="text-xs text-gray-400 mb-1">Piano attuale</div>
 
-                  <button
-                    type="button"
-                    disabled
-                    className="px-4 py-2 rounded-xl bg-gray-200 text-gray-500 font-bold text-sm cursor-not-allowed"
-                    title="Arriverà in uno step successivo"
-                  >
-                    Gestisci piano
-                  </button>
-                </div>
+      <div
+        className={`font-bold ${
+          planType === "premium"
+            ? "text-amber-600"
+            : "text-gray-800"
+        }`}
+      >
+        {planType === "premium" ? "Premium" : "Free"}
+      </div>
 
-                <div className="mt-4 flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-3">
-                  <div className="flex items-center gap-2">
-                    <Settings size={16} className="text-emerald-600" />
-                    <div>
-                      <div className="text-xs text-gray-400">Crediti EcoChef</div>
-                      <div className="font-bold text-gray-800">
-                        {creditsLoading ? "…" : ecoCredits === null ? "—" : ecoCredits}
-                      </div>
-                    </div>
-                  </div>
+      {planType === "premium" && premiumUntilLabel && (
+        <div className="text-xs text-gray-500 mt-1">
+          Attivo fino al {premiumUntilLabel}
+        </div>
+      )}
+    </div>
 
-                  <button
-                    type="button"
-                    onClick={refreshCredits}
-                    className="text-sm font-bold text-emerald-700 hover:text-emerald-800"
-                  >
-                    aggiorna
-                  </button>
-                </div>
-              </div>
+    <button
+      type="button"
+      className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
+      onClick={() => alert("Disponibile nello STEP Stripe")}
+    >
+      Gestisci piano
+    </button>
+  </div>
+
+  <div className="mt-4 flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-3">
+    <div>
+      <div className="text-xs text-gray-400">
+        Crediti EcoChef
+      </div>
+
+      <div className="font-bold text-gray-800 text-lg">
+        {creditsLoading ? "…" : ecoCredits ?? 0}
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={refreshCredits}
+      className="text-sm font-bold text-emerald-700 hover:text-emerald-800"
+    >
+      aggiorna
+    </button>
+  </div>
+
+  <div className="grid grid-cols-2 gap-2 mt-3">
+    <button
+      type="button"
+      onClick={() => alert("STEP Acquista Crediti")}
+      className="py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm hover:bg-emerald-100"
+    >
+      Acquista crediti
+    </button>
+
+    <button
+      type="button"
+      onClick={() => alert("STEP Premium")}
+      className="py-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-bold text-sm hover:bg-amber-100"
+    >
+      Passa a Premium
+    </button>
+  </div>
+</div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
