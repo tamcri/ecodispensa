@@ -47,6 +47,14 @@ export type ViewState = 'pantry' | 'shopping' | 'chef' | 'recipeBook';
 
 export type MealPlanComplexity = "easy" | "medium" | "hard" | "mixed";
 
+export type MealPlanStyle =
+  | "balanced"
+  | "light"
+  | "protein"
+  | "budget"
+  | "vegetarian"
+  | "antiwaste";
+
 export interface MealPlanRequest {
   startDate: string; // DD-MM-YYYY
   days: 1 | 2 | 3 | 5 | 7;
@@ -56,7 +64,8 @@ export interface MealPlanRequest {
   };
   people: number;
   budget: number | null;
-  complexity: MealPlanComplexity;
+    complexity: MealPlanComplexity;
+  style?: MealPlanStyle;
   notes?: string;
 }
 

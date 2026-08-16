@@ -73,6 +73,9 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
   const [complexity, setComplexity] = useState<MealPlanComplexity>(
     resolvedInitialValues.complexity as MealPlanComplexity
   );
+  const [planStyle, setPlanStyle] = useState<
+  "balanced" | "light" | "protein" | "budget" | "vegetarian" | "antiwaste"
+>("balanced");
   const [notes, setNotes] = useState(resolvedInitialValues.notes);
 
   useEffect(() => {
@@ -83,6 +86,7 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
     setPeople(resolvedInitialValues.people);
     setBudget(resolvedInitialValues.budget);
     setComplexity(resolvedInitialValues.complexity as MealPlanComplexity);
+    setPlanStyle("balanced");
     setNotes(resolvedInitialValues.notes);
   }, [resolvedInitialValues]);
 
@@ -116,6 +120,7 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
       people: Math.max(1, Math.round(people)),
       budget: parsedBudget,
       complexity,
+      style: planStyle,
       notes: notes.trim() || undefined,
     });
   };
@@ -241,6 +246,39 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
             <option value="mixed">Mista</option>
           </select>
         </div>
+
+        <div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Stile del piano
+  </label>
+
+  <select
+    value={planStyle}
+    onChange={(e) =>
+      setPlanStyle(
+        e.target.value as
+          | "balanced"
+          | "light"
+          | "protein"
+          | "budget"
+          | "vegetarian"
+          | "antiwaste"
+      )
+    }
+    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
+  >
+    <option value="balanced">⚖️ Equilibrato</option>
+    <option value="light">🥗 Leggero</option>
+    <option value="protein">💪 Proteico</option>
+    <option value="budget">💰 Economico</option>
+    <option value="vegetarian">🌱 Vegetariano</option>
+    <option value="antiwaste">♻️ Anti-spreco</option>
+  </select>
+
+  <p className="text-xs text-gray-500 mt-2">
+    Determina la priorità principale del piano alimentare.
+  </p>
+</div>
 
         <div>
           <label htmlFor="meal-plan-notes" className="block text-sm font-medium text-gray-700 mb-2">

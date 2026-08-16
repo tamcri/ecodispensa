@@ -126,28 +126,41 @@ function estimateMinimumBudget(
   return Number((totalMealServings * perServingCost).toFixed(2));
 }
 
-function parseStartDateDDMMYYYY(value: unknown): { iso: string; date: Date } | null {
+function parseStartDateDDMMYYYY(value: unknown): { iso: string; date: Date; display: string } | null {
   if (typeof value !== "string") return null;
 
   const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (!match) return null;
 
-  const [, dd, mm, yyyy] = match;
+  const ddmmyyyy = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  const isoDate = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  let dd: string;
+  let mm: string;
+  let yyyy: string;
+
+  if (ddmmyyyy) {
+    [, dd, mm, yyyy] = ddmmyyyy;
+  } else if (isoDate) {
+    [, yyyy, mm, dd] = isoDate;
+  } else {
+    return null;
+  }
+
   const iso = `${yyyy}-${mm}-${dd}`;
+  const display = `${dd}-${mm}-${yyyy}`;
   const date = new Date(`${iso}T00:00:00`);
 
   if (Number.isNaN(date.getTime())) return null;
 
   if (
-    date.getUTCFullYear() !== Number(yyyy) ||
-    date.getUTCMonth() + 1 !== Number(mm) ||
-    date.getUTCDate() !== Number(dd)
+    date.getFullYear() !== Number(yyyy) ||
+    date.getMonth() + 1 !== Number(mm) ||
+    date.getDate() !== Number(dd)
   ) {
     return null;
   }
 
-  return { iso, date };
+  return { iso, date, display };
 }
 
 function formatDateToISO(date: Date): string {
@@ -576,9 +589,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user_id = userData.user.id;
     const body = req.body ?? {};
 
+    const style =
+    body.style === "light" ||
+    body.style === "protein" ||
+    body.style === "budget" ||
+    body.style === "vegetarian" ||
+   body.style === "antiwaste"
+    ? body.style
+    : "balanced";
+
     const startDateParsed = parseStartDateDDMMYYYY(body.startDate);
     if (!startDateParsed) {
-      return res.status(400).json({ error: "Invalid startDate. Expected format: DD-MM-YYYY" });
+      return res.status(400).json({ error: "Data di inizio non valida. Seleziona una data dal calendario." });
     }
 
     const days = Math.round(toNumber(body.days, 0));
@@ -609,7 +631,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: profile, error: profileErr } = await supabase
       .from("user_profiles")
-      .select("diet, lactose_free, avoid, allergies")
+      .select("diet, lactose_free, avoid, allergies, plan_type, premium_until")
       .eq("user_id", user_id)
       .maybeSingle();
 
@@ -629,6 +651,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lactoseFree = Boolean(profile?.lactose_free ?? false);
     const avoid: string[] = Array.isArray(profile?.avoid) ? profile.avoid : [];
     const allergies: string[] = Array.isArray(profile?.allergies) ? profile.allergies : [];
+    const premiumUntil = profile?.premium_until ? new Date(String(profile.premium_until)) : null;
+    const isPremiumActive =
+      profile?.plan_type === "premium" &&
+      premiumUntil !== null &&
+      !Number.isNaN(premiumUntil.getTime()) &&
+      premiumUntil.getTime() > Date.now();
 
     const mealsPerDay = Number(includeLunch) + Number(includeDinner);
     const estimatedMinBudget = estimateMinimumBudget(days, mealsPerDay, people, complexity);
@@ -673,15 +701,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ...value, deduped: true });
     }
 
-    const { data: remainingAfterConsume, error: creditErr } = await supabase.rpc("consume_eco_credit");
-    if (creditErr) {
-      if (String(creditErr.message || "").includes("NO_CREDITS")) {
-        return res.status(402).json({
-          error: "NO_CREDITS",
-          message: "Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.",
-        });
+    let creditUsage: any = null;
+    let remainingAfterConsume: number | null = null;
+
+    if (!isPremiumActive) {
+      const { data: consumeData, error: creditErr } = await supabase.rpc("consume_eco_generation");
+      if (creditErr) {
+        if (String(creditErr.message || "").includes("NO_CREDITS")) {
+          return res.status(402).json({
+            error: "NO_CREDITS",
+            message: "Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.",
+          });
+        }
+        return res.status(500).json({ error: creditErr.message });
       }
-      return res.status(500).json({ error: creditErr.message });
+
+      creditUsage = consumeData ?? null;
+      remainingAfterConsume =
+        typeof creditUsage?.remainingCredits === "number" ? creditUsage.remainingCredits : null;
     }
 
     const rules: string[] = [];
@@ -690,19 +727,187 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (avoid.length) rules.push(`Avoid ingredients: ${avoid.join(", ")}.`);
     if (allergies.length) rules.push(`Allergies: ${allergies.join(", ")}.`);
 
+let styleInstructions = `
+- Obiettivo principale: equilibrio e varietà.
+- Mantieni una buona distribuzione tra carboidrati, proteine e verdure.
+- Alterna frequentemente gli ingredienti.
+`;
+
+if (style === "light") {
+  styleInstructions = `
+- Obiettivo principale: leggerezza.
+- Privilegia piatti leggeri e facilmente digeribili.
+- Limita salumi, formaggi grassi, fritti e preparazioni pesanti.
+- Preferisci verdure, pesce magro, legumi e cereali integrali.
+- Evita guanciale, pancetta, salsiccia e ingredienti molto grassi come protagonisti.
+`;
+}
+
+if (style === "protein") {
+  styleInstructions = `
+- Obiettivo principale: apporto proteico elevato.
+- Ogni pasto deve contenere una fonte proteica importante.
+- Alterna pesce, carne magra, uova, legumi e proteine vegetali.
+`;
+}
+
+if (style === "budget") {
+  styleInstructions = `
+- Obiettivo principale: contenere i costi.
+- Prediligi ingredienti economici.
+- Riduci il numero di ingredienti da acquistare.
+- Mantieni comunque varietà e qualità.
+`;
+}
+
+if (style === "vegetarian") {
+  styleInstructions = `
+- Obiettivo principale: alimentazione vegetariana.
+- Non usare carne o pesce.
+- Alterna legumi, uova, latticini se consentiti e proteine vegetali.
+`;
+}
+
+if (style === "antiwaste") {
+  styleInstructions = `
+- Obiettivo principale: ridurre gli sprechi.
+- Dai maggiore priorità alla dispensa.
+- Utilizza gli ingredienti prossimi alla scadenza quando coerenti.
+- Mantieni comunque varietà e qualità dei pasti.
+`;
+}
+
     const prompt = `
 Agisci come un meal planner esperto di cucina sostenibile, anti-spreco e organizzazione dei pasti.
+
+MISSIONE:
+- Devi comportarti come un meal planner professionista.
+- Il tuo obiettivo è creare un piano alimentare utile, realistico, vario e piacevole.
+- Il piano deve sembrare pensato per una persona reale, non generato in modo automatico.
+- Devi combinare organizzazione dei pasti, gusto, semplicità, equilibrio e riduzione degli sprechi.
 
 OBIETTIVO:
 - Genera un piano pasti di ${days} giorni.
 - Il piano inizia il ${startDateIso} e termina il ${endDateIso}.
 - Prevedi ${includeLunch ? "pranzo" : ""}${includeLunch && includeDinner ? " e " : ""}${includeDinner ? "cena" : ""}.
 - Il piano è per ${people} persone.
-- Riutilizza il più possibile gli ingredienti già presenti in dispensa.
-- Dai priorità ancora più alta agli ingredienti in scadenza a breve.
+
+PROCESSO DECISIONALE OBBLIGATORIO:
+1. Analizza prima le note dell'utente.
+2. Analizza dieta, allergie, intolleranze e ingredienti da evitare.
+3. Analizza lo stile del piano selezionato.
+4. Progetta la struttura generale dei giorni.
+5. Definisci prima il tipo di pasto: primo, secondo, piatto unico, zuppa, insalata completa o altro.
+6. Solo dopo scegli le ricette.
+7. Solo alla fine confronta le ricette con la dispensa.
+8. Non partire mai dalla dispensa per decidere i piatti, salvo stile Anti-spreco.
+
+STILE DEL PIANO:
+${styleInstructions}
+
+REGOLA SULLO STILE:
+- Lo stile selezionato deve guidare tutto il piano.
+- Se lo stile è "light", evita piatti pesanti anche se gli ingredienti sono disponibili.
+- Se lo stile è "antiwaste", puoi dare più importanza alla dispensa, ma senza usare ingredienti scaduti.
+- Se lo stile è "protein", ogni pasto deve contenere una fonte proteica chiara.
+- Se lo stile è "budget", scegli ingredienti economici ma non rendere il piano monotono.
+- Se lo stile è "vegetarian", non usare carne o pesce.
+
+FILOSOFIA DEL PIANO:
+- Il piano deve essere prima di tutto coerente con le preferenze, le note e l'obiettivo alimentare dell'utente.
+- La dispensa serve DOPO per capire cosa è già disponibile e cosa manca.
+- La dispensa NON deve guidare la scelta dei piatti.
+- Non modificare un piano leggero, equilibrato o richiesto dall'utente solo per forzare l'uso di ingredienti presenti in dispensa.
+- Se un ingrediente in dispensa non è coerente con le note utente, ignoralo.
+- Se un ingrediente in scadenza non è coerente con il piano, ignoralo.
+- Gli ingredienti disponibili devono essere usati solo quando migliorano o completano il piano senza snaturarlo.
+
+PRIORITÀ (in ordine di importanza):
+1. Rispetta sempre le richieste dell'utente e le note inserite.
+2. Rispetta dieta, allergie, intolleranze e ingredienti da evitare.
+3. Crea un piano realistico, equilibrato, sano e vario.
+4. Rispetta la struttura dei pasti richiesta dall'utente.
+5. Evita ripetizioni e monotonia.
+6. Usa la dispensa solo se compatibile con il piano.
+7. Dai priorità agli ingredienti prossimi alla scadenza solo se coerenti.
+8. Mantieni il budget richiesto quando possibile.
+
+REGOLE DI VARIETÀ:
+- Ogni giorno deve essere diverso dal precedente.
+- Non ripetere lo stesso piatto durante il piano.
+- Non proporre sempre la stessa categoria di piatto.
+- Non ripetere troppo spesso lo stesso ingrediente principale.
+- Alterna fonti proteiche, cereali, verdure e contorni.
+- Alterna metodi di cottura: vapore, forno, padella leggera, bollitura, crudo quando adatto.
+- Se la dispensa non consente sufficiente varietà, aggiungi ingredienti mancanti nella lista della spesa.
+- La varietà, la leggerezza e il rispetto delle preferenze hanno priorità rispetto al riuso della dispensa.
+
+CONTROLLO MONOTONIA:
+- Verifica quante volte compaiono gli stessi ingredienti principali.
+- Non usare lo stesso cereale o formato di pasta troppo spesso.
+- Non usare la stessa fonte proteica in giorni consecutivi, se evitabile.
+- Non proporre sempre pasta, riso o couscous come unica soluzione per il pranzo.
+- Alterna piatti caldi, freddi, zuppe, cereali, legumi, verdure e secondi.
+
+REGOLE SULLE NOTE UTENTE:
+- Le note utente sono vincolanti.
+- Se l'utente scrive "voglio mangiare leggero", evita piatti pesanti, salumi, fritti, preparazioni ricche di grassi e condimenti eccessivi.
+- Se l'utente scrive "primo a pranzo e secondo a cena", il pranzo deve essere un primo piatto e la cena deve essere un secondo con contorno.
+- Se l'utente chiede pasti semplici, proponi ricette semplici.
+- Se l'utente chiede pasti economici, usa ingredienti economici.
+- Se l'utente indica un obiettivo alimentare, rispettalo più della dispensa.
+
+PASTI LEGGERI:
+Se l'utente richiede pasti leggeri:
+- privilegia verdure, legumi, cereali integrali, pesce magro, carni magre, uova leggere o alternative vegetali;
+- limita salumi, guanciale, pancetta, panna, burro, formaggi grassi, fritti e salse pesanti;
+- usa cotture semplici come vapore, forno, padella antiaderente, bollitura o crudo;
+- usa condimenti moderati;
+- evita piatti chiaramente pesanti anche se gli ingredienti sono presenti in dispensa.
+- In un piano leggero, salumi come guanciale, pancetta, speck e salsiccia non devono essere ingredienti principali.
+- Possono essere usati solo se l'utente li richiede esplicitamente.
+- Se sono presenti in dispensa ma l'utente chiede leggerezza, ignorali.
+
+STRUTTURA DEI PASTI:
+- Se è richiesto un primo a pranzo, proponi primi piatti coerenti: pasta, riso, cereali, zuppe, minestre, cous cous o piatti equivalenti.
+- Se è richiesto un secondo a cena, proponi secondi coerenti: pesce, carne magra, uova, legumi, tofu, formaggi leggeri se compatibili, sempre con contorno.
+- Non proporre un salume saltato o un ingrediente singolo come piatto principale.
+- Ogni pasto deve avere senso come ricetta completa.
+
+LOGICA DI COSTRUZIONE DEL MENU:
+- Prima costruisci il menu ideale.
+- Poi valuta cosa è disponibile in dispensa.
+- Ogni pranzo deve avere una funzione chiara: primo leggero, piatto unico, zuppa, cereale con verdure o alternativa coerente.
+- Ogni cena deve avere una fonte proteica chiara e un contorno.
+- Pranzo e cena dello stesso giorno non devono essere entrambi pesanti.
+- Evita che pranzo e cena dello stesso giorno usino lo stesso ingrediente principale.
+
+LOGICA DI COSTRUZIONE DEL MENU:
+- Prima scegli la struttura del menu in base alle note dell'utente.
+- Solo dopo scegli le ricette.
+- Solo dopo confronta le ricette con la dispensa.
+- Non partire mai dagli ingredienti della dispensa per decidere il piatto.
+- Per ogni giorno crea una combinazione equilibrata tra carboidrati, proteine e verdure.
+- Se il pranzo è un primo, deve essere un primo completo ma leggero.
+- Se la cena è un secondo, deve includere sempre una fonte proteica e un contorno.
+- Evita che pranzo e cena dello stesso giorno siano entrambi pesanti.
+- Evita che pranzo e cena dello stesso giorno usino lo stesso ingrediente principale.
+- Se un ingrediente pesante è in dispensa, può essere usato solo in piccola quantità e solo se coerente con le note utente.
+
+ANTI-SPRECO:
 - Non usare mai ingredienti scaduti.
-- Riduci sprechi, costi e numero di ingredienti da comprare.
-- Favorisci il riuso degli stessi ingredienti tra più pasti.
+- Usa quando possibile gli ingredienti prossimi alla scadenza, ma solo se coerenti con il piano.
+- Evita acquisti inutili, ma non compromettere qualità, varietà e obiettivo alimentare.
+- Non sacrificare un piano leggero o equilibrato per consumare ingredienti pesanti presenti in dispensa.
+
+USO CORRETTO DELLA DISPENSA:
+- La dispensa serve a indicare cosa è già disponibile, non a decidere il piano.
+- Usa un ingrediente della dispensa solo se è coerente con stile, note e obiettivo del piano.
+- Se un ingrediente disponibile è pesante e lo stile è leggero, ignoralo.
+- Gli ingredienti in scadenza sono utili, ma non devono peggiorare qualità, leggerezza o varietà.
+- IngredientsUsed deve contenere solo ingredienti realmente presenti nella dispensa disponibile.
+- MissingIngredients deve contenere solo ingredienti non presenti o insufficienti.
+- Lo stesso ingrediente non può comparire sia in IngredientsUsed che in MissingIngredients.
 
 VINCOLI:
 - Complessità: ${complexity}
@@ -714,7 +919,7 @@ ${notes ? `- Note utente: ${notes}` : ""}
 DISPENSA DISPONIBILE:
 ${formatPantryItems(availableItems)}
 
-INGREDIENTI IN SCADENZA A BREVE (DA PRIORITIZZARE):
+INGREDIENTI IN SCADENZA A BREVE:
 ${formatPantryItems(expiringSoonItems)}
 
 INGREDIENTI SCADUTI (NON USARLI MAI):
@@ -726,11 +931,61 @@ REGOLE IMPORTANTI:
 - Se lactose-free = YES: evita ingredienti con lattosio.
 - Non usare ingredienti presenti in "Avoid ingredients".
 - Non usare ingredienti presenti in "Allergies".
-- IngredientsUsed deve contenere gli ingredienti realmente usati dalla ricetta con quantità e unità.
+- Non usare ingredienti scaduti anche se sarebbero perfetti per la ricetta.
+- IngredientsUsed deve contenere SOLO ingredienti realmente presenti nella DISPENSA DISPONIBILE e realmente usati nella ricetta.
+- MissingIngredients deve contenere gli ingredienti necessari alla ricetta che non sono presenti in dispensa o sono presenti in quantità insufficiente.
+- MissingIngredients deve essere pensato come una vera lista della spesa.
+- Per ingredienti normalmente acquistati a peso (carne, pesce, pasta, riso, verdure, legumi, formaggi) indica quantità e unità.
+- Per ingredienti normalmente acquistati a confezione, mazzetto o come dispensa base (basilico, prezzemolo, rosmarino, salvia, spezie, sale, pepe, olio, aceto, limone, aglio, cipolla e condimenti comuni) indica preferibilmente solo il nome.
+- Evita quantità irrealistiche come "basilico 10 g" o "sale 3 g".
+- Ragiona come una persona che deve realmente fare la spesa.
+- Se un ingrediente è presente solo tra gli scaduti, consideralo NON disponibile e inseriscilo in missingIngredients se serve.
 - Le ricette devono essere realistiche, semplici da eseguire e coerenti con il numero di persone.
 - Non inserire pasti vuoti nei giorni richiesti.
 - Non scrivere testo fuori dal JSON.
-- Anche se un ingrediente esiste solo tra gli scaduti, consideralo NON disponibile.
+
+QUALITÀ GASTRONOMICA:
+- Evita nomi troppo generici come "Pasta al pomodoro", "Riso con verdure", "Pollo con insalata".
+- Preferisci nomi più curati ma semplici, come "Spaghetti integrali con pomodorini arrosto e basilico" o "Petto di pollo al limone con zucchine grigliate".
+- Le ricette devono sembrare appetitose, realistiche e facili da cucinare.
+- Usa erbe aromatiche, spezie leggere e abbinamenti mediterranei quando coerenti.
+- Non inventare piatti strani o poco credibili.
+
+REGOLE SUI PASSAGGI:
+- Ogni ricetta deve avere passaggi chiari e pratici.
+- I passaggi devono accompagnare l'utente dall'inizio alla fine.
+- Indica tempi, cotture, fiamma, temperatura o consistenza quando utile.
+- Evita passaggi generici come "cuoci tutto" o "prepara la ricetta".
+- L'utente deve poter cucinare seguendo solo gli steps.
+
+CONTROLLO QUALITÀ DEL PIANO:
+Prima di generare il JSON verifica che:
+- Il piano sia coerente con lo stile selezionato.
+- I pasti siano realistici e appetitosi.
+- I piatti non siano troppo banali.
+- Le fonti proteiche siano ben distribuite.
+- Le verdure siano variate.
+- Non ci siano ripetizioni inutili.
+- Il piano sembri creato da un vero meal planner professionista.
+- La dispensa sia usata come supporto e non come motore principale del piano.
+- MissingIngredients rappresenti una lista della spesa realistica.
+
+VALIDAZIONE FINALE:
+Prima di restituire il JSON verifica che:
+1. Il piano rispetti le note dell'utente.
+2. Il piano rispetti lo stile selezionato.
+3. I pasti siano realistici e cucinabili.
+4. Le ricette siano appetitose e non banali.
+5. Le proteine siano distribuite bene.
+6. Le verdure siano presenti e variate.
+7. Non ci siano ripetizioni inutili.
+8. Nessun ingrediente scaduto sia usato.
+9. Nessun ingrediente compaia sia in IngredientsUsed che in MissingIngredients.
+10. IngredientsUsed contenga solo ingredienti realmente presenti in dispensa.
+11. MissingIngredients rappresenti una lista della spesa realistica.
+12. Il piano sembri creato da un vero meal planner professionista.
+
+Se uno di questi controlli fallisce, correggi il piano prima di generare il JSON.
 
 OUTPUT OBBLIGATORIO:
 Restituisci SOLO un JSON object valido, con questa struttura esatta:
@@ -781,9 +1036,12 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         console.error("OpenAI meal-plan error:", data);
 
         const refundReason = `openai_meal_plan_error_${r.status}`;
-        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_credit", {
-          p_reason: refundReason,
-        });
+        const { data: refunded, error: refundErr } = !isPremiumActive
+          ? await supabase.rpc("refund_eco_generation", {
+              p_consumed_credit: Boolean(creditUsage?.consumedCredit),
+              p_reason: refundReason,
+            })
+          : { data: null, error: null };
 
         const errType = data?.error?.type;
         const status = r.status;
@@ -795,7 +1053,8 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
             status === 429 && errType === "insufficient_quota"
               ? "Quota/billing API non attivo o crediti esauriti su OpenAI Platform."
               : undefined,
-          remainingCredits: typeof refunded === "number" ? refunded : remainingAfterConsume ?? null,
+          remainingCredits:
+            typeof refunded?.remainingCredits === "number" ? refunded.remainingCredits : remainingAfterConsume ?? null,
           refunded: refundErr ? false : true,
         };
       }
@@ -818,7 +1077,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         return {
           warning: budgetWarning,
           estimatedMinBudget,
-          startDate: body.startDate,
+          startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,
           plan: [],
@@ -889,7 +1148,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
           id: savedPlan.id,
           warning: budgetWarning,
           estimatedMinBudget,
-          startDate: body.startDate,
+          startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,
           plan: correctedPlan,
@@ -905,7 +1164,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         return {
           warning: budgetWarning,
           estimatedMinBudget,
-          startDate: body.startDate,
+          startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,
           plan: [],

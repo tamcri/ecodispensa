@@ -140,7 +140,7 @@ export const MealPlanResult = ({
                           )}
 
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">Ingredienti usati</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">Ingredienti da utilizzare</div>
                             <ul className="space-y-1 text-sm text-gray-600">
                               {day.meals.lunch.ingredientsUsed.map((item, index) => (
                                 <li key={`${item.name}-${index}`}>
@@ -152,7 +152,7 @@ export const MealPlanResult = ({
 
                           {day.meals.lunch.missingIngredients.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">Da comprare</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">Da acquistare</div>
                               <ul className="space-y-1 text-sm text-rose-700">
                                 {day.meals.lunch.missingIngredients.map((item, index) => (
                                   <li key={`${item.name}-${index}`}>
