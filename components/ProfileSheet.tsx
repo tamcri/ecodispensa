@@ -409,9 +409,22 @@ const startCheckout = async (productCode: string) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const premiumUntilLabel = premiumUntil
-  ? new Date(premiumUntil).toLocaleDateString("it-IT")
-  : null;
+  const premiumUntilDate = premiumUntil ? new Date(premiumUntil) : null;
+  const premiumUntilLabel = premiumUntilDate
+    ? premiumUntilDate.toLocaleDateString("it-IT")
+    : null;
+
+  const isPremiumActive =
+    planType === "premium" &&
+    premiumUntilDate !== null &&
+    !Number.isNaN(premiumUntilDate.getTime()) &&
+    premiumUntilDate.getTime() > Date.now();
+
+  const isPremiumExpired =
+    planType === "premium" &&
+    premiumUntilDate !== null &&
+    !Number.isNaN(premiumUntilDate.getTime()) &&
+    premiumUntilDate.getTime() <= Date.now();
 
   const creditProducts = billingProducts.filter((product) => product.type === "credits_pack");
 const subscriptionProducts = billingProducts.filter((product) => product.type === "subscription");
@@ -582,159 +595,228 @@ const formatPrice = (priceCents: number, currency: string) => {
               </div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-  <div className="flex items-center gap-2 mb-3">
-    <CreditCard size={16} className="text-emerald-600" />
-    <div className="text-sm font-bold text-gray-800">Piano</div>
-  </div>
-
-  <div className="flex items-center justify-between gap-3">
-    <div>
-      <div className="text-xs text-gray-400 mb-1">Piano attuale</div>
-
-      <div
-        className={`font-bold ${
-          planType === "premium"
-            ? "text-amber-600"
-            : "text-gray-800"
-        }`}
-      >
-        {planType === "premium" ? "Premium" : "Free"}
-      </div>
-
-      {planType === "premium" && premiumUntilLabel && (
-        <div className="text-xs text-gray-500 mt-1">
-          Attivo fino al {premiumUntilLabel}
-        </div>
-      )}
-    </div>
-
-    <button
-  type="button"
-  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
-  onClick={() => setShowBillingPanel((value) => !value)}
->
-  {showBillingPanel ? "Chiudi" : "Gestisci piano"}
-</button>
-  </div>
-
-  <div className="mt-4 flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-3">
-    <div>
-      <div className="text-xs text-gray-400">
-        Crediti EcoChef
-      </div>
-
-      <div className="font-bold text-gray-800 text-lg">
-        {creditsLoading ? "…" : ecoCredits ?? 0}
-      </div>
-    </div>
-
-    <button
-      type="button"
-      onClick={refreshCredits}
-      className="text-sm font-bold text-emerald-700 hover:text-emerald-800"
-    >
-      aggiorna
-    </button>
-  </div>
-
-  <div className="grid grid-cols-2 gap-2 mt-3">
-  <button
-  type="button"
-  onClick={() => setShowBillingPanel(true)}
-  className="w-full mt-3 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm hover:bg-emerald-100"
->
-  Visualizza pacchetti
-</button>
-</div>
-{showBillingPanel && (
-  <div className="mt-4 space-y-4">
-    <div className="bg-white border border-gray-100 rounded-xl p-4">
-      <div className="text-sm font-bold text-gray-800 mb-1">
-        Pacchetti crediti
-      </div>
-      <div className="text-xs text-gray-500 mb-3">
-        Acquista crediti da usare per EcoChef e le funzioni AI.
-      </div>
-
-      {billingLoading ? (
-        <div className="text-sm text-gray-500">Caricamento prodotti...</div>
-      ) : creditProducts.length === 0 ? (
-        <div className="text-sm text-gray-500">Nessun pacchetto disponibile.</div>
-      ) : (
-        <div className="space-y-2">
-          {creditProducts.map((product) => (
-            <div
-              key={product.code}
-              className="border border-gray-100 rounded-xl p-3 flex items-center justify-between gap-3"
-            >
-              <div>
-                <div className="font-bold text-gray-800">{product.name}</div>
-                <div className="text-xs text-gray-500">
-                  {product.credits_amount} crediti
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard size={16} className="text-emerald-600" />
+                  <div className="text-sm font-bold text-gray-800">Piano</div>
                 </div>
-                {product.description && (
-                  <div className="text-xs text-gray-400 mt-1">
-                    {product.description}
+
+                {isPremiumActive ? (
+                  <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-base"
+                            aria-hidden="true"
+                          >
+                            ⭐
+                          </span>
+                          <div>
+                            <div className="text-xs font-extrabold tracking-wider text-amber-700">
+                              PREMIUM ATTIVO
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {premiumUntilLabel ? `Scade il ${premiumUntilLabel}` : "Piano Premium attivo"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={refreshCredits}
+                        className="shrink-0 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                      >
+                        aggiorna
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      <div className="bg-white/90 border border-amber-100 rounded-xl p-3">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="text-base" aria-hidden="true">
+                            ♾
+                          </span>
+                          Generazioni EcoChef
+                        </div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                          Illimitate
+                        </div>
+                      </div>
+
+                      <div className="bg-white/90 border border-emerald-100 rounded-xl p-3">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="text-base" aria-hidden="true">
+                            💳
+                          </span>
+                          Crediti extra conservati
+                        </div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                          {creditsLoading ? "…" : ecoCredits ?? 0}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
+                      I crediti acquistati verranno utilizzati solo dopo la scadenza del Premium.
+                    </div>
+
+                    <button
+                      type="button"
+                      className="w-full mt-3 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
+                      onClick={() => setShowBillingPanel((value) => !value)}
+                    >
+                      {showBillingPanel ? "Chiudi" : "Gestisci piano"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div
+                          className={`text-xs font-extrabold tracking-wider ${
+                            isPremiumExpired ? "text-amber-700" : "text-gray-500"
+                          }`}
+                        >
+                          {isPremiumExpired ? "PREMIUM NON ATTIVO" : "PIANO FREE"}
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {isPremiumExpired && premiumUntilLabel
+                            ? `Scaduto il ${premiumUntilLabel}. I crediti sono di nuovo disponibili.`
+                            : "Usa i tuoi crediti per le generazioni EcoChef."}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={refreshCredits}
+                        className="shrink-0 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                      >
+                        aggiorna
+                      </button>
+                    </div>
+
+                    <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                      <div className="text-xs font-medium text-emerald-800">
+                        Crediti disponibili
+                      </div>
+                      <div className="mt-1 text-3xl font-extrabold text-gray-900">
+                        {creditsLoading ? "…" : ecoCredits ?? 0}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        1 credito = 4 generazioni AI
+                      </div>
+                    </div>
+
+                    <div className="mt-3 text-sm text-gray-600 leading-relaxed">
+                      {isPremiumExpired
+                        ? "Riattiva Premium per tornare alle generazioni EcoChef illimitate oppure continua usando i crediti disponibili."
+                        : "Passa a Premium per generazioni EcoChef illimitate oppure acquista nuovi pacchetti di crediti."}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowBillingPanel((value) => !value)}
+                      className="w-full mt-3 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm hover:bg-emerald-100 transition-colors"
+                    >
+                      {showBillingPanel
+                        ? "Chiudi"
+                        : isPremiumExpired
+                        ? "Riattiva Premium o acquista crediti"
+                        : "Scopri Premium e pacchetti"}
+                    </button>
+                  </div>
+                )}
+
+                {showBillingPanel && (
+                  <div className="mt-4 space-y-4">
+                    <div className="bg-white border border-gray-100 rounded-xl p-4">
+                      <div className="text-sm font-bold text-gray-800 mb-1">
+                        Pacchetti crediti
+                      </div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        Acquista crediti da usare per EcoChef e le funzioni AI.
+                      </div>
+
+                      {billingLoading ? (
+                        <div className="text-sm text-gray-500">Caricamento prodotti...</div>
+                      ) : creditProducts.length === 0 ? (
+                        <div className="text-sm text-gray-500">Nessun pacchetto disponibile.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {creditProducts.map((product) => (
+                            <div
+                              key={product.code}
+                              className="border border-gray-100 rounded-xl p-3 flex items-center justify-between gap-3"
+                            >
+                              <div>
+                                <div className="font-bold text-gray-800">{product.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {product.credits_amount} crediti
+                                </div>
+                                {product.description && (
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {product.description}
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => startCheckout(product.code)}
+                                className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700"
+                              >
+                                {formatPrice(product.price_cents, product.currency)}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white border border-amber-100 rounded-xl p-4">
+                      <div className="text-sm font-bold text-gray-800 mb-1">
+                        Premium
+                      </div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        Piano mensile per usare EcoDispensa in modo avanzato.
+                      </div>
+
+                      {billingLoading ? (
+                        <div className="text-sm text-gray-500">Caricamento piano...</div>
+                      ) : subscriptionProducts.length === 0 ? (
+                        <div className="text-sm text-gray-500">Nessun piano Premium disponibile.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {subscriptionProducts.map((product) => (
+                            <div
+                              key={product.code}
+                              className="border border-amber-100 rounded-xl p-3 flex items-center justify-between gap-3"
+                            >
+                              <div>
+                                <div className="font-bold text-gray-800">{product.name}</div>
+                                {product.description && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {product.description}
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => startCheckout(product.code)}
+                                className="px-3 py-2 rounded-xl bg-amber-500 text-white font-bold text-sm hover:bg-amber-600"
+                              >
+                                {formatPrice(product.price_cents, product.currency)}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={() => startCheckout(product.code)}
-                className="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700"
-              >
-                {formatPrice(product.price_cents, product.currency)}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-
-    <div className="bg-white border border-amber-100 rounded-xl p-4">
-      <div className="text-sm font-bold text-gray-800 mb-1">
-        Premium
-      </div>
-      <div className="text-xs text-gray-500 mb-3">
-        Piano mensile per usare EcoDispensa in modo avanzato.
-      </div>
-
-      {billingLoading ? (
-        <div className="text-sm text-gray-500">Caricamento piano...</div>
-      ) : subscriptionProducts.length === 0 ? (
-        <div className="text-sm text-gray-500">Nessun piano Premium disponibile.</div>
-      ) : (
-        <div className="space-y-2">
-          {subscriptionProducts.map((product) => (
-            <div
-              key={product.code}
-              className="border border-amber-100 rounded-xl p-3 flex items-center justify-between gap-3"
-            >
-              <div>
-                <div className="font-bold text-gray-800">{product.name}</div>
-                {product.description && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    {product.description}
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => startCheckout(product.code)}
-                className="px-3 py-2 rounded-xl bg-amber-500 text-white font-bold text-sm hover:bg-amber-600"
-              >
-                {formatPrice(product.price_cents, product.currency)}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  </div>
-)}
-</div>
 
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
