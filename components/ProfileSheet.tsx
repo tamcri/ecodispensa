@@ -49,6 +49,17 @@ type BillingProduct = {
   is_active: boolean;
 };
 
+type Purchase = {
+  id: string;
+  purchase_type: "credits_pack" | "subscription";
+  product_code: string;
+  product_name: string | null;
+  amount: number;
+  currency: string;
+  credits_added: number;
+  created_at: string;
+};
+
 function parseCommaList(input: string): string[] {
   return input
     .split(",")
@@ -120,6 +131,31 @@ async function fetchBillingProducts(): Promise<BillingProduct[]> {
   return Array.isArray(body?.products) ? body.products : [];
 }
 
+async function fetchPurchases(): Promise<Purchase[]> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("SESSION_MISSING");
+
+  const r = await fetch("/api/purchases", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const text = await r.text();
+
+  let body: any;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error("INVALID_JSON_RESPONSE");
+  }
+
+  if (!r.ok) {
+    throw new Error(body?.error ?? "PURCHASES_FETCH_FAILED");
+  }
+
+  return Array.isArray(body?.purchases) ? body.purchases : [];
+}
+
 export type ProfileSheetProps = {
   open: boolean;
   onClose: () => void;
@@ -152,6 +188,10 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [billingProducts, setBillingProducts] = useState<BillingProduct[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
   const [showBillingPanel, setShowBillingPanel] = useState(false);
+
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [purchasesError, setPurchasesError] = useState<string | null>(null);
 
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -264,6 +304,21 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     setBillingLoading(false);
   }
 };
+
+  const loadPurchases = async () => {
+    try {
+      setPurchasesLoading(true);
+      setPurchasesError(null);
+      const history = await fetchPurchases();
+      setPurchases(history);
+    } catch (e) {
+      console.error("purchases load error:", e);
+      setPurchases([]);
+      setPurchasesError("Impossibile caricare lo storico acquisti.");
+    } finally {
+      setPurchasesLoading(false);
+    }
+  };
 
 const startCheckout = async (productCode: string) => {
   try {
@@ -395,8 +450,11 @@ const startCheckout = async (productCode: string) => {
       if (token) {
         await refreshCredits();
         await loadBillingProducts();
+        await loadPurchases();
       } else {
         setEcoCredits(null);
+        setPurchases([]);
+        setPurchasesError(null);
       }
 
       setTab("profilo");
@@ -434,6 +492,38 @@ const formatPrice = (priceCents: number, currency: string) => {
     style: "currency",
     currency,
   }).format(priceCents / 100);
+};
+
+const formatPurchaseAmount = (amount: number, currency: string) => {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: currency || "EUR",
+  }).format(Number(amount ?? 0));
+};
+
+const formatPurchaseDate = (createdAt: string) => {
+  const date = new Date(createdAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Data non disponibile";
+  }
+
+  return date.toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
+const getPurchaseTitle = (purchase: Purchase) => {
+  if (purchase.purchase_type === "credits_pack") {
+    const baseName = purchase.product_name || "Pacchetto crediti";
+    return purchase.credits_added > 0
+      ? `${baseName} +${purchase.credits_added} crediti`
+      : baseName;
+  }
+
+  return purchase.product_name || "Premium Mensile";
 };
 
   if (!open) return null;
@@ -814,6 +904,86 @@ const formatPrice = (priceCents: number, currency: string) => {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={16} className="text-emerald-600" />
+                    <div className="text-sm font-bold text-gray-800">Storico acquisti</div>
+                  </div>
+
+                  {!purchasesLoading && (
+                    <button
+                      type="button"
+                      onClick={loadPurchases}
+                      className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                    >
+                      aggiorna
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-xs text-gray-500 mb-3">
+                  Gli ultimi acquisti effettuati su EcoDispensa.
+                </div>
+
+                {purchasesLoading ? (
+                  <div className="py-5 flex items-center justify-center gap-2 text-sm text-gray-500">
+                    <Loader2 size={18} className="animate-spin text-emerald-600" />
+                    Caricamento acquisti...
+                  </div>
+                ) : purchasesError ? (
+                  <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+                    <div className="text-sm text-red-700">{purchasesError}</div>
+                    <button
+                      type="button"
+                      onClick={loadPurchases}
+                      className="mt-2 text-xs font-bold text-red-700 hover:text-red-800"
+                    >
+                      Riprova
+                    </button>
+                  </div>
+                ) : purchases.length === 0 ? (
+                  <div className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-500">
+                    Nessun acquisto registrato.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {purchases.map((purchase) => (
+                      <div
+                        key={purchase.id}
+                        className="rounded-xl border border-gray-100 bg-white p-3 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-gray-800 truncate">
+                            {getPurchaseTitle(purchase)}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {formatPurchaseDate(purchase.created_at)}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <div className="font-bold text-sm text-gray-900">
+                            {formatPurchaseAmount(purchase.amount, purchase.currency)}
+                          </div>
+                          <div
+                            className={`text-[11px] font-semibold mt-1 ${
+                              purchase.purchase_type === "subscription"
+                                ? "text-amber-700"
+                                : "text-emerald-700"
+                            }`}
+                          >
+                            {purchase.purchase_type === "subscription"
+                              ? "Premium"
+                              : "Crediti EcoChef"}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
