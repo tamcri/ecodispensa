@@ -199,6 +199,44 @@ function getValidPantryItems(items: PantryItem[]) {
   });
 }
 
+function isMealPlanQuantityAsNeeded(name: string, unit?: string | null) {
+  const normalizedName = name.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalizedUnit = String(unit ?? "").trim().toLowerCase();
+
+  if (normalizedUnit === "qb" || normalizedUnit === "q.b." || normalizedUnit === "q.b") {
+    return true;
+  }
+
+  const pantryBasics = [
+    "sale",
+    "pepe",
+    "olio",
+    "olio extravergine",
+    "olio extravergine di oliva",
+    "olio evo",
+    "aceto",
+    "basilico",
+    "prezzemolo",
+    "rosmarino",
+    "salvia",
+    "origano",
+    "paprika",
+    "curcuma",
+    "cannella",
+    "noce moscata",
+  ];
+
+  return (
+    normalizedUnit === "pz" &&
+    pantryBasics.some(
+      (basic) =>
+        normalizedName === basic ||
+        normalizedName.startsWith(`${basic} `) ||
+        normalizedName.includes(` ${basic} `)
+    )
+  );
+}
+
 export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems }) => {
   const [mode, setMode] = useState<ChefMode>("suggest");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -619,12 +657,16 @@ if (typeof recipesResp?.remainingCredits === "number") {
     setAddingMissing(true);
 
     try {
-      const rows = mealPlanResult.shoppingListPreview.map((item) => ({
-        name: item.name,
-        category: inferCategoryFromName(item.name),
-        quantity: item.quantity,
-        unit: item.unit,
-      }));
+      const rows = mealPlanResult.shoppingListPreview.map((item) => {
+        const quantityAsNeeded = isMealPlanQuantityAsNeeded(item.name, item.unit);
+
+        return {
+          name: item.name,
+          category: inferCategoryFromName(item.name),
+          quantity: quantityAsNeeded ? null : item.quantity,
+          unit: quantityAsNeeded ? "Q.B." : item.unit,
+        };
+      });
 
       await onAddShoppingItems(rows);
       setShoppingListAdded(true);

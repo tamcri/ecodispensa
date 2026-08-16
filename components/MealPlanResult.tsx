@@ -24,6 +24,52 @@ function formatDisplayDate(value?: string | null) {
   return value;
 }
 
+function isPantryBasicIngredient(name: string) {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, " ");
+
+  const pantryBasics = [
+    "sale",
+    "pepe",
+    "olio",
+    "olio extravergine",
+    "olio extravergine di oliva",
+    "olio evo",
+    "aceto",
+    "basilico",
+    "prezzemolo",
+    "rosmarino",
+    "salvia",
+    "origano",
+    "paprika",
+    "curcuma",
+    "cannella",
+    "noce moscata",
+  ];
+
+  return pantryBasics.some(
+    (basic) =>
+      normalized === basic ||
+      normalized.startsWith(`${basic} `) ||
+      normalized.includes(` ${basic} `)
+  );
+}
+
+function isQuantityAsNeeded(item: { name: string; quantity: number; unit: string }) {
+  const normalizedUnit = String(item.unit ?? "").trim().toLowerCase();
+  return normalizedUnit === "qb" || normalizedUnit === "q.b." || normalizedUnit === "q.b";
+}
+
+function formatIngredient(item: { name: string; quantity: number; unit: string }) {
+  if (
+    isQuantityAsNeeded(item) ||
+    (isPantryBasicIngredient(item.name) && String(item.unit).toLowerCase() === "pz")
+  ) {
+    return `${item.name} — Q.B.`;
+  }
+
+  return `${item.name} — ${item.quantity} ${item.unit}`;
+}
+
 export const MealPlanResult = ({
   result,
   onAddMissingToShoppingList,
@@ -140,14 +186,19 @@ export const MealPlanResult = ({
                           )}
 
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">Ingredienti da utilizzare</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">Dalla dispensa</div>
                             <ul className="space-y-1 text-sm text-gray-600">
                               {day.meals.lunch.ingredientsUsed.map((item, index) => (
                                 <li key={`${item.name}-${index}`}>
-                                  • {item.name} — {item.quantity} {item.unit}
+                                  • {formatIngredient(item)}
                                 </li>
                               ))}
                             </ul>
+                            {day.meals.lunch.ingredientsUsed.length === 0 && (
+                              <p className="text-sm text-gray-400 italic">
+                                Nessun ingrediente disponibile dalla dispensa.
+                              </p>
+                            )}
                           </div>
 
                           {day.meals.lunch.missingIngredients.length > 0 && (
@@ -156,7 +207,7 @@ export const MealPlanResult = ({
                               <ul className="space-y-1 text-sm text-rose-700">
                                 {day.meals.lunch.missingIngredients.map((item, index) => (
                                   <li key={`${item.name}-${index}`}>
-                                    • {item.name} — {item.quantity} {item.unit}
+                                    • {formatIngredient(item)}
                                   </li>
                                 ))}
                               </ul>
@@ -194,23 +245,28 @@ export const MealPlanResult = ({
                           )}
 
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">Ingredienti usati</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">Dalla dispensa</div>
                             <ul className="space-y-1 text-sm text-gray-600">
                               {day.meals.dinner.ingredientsUsed.map((item, index) => (
                                 <li key={`${item.name}-${index}`}>
-                                  • {item.name} — {item.quantity} {item.unit}
+                                  • {formatIngredient(item)}
                                 </li>
                               ))}
                             </ul>
+                            {day.meals.dinner.ingredientsUsed.length === 0 && (
+                              <p className="text-sm text-gray-400 italic">
+                                Nessun ingrediente disponibile dalla dispensa.
+                              </p>
+                            )}
                           </div>
 
                           {day.meals.dinner.missingIngredients.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">Da comprare</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">Da acquistare</div>
                               <ul className="space-y-1 text-sm text-rose-700">
                                 {day.meals.dinner.missingIngredients.map((item, index) => (
                                   <li key={`${item.name}-${index}`}>
-                                    • {item.name} — {item.quantity} {item.unit}
+                                    • {formatIngredient(item)}
                                   </li>
                                 ))}
                               </ul>
@@ -242,7 +298,7 @@ export const MealPlanResult = ({
                 <ul className="space-y-1 text-sm text-gray-700">
                   {result.shoppingListPreview.map((item, index) => (
                     <li key={`${item.name}-${item.unit}-${index}`}>
-                      • {item.name} — {item.quantity} {item.unit}
+                      • {formatIngredient(item)}
                     </li>
                   ))}
                 </ul>
