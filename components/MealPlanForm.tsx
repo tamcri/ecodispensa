@@ -5,6 +5,8 @@ interface MealPlanFormProps {
   onSubmit: (payload: MealPlanRequest) => Promise<void> | void;
   loading: boolean;
   initialValues?: Partial<MealPlanRequest>;
+  isPremiumActive?: boolean;
+  premiumStatusLoading?: boolean;
 }
 
 function formatTodayISO() {
@@ -43,7 +45,13 @@ function displayToISO(value: string): string | null {
   return iso;
 }
 
-export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormProps) => {
+export const MealPlanForm = ({
+  onSubmit,
+  loading,
+  initialValues,
+  isPremiumActive = false,
+  premiumStatusLoading = false,
+}: MealPlanFormProps) => {
   const resolvedInitialValues = useMemo(() => {
     const initialStartDateIso =
       initialValues?.startDate && displayToISO(initialValues.startDate)
@@ -60,6 +68,10 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
       people: initialValues?.people ?? 2,
       budget: initialValues?.budget == null ? "" : String(initialValues.budget),
       complexity: initialValues?.complexity ?? "mixed",
+      dailyCalorieTarget:
+        initialValues?.dailyCalorieTarget == null
+          ? ""
+          : String(initialValues.dailyCalorieTarget),
       notes: initialValues?.notes ?? "",
     };
   }, [initialValues]);
@@ -76,6 +88,9 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
   const [planStyle, setPlanStyle] = useState<
   "balanced" | "light" | "protein" | "budget" | "vegetarian" | "antiwaste"
 >("balanced");
+  const [dailyCalorieTarget, setDailyCalorieTarget] = useState<string>(
+    resolvedInitialValues.dailyCalorieTarget
+  );
   const [notes, setNotes] = useState(resolvedInitialValues.notes);
 
   useEffect(() => {
@@ -87,6 +102,7 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
     setBudget(resolvedInitialValues.budget);
     setComplexity(resolvedInitialValues.complexity as MealPlanComplexity);
     setPlanStyle("balanced");
+    setDailyCalorieTarget(resolvedInitialValues.dailyCalorieTarget);
     setNotes(resolvedInitialValues.notes);
   }, [resolvedInitialValues]);
 
@@ -110,6 +126,21 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
       return;
     }
 
+    const parsedDailyCalorieTarget =
+      isPremiumActive && dailyCalorieTarget.trim() !== ""
+        ? Math.round(Number(dailyCalorieTarget))
+        : null;
+
+    if (
+      parsedDailyCalorieTarget !== null &&
+      (!Number.isFinite(parsedDailyCalorieTarget) ||
+        parsedDailyCalorieTarget < 1000 ||
+        parsedDailyCalorieTarget > 4000)
+    ) {
+      alert("Inserisci un obiettivo calorie compreso tra 1000 e 4000 kcal.");
+      return;
+    }
+
     await onSubmit({
       startDate: isoToDisplay(startDateIso),
       days,
@@ -121,6 +152,7 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
       budget: parsedBudget,
       complexity,
       style: planStyle,
+      dailyCalorieTarget: parsedDailyCalorieTarget,
       notes: notes.trim() || undefined,
     });
   };
@@ -279,6 +311,48 @@ export const MealPlanForm = ({ onSubmit, loading, initialValues }: MealPlanFormP
     Determina la priorità principale del piano alimentare.
   </p>
 </div>
+
+        <div className={`rounded-xl border p-4 ${
+          isPremiumActive
+            ? "border-amber-200 bg-amber-50/60"
+            : "border-gray-200 bg-gray-50"
+        }`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <label
+              htmlFor="meal-plan-daily-calories"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Obiettivo calorie giornaliere
+            </label>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+              Premium
+            </span>
+          </div>
+
+          <input
+            id="meal-plan-daily-calories"
+            type="number"
+            min={1000}
+            max={4000}
+            step={50}
+            value={dailyCalorieTarget}
+            onChange={(e) => setDailyCalorieTarget(e.target.value)}
+            disabled={!isPremiumActive || premiumStatusLoading}
+            placeholder={premiumStatusLoading ? "Verifica piano..." : "Es. 1800"}
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+          />
+
+          <p className="text-xs text-gray-500 mt-2">
+            {premiumStatusLoading
+              ? "Sto verificando il tuo piano."
+              : isPremiumActive
+                ? "Opzionale. EcoDispensa userà il valore come riferimento e mostrerà una stima kcal per pasto e per giorno."
+                : "Disponibile con il piano Premium."}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Valori indicativi, non costituiscono indicazione medica o nutrizionale. Il totale considera solo i pasti pianificati in EcoDispensa.
+          </p>
+        </div>
 
         <div>
           <label htmlFor="meal-plan-notes" className="block text-sm font-medium text-gray-700 mb-2">

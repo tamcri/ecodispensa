@@ -176,6 +176,8 @@ function canonicalizeConcreteIngredientName(name: string): string {
     "spinaci freschi": "spinaci",
     pomodori: "pomodoro",
     pomodorini: "pomodoro",
+    "petto di pollo": "pollo",
+    parmesano: "parmigiano",
     "pomodori freschi": "pomodoro",
     "pomodoro fresco": "pomodoro",
     "pomodori ciliegini": "pomodoro",
@@ -184,6 +186,17 @@ function canonicalizeConcreteIngredientName(name: string): string {
     "prezzemolo fresco": "prezzemolo",
     "rosmarino fresco": "rosmarino",
     "erbe aromatiche fresche": "erbe aromatiche",
+    limone: "limone",
+    limoni: "limone",
+    lime: "lime",
+    mele: "mela",
+    banane: "banana",
+    arance: "arancia",
+    pere: "pera",
+    pesche: "pesca",
+    fragole: "fragola",
+    mandarini: "mandarino",
+    clementine: "clementina",
     "olio d'oliva": "olio d'oliva",
     "olio di oliva": "olio d'oliva",
     "olio extravergine": "olio d'oliva",
@@ -244,6 +257,14 @@ function isPieceIngredient(name: string): boolean {
     "scalogno",
     "cetriolo",
     "avocado",
+    "mela",
+    "banana",
+    "arancia",
+    "pera",
+    "pesca",
+    "kiwi",
+    "mandarino",
+    "clementina",
   ];
 
   return pieceIngredients.some(
@@ -339,9 +360,35 @@ function normalizePracticalShoppingIngredient(
   }
 
   if (name === "limone" || name === "lime") {
+    const gramsPerPiece = name === "limone" ? 100 : 70;
+    const millilitersPerPiece = name === "limone" ? 40 : 30;
+
+    let pieceQuantity = 1;
+
+    if (unit === "pz") {
+      pieceQuantity = Math.max(1, Math.round(quantity || 1));
+    } else if (unit === "g") {
+      pieceQuantity = Math.max(1, Math.ceil(quantity / gramsPerPiece));
+    } else if (unit === "kg") {
+      pieceQuantity = Math.max(
+        1,
+        Math.ceil((quantity * 1000) / gramsPerPiece)
+      );
+    } else if (unit === "ml") {
+      pieceQuantity = Math.max(
+        1,
+        Math.ceil(quantity / millilitersPerPiece)
+      );
+    } else if (unit === "l") {
+      pieceQuantity = Math.max(
+        1,
+        Math.ceil((quantity * 1000) / millilitersPerPiece)
+      );
+    }
+
     return {
       name,
-      quantity: Math.max(1, Math.round(quantity || 1)),
+      quantity: pieceQuantity,
       unit: "pz",
     };
   }
@@ -505,14 +552,27 @@ type MealPlanRecipe = {
   difficulty: string;
   time: string;
   servings: number;
+  estimatedCalories?: number | null;
   description: string;
   ingredientsUsed: { name: string; quantity: number; unit: string }[];
   missingIngredients: MissingIngredient[];
   steps: string[];
 };
 
+type MealPlanFruitSupplement = {
+  name: string;
+  quantityPerPerson: number;
+  totalQuantity: number;
+  unit: string;
+  estimatedCalories: number;
+  pantryQuantity: number;
+  missingQuantity: number;
+};
+
 type MealPlanDay = {
   day: number;
+  estimatedDailyCalories?: number | null;
+  fruitSupplement?: MealPlanFruitSupplement;
   meals: {
     lunch?: MealPlanRecipe;
     dinner?: MealPlanRecipe;
@@ -898,7 +958,261 @@ function normalizeRecipeStepIngredientConsistency(
   };
 }
 
-function sanitizeRecipe(input: any, fallbackServings: number): MealPlanRecipe {
+function parseEstimatedCalories(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+type CalorieDensityRule = {
+  keywords: string[];
+  kcalPer100g?: number;
+  kcalPer100ml?: number;
+  kcalPerPiece?: number;
+  gramsPerPiece?: number;
+};
+
+const CALORIE_DENSITY_RULES: CalorieDensityRule[] = [
+  { keywords: ["olio d'oliva", "olio di oliva", "olio extravergine", "olio evo"], kcalPer100g: 884, kcalPer100ml: 810 },
+  { keywords: ["burro"], kcalPer100g: 717 },
+  { keywords: ["panna"], kcalPer100g: 340, kcalPer100ml: 340 },
+  { keywords: ["parmigiano", "grana"], kcalPer100g: 400 },
+  { keywords: ["pecorino"], kcalPer100g: 390 },
+  { keywords: ["mozzarella"], kcalPer100g: 250 },
+  { keywords: ["ricotta"], kcalPer100g: 175 },
+  { keywords: ["formaggio"], kcalPer100g: 330 },
+  { keywords: ["yogurt"], kcalPer100g: 65, kcalPer100ml: 65 },
+  { keywords: ["latte"], kcalPer100g: 46, kcalPer100ml: 46 },
+
+  { keywords: ["spaghetti", "penne", "fusilli", "rigatoni", "farfalle", "orecchiette", "tagliatelle", "fettuccine", "linguine", "bucatini", "paccheri", "tortiglioni", "mezze maniche", "pasta"], kcalPer100g: 350 },
+  { keywords: ["riso"], kcalPer100g: 360 },
+  { keywords: ["cous cous", "couscous"], kcalPer100g: 360 },
+  { keywords: ["quinoa"], kcalPer100g: 368 },
+  { keywords: ["farro"], kcalPer100g: 340 },
+  { keywords: ["orzo"], kcalPer100g: 350 },
+  { keywords: ["pane", "panino", "piadina"], kcalPer100g: 265 },
+
+  { keywords: ["pollo"], kcalPer100g: 165 },
+  { keywords: ["tacchino"], kcalPer100g: 135 },
+  { keywords: ["manzo", "vitello"], kcalPer100g: 200 },
+  { keywords: ["maiale"], kcalPer100g: 240 },
+  { keywords: ["salmone"], kcalPer100g: 208 },
+  { keywords: ["tonno"], kcalPer100g: 130 },
+  { keywords: ["sgombro"], kcalPer100g: 205 },
+  { keywords: ["orata", "branzino", "merluzzo", "nasello", "pesce"], kcalPer100g: 105 },
+  { keywords: ["uovo", "uova"], kcalPer100g: 143, kcalPerPiece: 75 },
+
+  { keywords: ["ceci"], kcalPer100g: 140 },
+  { keywords: ["lenticchie"], kcalPer100g: 115 },
+  { keywords: ["fagioli"], kcalPer100g: 125 },
+  { keywords: ["piselli"], kcalPer100g: 80 },
+  { keywords: ["tofu"], kcalPer100g: 120 },
+  { keywords: ["tempeh"], kcalPer100g: 195 },
+  { keywords: ["seitan"], kcalPer100g: 140 },
+
+  { keywords: ["patata"], kcalPer100g: 77 },
+  { keywords: ["pomodoro"], kcalPer100g: 18 },
+  { keywords: ["zucchina"], kcalPer100g: 17 },
+  { keywords: ["carota"], kcalPer100g: 41 },
+  { keywords: ["melanzana"], kcalPer100g: 25 },
+  { keywords: ["peperone"], kcalPer100g: 31 },
+  { keywords: ["broccoli", "broccolo"], kcalPer100g: 34 },
+  { keywords: ["spinaci"], kcalPer100g: 23 },
+  { keywords: ["asparagi"], kcalPer100g: 20 },
+  { keywords: ["insalata mista", "lattuga", "insalata"], kcalPer100g: 20 },
+  { keywords: ["cetriolo"], kcalPer100g: 15 },
+  { keywords: ["cipolla"], kcalPer100g: 40, gramsPerPiece: 100 },
+  { keywords: ["aglio"], kcalPer100g: 149, gramsPerPiece: 5 },
+
+  { keywords: ["limone"], kcalPer100g: 29, gramsPerPiece: 100 },
+  { keywords: ["lime"], kcalPer100g: 30, gramsPerPiece: 70 },
+  { keywords: ["avocado"], kcalPer100g: 160, gramsPerPiece: 150 },
+  { keywords: ["mela"], kcalPer100g: 52, gramsPerPiece: 180 },
+  { keywords: ["banana"], kcalPer100g: 89, gramsPerPiece: 120 },
+  { keywords: ["arancia"], kcalPer100g: 47, gramsPerPiece: 180 },
+  { keywords: ["pera"], kcalPer100g: 57, gramsPerPiece: 180 },
+  { keywords: ["pesca"], kcalPer100g: 39, gramsPerPiece: 150 },
+  { keywords: ["kiwi"], kcalPer100g: 61, gramsPerPiece: 80 },
+  { keywords: ["mandarino", "clementina"], kcalPer100g: 53, gramsPerPiece: 90 },
+  { keywords: ["fragola"], kcalPer100g: 32 },
+  { keywords: ["uva"], kcalPer100g: 69 },
+
+  { keywords: ["mandorle", "noci", "nocciole", "pistacchi", "semi"], kcalPer100g: 600 },
+  { keywords: ["pesto"], kcalPer100g: 450 },
+];
+
+function findCalorieDensityRule(name: string): CalorieDensityRule | null {
+  const normalized = normalizeIngredientName(
+    canonicalizeConcreteIngredientName(name)
+  );
+
+  for (const rule of CALORIE_DENSITY_RULES) {
+    if (
+      rule.keywords.some(
+        (keyword) =>
+          normalized === keyword ||
+          normalized.startsWith(`${keyword} `) ||
+          normalized.endsWith(` ${keyword}`) ||
+          normalized.includes(` ${keyword} `)
+      )
+    ) {
+      return rule;
+    }
+  }
+
+  return null;
+}
+
+function estimateIngredientCalories(
+  ingredient: { name: string; quantity: number; unit: string },
+  servings: number
+): number | null {
+  const name = canonicalizeConcreteIngredientName(ingredient.name);
+  const normalizedName = normalizeIngredientName(name);
+  const unit = normalizeUnit(ingredient.unit);
+  const quantity = Math.max(0, Number(ingredient.quantity) || 0);
+  const rule = findCalorieDensityRule(name);
+
+  if (unit === "qb" || unit === "q.b." || unit === "q.b") {
+    if (
+      normalizedName === "olio d'oliva" ||
+      normalizedName.includes("olio ")
+    ) {
+      // Per "Q.B." assumiamo circa 10 g di olio per persona:
+      // 10 g × 8,84 kcal/g ≈ 88 kcal/persona.
+      return 88 * Math.max(1, servings);
+    }
+
+    // Sale, pepe, erbe, spezie e aceto hanno impatto trascurabile
+    // rispetto alle altre fonti energetiche della ricetta.
+    if (isPantryBasicIngredient(name)) {
+      return 0;
+    }
+
+    return null;
+  }
+
+  if (!rule) return null;
+
+  if (unit === "pz") {
+    if (typeof rule.kcalPerPiece === "number") {
+      return quantity * rule.kcalPerPiece;
+    }
+
+    if (
+      typeof rule.gramsPerPiece === "number" &&
+      typeof rule.kcalPer100g === "number"
+    ) {
+      return quantity * rule.gramsPerPiece * (rule.kcalPer100g / 100);
+    }
+
+    return null;
+  }
+
+  if ((unit === "g" || unit === "kg") && typeof rule.kcalPer100g === "number") {
+    const grams = unit === "kg" ? quantity * 1000 : quantity;
+    return grams * (rule.kcalPer100g / 100);
+  }
+
+  if ((unit === "ml" || unit === "l") && typeof rule.kcalPer100ml === "number") {
+    const milliliters = unit === "l" ? quantity * 1000 : quantity;
+    return milliliters * (rule.kcalPer100ml / 100);
+  }
+
+  return null;
+}
+
+function roundCaloriesForDisplay(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(10, Math.round(value / 10) * 10);
+}
+
+function recalculateRecipeEstimatedCalories(
+  recipe: MealPlanRecipe
+): MealPlanRecipe {
+  const ingredients = [
+    ...recipe.ingredientsUsed,
+    ...recipe.missingIngredients,
+  ];
+
+  let totalKnownCalories = 0;
+  let consideredIngredients = 0;
+  let recognizedIngredients = 0;
+
+  for (const ingredient of ingredients) {
+    const normalizedUnit = normalizeUnit(ingredient.unit);
+    const normalizedName = normalizeIngredientName(
+      canonicalizeConcreteIngredientName(ingredient.name)
+    );
+
+    const isNegligibleQb =
+      (normalizedUnit === "qb" ||
+        normalizedUnit === "q.b." ||
+        normalizedUnit === "q.b") &&
+      !normalizedName.includes("olio");
+
+    // Sale, pepe, erbe e spezie Q.B. non devono abbassare artificialmente
+    // la copertura del calcolo.
+    if (!isNegligibleQb) {
+      consideredIngredients += 1;
+    }
+
+    const kcal = estimateIngredientCalories(
+      ingredient,
+      Math.max(1, recipe.servings)
+    );
+
+    if (typeof kcal === "number") {
+      totalKnownCalories += kcal;
+      if (!isNegligibleQb) {
+        recognizedIngredients += 1;
+      }
+    }
+  }
+
+  const coverage =
+    consideredIngredients > 0
+      ? recognizedIngredients / consideredIngredients
+      : 0;
+
+  const ingredientBasedEstimate =
+    coverage >= 0.75 && totalKnownCalories > 0
+      ? roundCaloriesForDisplay(
+          totalKnownCalories / Math.max(1, recipe.servings)
+        )
+      : null;
+
+  return {
+    ...recipe,
+    estimatedCalories:
+      ingredientBasedEstimate ??
+      parseEstimatedCalories(recipe.estimatedCalories),
+  };
+}
+
+function applyIngredientBasedCalorieEstimates(
+  plan: MealPlanDay[],
+  includeCalories: boolean
+): MealPlanDay[] {
+  if (!includeCalories) return plan;
+
+  return plan.map((day) => ({
+    ...day,
+    meals: {
+      lunch: day.meals.lunch
+        ? recalculateRecipeEstimatedCalories(day.meals.lunch)
+        : undefined,
+      dinner: day.meals.dinner
+        ? recalculateRecipeEstimatedCalories(day.meals.dinner)
+        : undefined,
+    },
+  }));
+}
+
+function sanitizeRecipe(
+  input: any,
+  fallbackServings: number,
+  includeCalories = false
+): MealPlanRecipe {
   const rawIngredientsUsed = Array.isArray(input?.ingredientsUsed) ? input.ingredientsUsed : [];
   const rawMissingIngredients = Array.isArray(input?.missingIngredients) ? input.missingIngredients : [];
   const rawSteps = Array.isArray(input?.steps) ? input.steps : [];
@@ -910,6 +1224,9 @@ function sanitizeRecipe(input: any, fallbackServings: number): MealPlanRecipe {
     difficulty: cleanText(input?.difficulty) ?? "Media",
     time: cleanText(input?.time) ?? "30 min",
     servings: Math.max(1, Math.round(toNumber(input?.servings, fallbackServings))),
+    estimatedCalories: includeCalories
+      ? parseEstimatedCalories(input?.estimatedCalories)
+      : undefined,
     description: normalizeCommonItalianRecipeText(
       cleanText(input?.description) ?? ""
     ),
@@ -940,7 +1257,14 @@ function sanitizeRecipe(input: any, fallbackServings: number): MealPlanRecipe {
   );
 }
 
-function sanitizePlan(rawPlan: any, people: number, days: number, includeLunch: boolean, includeDinner: boolean): MealPlanDay[] {
+function sanitizePlan(
+  rawPlan: any,
+  people: number,
+  days: number,
+  includeLunch: boolean,
+  includeDinner: boolean,
+  includeCalories = false
+): MealPlanDay[] {
   const rawDays = Array.isArray(rawPlan) ? rawPlan : [];
   const result: MealPlanDay[] = [];
 
@@ -954,17 +1278,341 @@ function sanitizePlan(rawPlan: any, people: number, days: number, includeLunch: 
     };
 
     if (includeLunch && sourceMeals?.lunch) {
-      dayEntry.meals.lunch = sanitizeRecipe(sourceMeals.lunch, people);
+      dayEntry.meals.lunch = sanitizeRecipe(
+        sourceMeals.lunch,
+        people,
+        includeCalories
+      );
     }
 
     if (includeDinner && sourceMeals?.dinner) {
-      dayEntry.meals.dinner = sanitizeRecipe(sourceMeals.dinner, people);
+      dayEntry.meals.dinner = sanitizeRecipe(
+        sourceMeals.dinner,
+        people,
+        includeCalories
+      );
     }
 
     result.push(dayEntry);
   }
 
   return result;
+}
+
+function applyEstimatedDailyCalories(
+  plan: MealPlanDay[],
+  includeCalories: boolean
+): MealPlanDay[] {
+  if (!includeCalories) return plan;
+
+  return plan.map((day) => {
+    const meals = [day.meals.lunch, day.meals.dinner].filter(
+      Boolean
+    ) as MealPlanRecipe[];
+
+    const validCalories = meals.map((meal) => meal.estimatedCalories);
+    const hasCompleteEstimate =
+      meals.length > 0 &&
+      validCalories.every(
+        (value) => typeof value === "number" && value > 0
+      );
+
+    const fruitCalories =
+      typeof day.fruitSupplement?.estimatedCalories === "number" &&
+      day.fruitSupplement.estimatedCalories > 0
+        ? day.fruitSupplement.estimatedCalories
+        : 0;
+
+    return {
+      ...day,
+      estimatedDailyCalories: hasCompleteEstimate
+        ? validCalories.reduce(
+            (total, value) => total + Number(value ?? 0),
+            fruitCalories
+          )
+        : null,
+    };
+  });
+}
+
+
+type FruitSupplementOption = {
+  name: string;
+  kcalPerPiece: number;
+};
+
+const FRUIT_SUPPLEMENT_OPTIONS: FruitSupplementOption[] = [
+  { name: "mandarino", kcalPerPiece: 48 },
+  { name: "kiwi", kcalPerPiece: 49 },
+  { name: "arancia", kcalPerPiece: 85 },
+  { name: "mela", kcalPerPiece: 94 },
+  { name: "pera", kcalPerPiece: 103 },
+  { name: "banana", kcalPerPiece: 107 },
+];
+
+function notesBlockFruitSupplement(
+  fruitName: string,
+  notes: string
+): boolean {
+  const normalizedNotes = normalizeIngredientName(notes);
+
+  const blocksAllFruit =
+    normalizedNotes.includes("senza frutta") ||
+    normalizedNotes.includes("niente frutta") ||
+    normalizedNotes.includes("no frutta") ||
+    normalizedNotes.includes("non mangio frutta");
+
+  if (blocksAllFruit) return true;
+
+  const normalizedFruit = normalizeIngredientName(fruitName);
+  return (
+    normalizedNotes.includes(`senza ${normalizedFruit}`) ||
+    normalizedNotes.includes(`niente ${normalizedFruit}`) ||
+    normalizedNotes.includes(`no ${normalizedFruit}`) ||
+    normalizedNotes.includes(`non mangio ${normalizedFruit}`)
+  );
+}
+
+function isFruitSupplementAllowed(
+  fruitName: string,
+  avoid: string[],
+  allergies: string[],
+  notes: string
+): boolean {
+  if (notesBlockFruitSupplement(fruitName, notes)) {
+    return false;
+  }
+
+  const blockers = [...avoid, ...allergies];
+
+  return !blockers.some((blocked) => {
+    const normalizedBlocked = normalizeIngredientName(String(blocked ?? ""));
+
+    if (
+      normalizedBlocked === "frutta" ||
+      normalizedBlocked === "frutta fresca"
+    ) {
+      return true;
+    }
+
+    return ingredientAliasesOverlap(fruitName, normalizedBlocked);
+  });
+}
+
+function chooseFruitSupplement(
+  deficitPerPerson: number,
+  avoid: string[],
+  allergies: string[],
+  notes: string,
+  excludedFruitNames: string[],
+  previousFruitName: string | null
+): FruitSupplementOption | null {
+  if (
+    !Number.isFinite(deficitPerPerson) ||
+    deficitPerPerson < 50 ||
+    deficitPerPerson > 200
+  ) {
+    return null;
+  }
+
+  const excluded = new Set(
+    excludedFruitNames.map((name) =>
+      normalizeIngredientName(canonicalizeConcreteIngredientName(name))
+    )
+  );
+
+  let best:
+    | {
+        option: FruitSupplementOption;
+        score: number;
+      }
+    | null = null;
+
+  for (const option of FRUIT_SUPPLEMENT_OPTIONS) {
+    if (!isFruitSupplementAllowed(option.name, avoid, allergies, notes)) {
+      continue;
+    }
+
+    if (excluded.has(normalizeIngredientName(option.name))) {
+      continue;
+    }
+
+    // Massimo una porzione / un frutto intero per persona al giorno.
+    const fruitCalories = option.kcalPerPiece;
+    const overshoot = Math.max(0, fruitCalories - deficitPerPerson);
+    const overshootPenalty = overshoot > 25 ? 1000 : overshoot * 2;
+    const repetitionPenalty =
+      previousFruitName === option.name ? 20 : 0;
+    const score =
+      Math.abs(deficitPerPerson - fruitCalories) +
+      overshootPenalty +
+      repetitionPenalty;
+
+    if (!best || score < best.score) {
+      best = {
+        option,
+        score,
+      };
+    }
+  }
+
+  return best?.option ?? null;
+}
+
+function buildRemainingPantryForFruitSupplements(
+  plan: MealPlanDay[],
+  availablePantryItems: AvailablePantryItem[]
+): PantryAvailabilityBucket[] {
+  const remaining = buildPantryAvailabilityMap(availablePantryItems);
+
+  for (const day of plan) {
+    const recipes = [day.meals.lunch, day.meals.dinner].filter(
+      Boolean
+    ) as MealPlanRecipe[];
+
+    for (const recipe of recipes) {
+      for (const ingredient of recipe.ingredientsUsed) {
+        if (isPantryBasicIngredient(ingredient.name)) {
+          continue;
+        }
+
+        const base = unitToBase(ingredient.quantity, ingredient.unit);
+        const aliases = buildIngredientAliases(ingredient.name);
+        const bucket = remaining.find(
+          (candidate) =>
+            candidate.baseUnit === base.unit &&
+            candidate.aliases.some((alias) => aliases.includes(alias))
+        );
+
+        if (!bucket) continue;
+
+        bucket.totalBaseQty = Math.max(
+          0,
+          Number((bucket.totalBaseQty - base.qty).toFixed(2))
+        );
+      }
+    }
+  }
+
+  return remaining;
+}
+
+function applyFruitCalorieSupplements(
+  plan: MealPlanDay[],
+  dailyCalorieTarget: number,
+  people: number,
+  avoid: string[],
+  allergies: string[],
+  notes: string,
+  availablePantryItems: AvailablePantryItem[]
+): { plan: MealPlanDay[]; applied: boolean } {
+  const clonedPlan: MealPlanDay[] = plan.map((day) => ({
+    ...day,
+    fruitSupplement: day.fruitSupplement
+      ? { ...day.fruitSupplement }
+      : undefined,
+    meals: {
+      lunch: day.meals.lunch,
+      dinner: day.meals.dinner,
+    },
+  }));
+
+  const remainingPantry = buildRemainingPantryForFruitSupplements(
+    clonedPlan,
+    availablePantryItems
+  );
+
+  let applied = false;
+  let previousFruitName: string | null = null;
+
+  for (const day of clonedPlan) {
+    const currentCalories = day.estimatedDailyCalories;
+
+    if (
+      typeof currentCalories !== "number" ||
+      currentCalories <= 0 ||
+      currentCalories >= dailyCalorieTarget
+    ) {
+      continue;
+    }
+
+    const deficitPerPerson = dailyCalorieTarget - currentCalories;
+
+    if (deficitPerPerson < 50 || deficitPerPerson > 200) {
+      continue;
+    }
+
+    const dayRecipes = [day.meals.lunch, day.meals.dinner].filter(
+      Boolean
+    ) as MealPlanRecipe[];
+
+    const existingFruitNames = dayRecipes
+      .flatMap((recipe) => [
+        ...recipe.ingredientsUsed,
+        ...recipe.missingIngredients,
+      ])
+      .map((ingredient) =>
+        normalizeIngredientName(
+          canonicalizeConcreteIngredientName(ingredient.name)
+        )
+      )
+      .filter((name) =>
+        FRUIT_SUPPLEMENT_OPTIONS.some(
+          (option) => normalizeIngredientName(option.name) === name
+        )
+      );
+
+    const option = chooseFruitSupplement(
+      deficitPerPerson,
+      avoid,
+      allergies,
+      notes,
+      existingFruitNames,
+      previousFruitName
+    );
+
+    if (!option) {
+      continue;
+    }
+
+    const totalQuantity = Math.max(1, people);
+    const fruitAliases = buildIngredientAliases(option.name);
+    const pantryBucket = remainingPantry.find(
+      (bucket) =>
+        bucket.baseUnit === "pz" &&
+        bucket.aliases.some((alias) => fruitAliases.includes(alias))
+    );
+
+    const pantryQuantity = pantryBucket
+      ? Math.min(totalQuantity, Math.max(0, pantryBucket.totalBaseQty))
+      : 0;
+    const missingQuantity = Math.max(0, totalQuantity - pantryQuantity);
+
+    if (pantryBucket && pantryQuantity > 0) {
+      pantryBucket.totalBaseQty = Math.max(
+        0,
+        Number((pantryBucket.totalBaseQty - pantryQuantity).toFixed(2))
+      );
+    }
+
+    day.fruitSupplement = {
+      name: option.name,
+      quantityPerPerson: 1,
+      totalQuantity,
+      unit: "pz",
+      estimatedCalories: option.kcalPerPiece,
+      pantryQuantity: Number(pantryQuantity.toFixed(2)),
+      missingQuantity: Number(missingQuantity.toFixed(2)),
+    };
+
+    previousFruitName = option.name;
+    applied = true;
+  }
+
+  return {
+    plan: clonedPlan,
+    applied,
+  };
 }
 
 function buildPantryAvailabilityMap(
@@ -1071,6 +1719,10 @@ function recalculateMissingIngredients(
   return plan.map((day) => {
     const clonedDay: MealPlanDay = {
       day: day.day,
+      estimatedDailyCalories: day.estimatedDailyCalories,
+      fruitSupplement: day.fruitSupplement
+        ? { ...day.fruitSupplement }
+        : undefined,
       meals: {},
     };
 
@@ -1225,6 +1877,39 @@ function aggregateShoppingList(plan: MealPlanDay[]): MissingIngredient[] {
         }
       }
     }
+
+    if (
+      day.fruitSupplement &&
+      day.fruitSupplement.missingQuantity > 0
+    ) {
+      const normalizedIngredient = normalizeShoppingAggregationIngredient({
+        name: day.fruitSupplement.name,
+        quantity: day.fruitSupplement.missingQuantity,
+        unit: day.fruitSupplement.unit,
+      });
+
+      const canonicalName = singularizeItalianFoodName(
+        canonicalizeConcreteIngredientName(normalizedIngredient.name)
+      );
+      const base = unitToBase(
+        normalizedIngredient.quantity,
+        normalizedIngredient.unit
+      );
+      const key = `${canonicalName}__${base.unit}`;
+      const existing = aggregated.get(key);
+
+      if (existing) {
+        existing.totalBaseQty = Number(
+          (existing.totalBaseQty + base.qty).toFixed(2)
+        );
+      } else {
+        aggregated.set(key, {
+          name: normalizedIngredient.name,
+          totalBaseQty: Number(base.qty.toFixed(2)),
+          baseUnit: base.unit,
+        });
+      }
+    }
   }
 
   return [...aggregated.values()]
@@ -1286,6 +1971,17 @@ function validateShoppingListAccounting(
 
     for (const recipe of recipes) {
       perRecipeMissing.push(...recipe.missingIngredients);
+    }
+
+    if (
+      day.fruitSupplement &&
+      day.fruitSupplement.missingQuantity > 0
+    ) {
+      perRecipeMissing.push({
+        name: day.fruitSupplement.name,
+        quantity: day.fruitSupplement.missingQuantity,
+        unit: day.fruitSupplement.unit,
+      });
     }
   }
 
@@ -1822,6 +2518,157 @@ function buildMealPlanOverview(plan: MealPlanDay[]) {
   }));
 }
 
+
+type CalorieRepairDayTarget = {
+  day: number;
+  currentDailyCalories: number;
+  targetDailyCalories: number;
+  desiredMealsCalories: number;
+  meals: {
+    meal: MealSlot;
+    currentCalories: number;
+    suggestedCalories: number;
+    currentRecipe: MealPlanRecipe;
+  }[];
+};
+
+function buildCalorieRepairDayTargets(
+  plan: MealPlanDay[],
+  dailyCalorieTarget: number
+): CalorieRepairDayTarget[] {
+  const desiredResidualForFruit = 100;
+  const desiredMealsCalories = Math.max(
+    0,
+    dailyCalorieTarget - desiredResidualForFruit
+  );
+
+  return plan
+    .map((day): CalorieRepairDayTarget | null => {
+      const currentDailyCalories =
+        typeof day.estimatedDailyCalories === "number"
+          ? day.estimatedDailyCalories
+          : 0;
+
+      const deficit = dailyCalorieTarget - currentDailyCalories;
+
+      // La frutta gestisce solo il deficit residuo <= 200 kcal/persona.
+      // Sopra questa soglia devono essere corretti i pasti reali.
+      if (deficit <= 200) {
+        return null;
+      }
+
+      const dayMeals = (
+        [
+          day.meals.lunch
+            ? { meal: "lunch" as MealSlot, recipe: day.meals.lunch }
+            : null,
+          day.meals.dinner
+            ? { meal: "dinner" as MealSlot, recipe: day.meals.dinner }
+            : null,
+        ].filter(Boolean) as {
+          meal: MealSlot;
+          recipe: MealPlanRecipe;
+        }[]
+      );
+
+      if (!dayMeals.length) {
+        return null;
+      }
+
+      const suggestedPerMeal = Math.round(
+        desiredMealsCalories / dayMeals.length
+      );
+
+      return {
+        day: day.day,
+        currentDailyCalories,
+        targetDailyCalories: dailyCalorieTarget,
+        desiredMealsCalories,
+        meals: dayMeals.map(({ meal, recipe }) => ({
+          meal,
+          currentCalories:
+            typeof recipe.estimatedCalories === "number"
+              ? recipe.estimatedCalories
+              : 0,
+          suggestedCalories: suggestedPerMeal,
+          currentRecipe: recipe,
+        })),
+      };
+    })
+    .filter(
+      (target): target is CalorieRepairDayTarget => target !== null
+    );
+}
+
+function buildCalorieRepairTargets(
+  dayTargets: CalorieRepairDayTarget[]
+): MealPlanRepairTarget[] {
+  return dayTargets.flatMap((dayTarget) =>
+    dayTarget.meals.map((mealTarget) => ({
+      day: dayTarget.day,
+      meal: mealTarget.meal,
+      currentRecipe: mealTarget.currentRecipe,
+      problems: [
+        `Il totale del giorno è circa ${dayTarget.currentDailyCalories} kcal/persona ` +
+          `rispetto all'obiettivo indicativo di ${dayTarget.targetDailyCalories} kcal/persona. ` +
+          `Rendi questo pasto più sostanzioso tramite ingredienti o quantità REALI, ` +
+          `senza gonfiare estimatedCalories.`,
+      ],
+      forbiddenIngredients: [],
+      forbiddenPastaFormats: [],
+    }))
+  );
+}
+
+function calorieRepairImprovesTargets(
+  beforePlan: MealPlanDay[],
+  afterPlan: MealPlanDay[],
+  dayTargets: CalorieRepairDayTarget[]
+): boolean {
+  return dayTargets.every((target) => {
+    const beforeDay = beforePlan.find((day) => day.day === target.day);
+    const afterDay = afterPlan.find((day) => day.day === target.day);
+
+    const beforeCalories =
+      typeof beforeDay?.estimatedDailyCalories === "number"
+        ? beforeDay.estimatedDailyCalories
+        : 0;
+    const afterCalories =
+      typeof afterDay?.estimatedDailyCalories === "number"
+        ? afterDay.estimatedDailyCalories
+        : 0;
+
+    if (afterCalories <= beforeCalories) {
+      return false;
+    }
+
+    const beforeDistance = Math.abs(
+      target.targetDailyCalories - beforeCalories
+    );
+    const afterDistance = Math.abs(
+      target.targetDailyCalories - afterCalories
+    );
+
+    if (afterDistance >= beforeDistance) {
+      return false;
+    }
+
+    const minimumAcceptableMealsCalories = Math.max(
+      0,
+      target.targetDailyCalories - 200
+    );
+
+    // Il repair è valido solo se porta i pasti dentro la fascia in cui
+    // l'eventuale frutta può completare il deficit residuo (max ~200 kcal/persona).
+    if (afterCalories < minimumAcceptableMealsCalories) {
+      return false;
+    }
+
+    // Evita repair che superano troppo il riferimento.
+    return afterCalories <= target.targetDailyCalories * 1.15;
+  });
+}
+
 function isUsableRepairRecipe(recipe: MealPlanRecipe): boolean {
   const totalIngredients =
     recipe.ingredientsUsed.length + recipe.missingIngredients.length;
@@ -1861,7 +2708,8 @@ function applyTargetedMealPlanRepairs(
   plan: MealPlanDay[],
   replacements: MealPlanRepairReplacement[],
   targets: MealPlanRepairTarget[],
-  people: number
+  people: number,
+  includeCalories = false
 ): { plan: MealPlanDay[]; applied: number; rejected: string[] } {
   const targetMap = new Map(
     targets.map((target) => [`${target.day}__${target.meal}`, target])
@@ -1908,7 +2756,11 @@ function applyTargetedMealPlanRepairs(
       continue;
     }
 
-    const repairedRecipe = sanitizeRecipe(replacement?.recipe, people);
+    const repairedRecipe = sanitizeRecipe(
+      replacement?.recipe,
+      people,
+      includeCalories
+    );
 
     if (!isUsableRepairRecipe(repairedRecipe)) {
       rejected.push(
@@ -2165,7 +3017,10 @@ function parseRepairReplacementsFromModelText(text: string): {
   };
 }
 
-function buildMealPlanRepairStructuredFormat(targetCount: number) {
+function buildMealPlanRepairStructuredFormat(
+  targetCount: number,
+  includeCalories = false
+) {
   const ingredientSchema = {
     type: "object",
     additionalProperties: false,
@@ -2180,41 +3035,50 @@ function buildMealPlanRepairStructuredFormat(targetCount: number) {
     required: ["name", "quantity", "unit"],
   };
 
+  const recipeProperties: Record<string, any> = {
+    title: { type: "string" },
+    difficulty: {
+      type: "string",
+      enum: ["Facile", "Media", "Difficile"],
+    },
+    time: { type: "string" },
+    servings: { type: "number" },
+    description: { type: "string" },
+    ingredientsUsed: {
+      type: "array",
+      items: ingredientSchema,
+    },
+    missingIngredients: {
+      type: "array",
+      items: ingredientSchema,
+    },
+    steps: {
+      type: "array",
+      items: { type: "string" },
+    },
+  };
+
+  const recipeRequired = [
+    "title",
+    "difficulty",
+    "time",
+    "servings",
+    "description",
+    "ingredientsUsed",
+    "missingIngredients",
+    "steps",
+  ];
+
+  if (includeCalories) {
+    recipeProperties.estimatedCalories = { type: "number" };
+    recipeRequired.push("estimatedCalories");
+  }
+
   const recipeSchema = {
     type: "object",
     additionalProperties: false,
-    properties: {
-      title: { type: "string" },
-      difficulty: {
-        type: "string",
-        enum: ["Facile", "Media", "Difficile"],
-      },
-      time: { type: "string" },
-      servings: { type: "number" },
-      description: { type: "string" },
-      ingredientsUsed: {
-        type: "array",
-        items: ingredientSchema,
-      },
-      missingIngredients: {
-        type: "array",
-        items: ingredientSchema,
-      },
-      steps: {
-        type: "array",
-        items: { type: "string" },
-      },
-    },
-    required: [
-      "title",
-      "difficulty",
-      "time",
-      "servings",
-      "description",
-      "ingredientsUsed",
-      "missingIngredients",
-      "steps",
-    ],
+    properties: recipeProperties,
+    required: recipeRequired,
   };
 
   return {
@@ -2274,6 +3138,19 @@ function buildPantryCoverage(plan: MealPlanDay[], availablePantryItems: Availabl
             usedPantryNames.add(originalName);
             break;
           }
+        }
+      }
+    }
+
+    if (
+      day.fruitSupplement &&
+      day.fruitSupplement.pantryQuantity > 0
+    ) {
+      for (const alias of buildIngredientAliases(day.fruitSupplement.name)) {
+        const originalName = pantryAliasMap.get(alias);
+        if (originalName) {
+          usedPantryNames.add(originalName);
+          break;
         }
       }
     }
@@ -2358,6 +3235,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const complexity = isValidComplexity(body.complexity) ? body.complexity : "mixed";
     const notes = cleanText(body.notes) ?? "";
+    const requestedDailyCalorieTarget =
+      body.dailyCalorieTarget == null || body.dailyCalorieTarget === ""
+        ? null
+        : Math.round(toNumber(body.dailyCalorieTarget, NaN));
+
+    if (
+      requestedDailyCalorieTarget !== null &&
+      (!Number.isFinite(requestedDailyCalorieTarget) ||
+        requestedDailyCalorieTarget < 1000 ||
+        requestedDailyCalorieTarget > 4000)
+    ) {
+      return res.status(400).json({
+        error: "INVALID_DAILY_CALORIE_TARGET",
+        message: "L'obiettivo calorie deve essere compreso tra 1000 e 4000 kcal.",
+      });
+    }
 
     const { data: profile, error: profileErr } = await supabase
       .from("user_profiles")
@@ -2388,7 +3281,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       !Number.isNaN(premiumUntil.getTime()) &&
       premiumUntil.getTime() > Date.now();
 
+    if (requestedDailyCalorieTarget !== null && !isPremiumActive) {
+      return res.status(403).json({
+        error: "PREMIUM_REQUIRED",
+        message: "L'obiettivo calorie giornaliere è disponibile solo con il piano Premium.",
+      });
+    }
+
+    const dailyCalorieTarget = isPremiumActive
+      ? requestedDailyCalorieTarget
+      : null;
+    const includeCalories = dailyCalorieTarget !== null;
+
     const mealsPerDay = Number(includeLunch) + Number(includeDinner);
+    const perMealCalorieReference =
+      includeCalories && dailyCalorieTarget !== null
+        ? Math.round(dailyCalorieTarget / Math.max(1, mealsPerDay))
+        : null;
     const estimatedMinBudget = estimateMinimumBudget(days, mealsPerDay, people, complexity);
     const budgetWarning =
       budget !== null && budget < estimatedMinBudget
@@ -2406,6 +3315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       budget,
       complexity,
       style,
+      dailyCalorieTarget,
       notes,
       diet,
       lactoseFree,
@@ -2571,6 +3481,35 @@ if (style === "antiwaste") {
 `;
 
 
+    const calorieInstructions = includeCalories
+      ? `
+CALORIE V2 - FUNZIONE PREMIUM:
+- Obiettivo calorie giornaliere indicativo: circa ${dailyCalorieTarget} kcal per persona.
+- Il valore è un riferimento organizzativo, non medico o nutrizionale.
+- Sono pianificati ${mealsPerDay} pasti al giorno: come riferimento pratico, ogni pasto può contribuire mediamente circa ${perMealCalorieReference} kcal/persona, senza obbligo di dividerle in modo identico.
+- PRIMA costruisci una ricetta con quantità realistiche; SOLO DOPO calcola estimatedCalories dagli ingredienti realmente elencati.
+- estimatedCalories deve indicare le kcal STIMATE PER PERSONA del singolo pasto.
+- NON scegliere estimatedCalories per far sembrare che il pasto raggiunga il target: il numero deve derivare dalla ricetta.
+- Il server esegue un controllo indipendente basato su ingredienti e quantità e può sostituire la stima del modello quando ha copertura sufficiente.
+- Riferimenti indicativi utili: pasta/riso secchi ~350-360 kcal/100 g; pane ~265 kcal/100 g; pollo ~165 kcal/100 g; salmone ~208 kcal/100 g; uovo ~75 kcal/pz; legumi cotti ~115-140 kcal/100 g; patate ~77 kcal/100 g; verdure comuni ~15-40 kcal/100 g; parmigiano/pecorino ~390-400 kcal/100 g; olio ~88 kcal per 10 g.
+- Per olio indicato Q.B. considera circa 10 g per persona ai fini della stima.
+- PRIMA dell'output, fai un controllo numerico approssimativo della giornata usando ingredienti e quantità.
+- I pasti principali devono fornire la parte sostanziale dell'obiettivo: prima dell'eventuale frutta, cerca di arrivare almeno a circa ${Math.max(0, Number(dailyCalorieTarget) - 200)} kcal/persona complessive quando è gastronomicamente ragionevole.
+- Se i pasti principali sono molto sotto questo livello, correggi LE QUANTITÀ REALI o completa il pasto con ingredienti coerenti come cereali, pane, patate, legumi o una quantità congrua della fonte proteica.
+- FRUTTA INTEGRATIVA: NON inserirla dentro ingredientsUsed, missingIngredients o steps soltanto per colmare il target calorico.
+- La frutta integrativa viene gestita separatamente dal server dopo il calcolo delle calorie reali dei pasti.
+- Il server può aggiungere al massimo 1 porzione / 1 frutto intero per persona al giorno SOLO quando resta un deficit residuo di circa 50-200 kcal/persona.
+- Se il deficit supera circa 200 kcal/persona, il server correggerà prima i pasti reali; la frutta non deve compensare giornate troppo leggere.
+- I pasti devono quindi restare completi e realistici anche senza contare sulla frutta.
+- La frutta può comparire dentro una ricetta solo se è un vero ingrediente gastronomico del piatto, non come semplice fine pasto.
+- Non aumentare soltanto estimatedCalories: per avvicinarti al target devono cambiare ingredienti o quantità reali.
+- Il totale giornaliero sarà calcolato dal server sommando i pasti pianificati.
+- Cerca di mantenere la giornata indicativamente entro circa l'85%-115% dell'obiettivo quando è gastronomicamente ragionevole, senza sacrificare varietà, qualità, dieta, allergie, anti-spreco o realismo.
+- Non forzare mai quantità innaturali soltanto per raggiungere un numero preciso.
+- EcoDispensa pianifica soltanto i pasti selezionati dall'utente: colazione, spuntini o altri pasti non inclusi restano fuori dal totale mostrato.
+`
+      : "";
+
     const prompt = `
 Agisci come un meal planner esperto di cucina sostenibile, anti-spreco e organizzazione dei pasti.
 
@@ -2585,6 +3524,8 @@ OBIETTIVO:
 - Il piano inizia il ${startDateIso} e termina il ${endDateIso}.
 - Prevedi ${includeLunch ? "pranzo" : ""}${includeLunch && includeDinner ? " e " : ""}${includeDinner ? "cena" : ""}.
 - Il piano è per ${people} persone.
+
+${calorieInstructions}
 
 PROCESSO DECISIONALE OBBLIGATORIO:
 1. Analizza prima le note dell'utente.
@@ -2814,6 +3755,9 @@ Prima di restituire il JSON verifica che:
 19. Ogni ingrediente citato nei passaggi sia coerente con ingredientsUsed + missingIngredients.
 20. La pasta fredda o l'insalata di pasta non usi formati lunghi salvo richiesta esplicita.
 21. Il piano sembri creato da un vero meal planner professionista.
+${includeCalories ? `22. Ogni pasto abbia estimatedCalories come stima intera positiva delle kcal per persona e sia coerente con ingredienti, quantità e porzioni.
+23. La somma giornaliera stimata dai pasti sia ragionevolmente vicina all'obiettivo indicativo usando quantità REALI, non numeri calorici gonfiati.
+24. Non inserire frutta fresca come semplice complemento calorico dentro ingredienti o passaggi delle ricette: l'eventuale integrazione viene gestita separatamente dal server.` : ""}
 
 Se uno di questi controlli fallisce, correggi il piano prima di generare il JSON.
 
@@ -2829,6 +3773,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
           "difficulty": "Facile|Media|Difficile",
           "time": "es. 30 min",
           "servings": ${people},
+          ${includeCalories ? '"estimatedCalories": 650,' : ""}
           "description": "...",
           "ingredientsUsed": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz|qb"}],
           "missingIngredients": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz|qb"}],
@@ -2839,6 +3784,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
           "difficulty": "Facile|Media|Difficile",
           "time": "es. 35 min",
           "servings": ${people},
+          ${includeCalories ? '"estimatedCalories": 650,' : ""}
           "description": "...",
           "ingredientsUsed": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz|qb"}],
           "missingIngredients": [{"name":"...", "quantity": 1, "unit":"g|kg|l|ml|pz|qb"}],
@@ -2896,6 +3842,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         return {
           warning: budgetWarning,
           estimatedMinBudget,
+          dailyCalorieTarget,
           startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,
@@ -2912,7 +3859,14 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
 
       try {
         const parsed = parseJsonObjectFromModelText(text);
-        const aiPlan = sanitizePlan(parsed?.plan, people, days, includeLunch, includeDinner);
+        const aiPlan = sanitizePlan(
+          parsed?.plan,
+          people,
+          days,
+          includeLunch,
+          includeDinner,
+          includeCalories
+        );
 
         let finalPlan = recalculateMissingIngredients(aiPlan, availableItems);
         let repairApplied = false;
@@ -2944,6 +3898,7 @@ CONTESTO:
 - Ingredienti da evitare: ${avoid.length ? avoid.join(", ") : "nessuno"}
 - Allergie: ${allergies.length ? allergies.join(", ") : "nessuna"}
 ${notes ? `- Note utente: ${notes}` : ""}
+${includeCalories ? `- Obiettivo calorie Premium: circa ${dailyCalorieTarget} kcal al giorno per persona.` : ""}
 
 PANORAMICA DEL PIANO DA PRESERVARE:
 ${JSON.stringify(buildMealPlanOverview(finalPlan), null, 2)}
@@ -2976,6 +3931,7 @@ REGOLE OBBLIGATORIE:
 - Mantieni il tipo di pasto coerente: un pranzo resta un pranzo appropriato, una cena resta una cena appropriata.
 - Evita di creare nuove ripetizioni rispetto alla panoramica del piano.
 - Rispetta dieta, allergie, ingredienti da evitare, note, stile e numero di persone.
+${includeCalories ? `- Mantieni anche la coerenza con l'obiettivo calorie Premium: costruisci prima ingredienti e quantità realistiche, poi calcola estimatedCalories PER PERSONA dalla ricetta; non inventare il numero per centrare artificialmente il target. Come riferimento medio per questo piano considera circa ${perMealCalorieReference} kcal/persona per pasto. Per olio Q.B. considera circa 10 g per persona. NON aggiungere frutta come semplice complemento calorico dentro la ricetta: l'eventuale frutta integrativa viene gestita separatamente dal server.` : ""}
 - Mantieni quantità realistiche.
 - Q.B. soltanto per condimenti, spezie ed erbe aromatiche.
 - La voce generica "erbe aromatiche" deve essere Q.B.; quando possibile preferisci un'erba specifica.
@@ -3007,6 +3963,7 @@ OUTPUT OBBLIGATORIO:
         "difficulty": "Facile|Media|Difficile",
         "time": "...",
         "servings": ${people},
+        ${includeCalories ? '"estimatedCalories": 650,' : ""}
         "description": "...",
         "ingredientsUsed": [],
         "missingIngredients": [
@@ -3031,7 +3988,10 @@ OUTPUT OBBLIGATORIO:
                 body: JSON.stringify({
                   model,
                   input: repairPrompt,
-                  text: buildMealPlanRepairStructuredFormat(repairTargets.length),
+                  text: buildMealPlanRepairStructuredFormat(
+                    repairTargets.length,
+                    includeCalories
+                  ),
                 }),
               }
             );
@@ -3063,7 +4023,8 @@ OUTPUT OBBLIGATORIO:
                   finalPlan,
                   rawReplacements,
                   repairTargets,
-                  people
+                  people,
+                  includeCalories
                 );
 
                 if (repairResult.rejected.length > 0) {
@@ -3158,6 +4119,245 @@ OUTPUT OBBLIGATORIO:
           };
         }
 
+        finalPlan = applyIngredientBasedCalorieEstimates(
+          finalPlan,
+          includeCalories
+        );
+        finalPlan = applyEstimatedDailyCalories(finalPlan, includeCalories);
+
+        if (
+          includeCalories &&
+          dailyCalorieTarget !== null
+        ) {
+          const calorieRepairDayTargets =
+            buildCalorieRepairDayTargets(
+              finalPlan,
+              dailyCalorieTarget
+            );
+
+          if (calorieRepairDayTargets.length > 0) {
+            const calorieRepairTargets =
+              buildCalorieRepairTargets(
+                calorieRepairDayTargets
+              );
+
+            const calorieRepairPrompt = `
+Agisci come revisore tecnico delle quantità di un piano pasti.
+
+NON devi cambiare i giorni non indicati.
+Per i pasti elencati devi correggere ingredienti e quantità REALI perché il totale calorico giornaliero è troppo basso.
+
+CONTESTO:
+- Persone: ${people}
+- Stile: ${style}
+- Complessità: ${complexity}
+- Dieta: ${diet}
+- Senza lattosio: ${lactoseFree ? "SI" : "NO"}
+- Ingredienti da evitare: ${avoid.length ? avoid.join(", ") : "nessuno"}
+- Allergie: ${allergies.length ? allergies.join(", ") : "nessuna"}
+${notes ? `- Note utente: ${notes}` : ""}
+- Obiettivo calorie indicativo: circa ${dailyCalorieTarget} kcal/persona al giorno.
+- La frutta integrativa viene gestita DOPO e può coprire soltanto un piccolo deficit residuo, massimo circa 200 kcal/persona.
+
+GIORNI DA CORREGGERE:
+${JSON.stringify(
+  calorieRepairDayTargets.map((target) => ({
+    day: target.day,
+    currentDailyCalories: target.currentDailyCalories,
+    targetDailyCalories: target.targetDailyCalories,
+    desiredMealsCalories: target.desiredMealsCalories,
+    meals: target.meals.map((meal) => ({
+      meal: meal.meal,
+      currentTitle: meal.currentRecipe.title,
+      currentCalories: meal.currentCalories,
+      suggestedCalories: meal.suggestedCalories,
+    })),
+  })),
+  null,
+  2
+)}
+
+PANORAMICA COMPLETA DEL PIANO DA PRESERVARE:
+${JSON.stringify(buildMealPlanOverview(finalPlan), null, 2)}
+
+DISPENSA ORIGINALE:
+${formatPantryItems(availableItems)}
+
+REGOLE OBBLIGATORIE:
+- Restituisci ESATTAMENTE ${calorieRepairTargets.length} sostituzioni: una per ogni pasto indicato nei giorni da correggere.
+- Mantieni lo stesso tipo e la stessa identità culinaria del pasto quando possibile: modifica soprattutto quantità e componenti coerenti, non stravolgere inutilmente il menu.
+- Il totale dei pasti del giorno dovrebbe arrivare indicativamente vicino a ${Math.max(
+              0,
+              dailyCalorieTarget - 100
+            )} kcal/persona, lasciando eventualmente un piccolo margine alla frutta.
+- SOGLIA MINIMA OBBLIGATORIA DEL REPAIR: dopo la correzione, i pasti del giorno devono raggiungere almeno circa ${Math.max(
+              0,
+              dailyCalorieTarget - 200
+            )} kcal/persona. Se restano sotto questa soglia, il repair è insufficiente.
+- Usa il valore suggestedCalories di ogni pasto come riferimento pratico, non come numero rigido.
+- Aumenta energia tramite quantità realistiche o componenti coerenti: cereali, pane, patate, legumi, fonte proteica, formaggio quando consentito, frutta secca in piccola quantità.
+- NON aggiungere frutta fresca come semplice fine pasto dentro la ricetta: l'eventuale frutta integrativa viene gestita separatamente dal server.
+- estimatedCalories deve essere calcolato dalla ricetta proposta; NON scrivere un numero più alto senza modificare ingredienti o quantità.
+- Per olio Q.B. considera circa 10 g/persona ai fini della stima.
+- Mantieni porzioni realistiche per ${people} persone.
+- Rispetta dieta, allergie, ingredienti da evitare, note e stile.
+- Evita di introdurre nuove ripetizioni evidenti rispetto alla panoramica.
+- Q.B. soltanto per condimenti, spezie ed erbe aromatiche.
+- Per rendere il ricalcolo della dispensa deterministico, imposta ingredientsUsed = [].
+- Inserisci in missingIngredients TUTTI gli ingredienti necessari alla ricetta, anche quelli che potrebbero essere già in dispensa. Il server ricalcolerà automaticamente cosa è disponibile e cosa manca.
+- Usa nomi ingredienti stabili.
+- Per pasta confezionata non indicare minuti fissi: usa i tempi indicati sulla confezione.
+- Ogni ingrediente citato nei passaggi deve comparire negli ingredienti.
+- Restituisci SOLO JSON valido e compatto, senza markdown o testo aggiuntivo.
+`.trim();
+
+            try {
+              const calorieRepairResponse = await fetch(
+                "https://api.openai.com/v1/responses",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model,
+                    input: calorieRepairPrompt,
+                    text: buildMealPlanRepairStructuredFormat(
+                      calorieRepairTargets.length,
+                      true
+                    ),
+                  }),
+                }
+              );
+
+              const calorieRepairData =
+                await calorieRepairResponse.json();
+
+              if (calorieRepairResponse.ok) {
+                const calorieRepairText =
+                  extractOpenAIOutputText(
+                    calorieRepairData
+                  );
+
+                if (calorieRepairText) {
+                  const parsedCalorieRepair =
+                    parseRepairReplacementsFromModelText(
+                      calorieRepairText
+                    );
+
+                  if (
+                    parsedCalorieRepair.parseErrors.length > 0
+                  ) {
+                    console.warn(
+                      "Meal-plan calorie repair JSON recovery details:",
+                      parsedCalorieRepair.parseErrors
+                    );
+                  }
+
+                  const calorieRepairResult =
+                    applyTargetedMealPlanRepairs(
+                      finalPlan,
+                      parsedCalorieRepair.replacements,
+                      calorieRepairTargets,
+                      people,
+                      true
+                    );
+
+                  if (
+                    calorieRepairResult.rejected.length > 0
+                  ) {
+                    console.warn(
+                      "Meal-plan calorie repair rejected replacements:",
+                      calorieRepairResult.rejected
+                    );
+                  }
+
+                  if (
+                    calorieRepairResult.applied ===
+                    calorieRepairTargets.length
+                  ) {
+                    let calorieCandidate =
+                      recalculateMissingIngredients(
+                        calorieRepairResult.plan,
+                        availableItems
+                      );
+
+                    const calorieCandidateQualityIssues =
+                      analyzeMealPlanQualityIssues(
+                        calorieCandidate,
+                        availableItems,
+                        strictAntiWasteRepurchaseNames
+                      );
+
+                    calorieCandidate =
+                      applyIngredientBasedCalorieEstimates(
+                        calorieCandidate,
+                        true
+                      );
+                    calorieCandidate =
+                      applyEstimatedDailyCalories(
+                        calorieCandidate,
+                        true
+                      );
+
+                    const calorieCandidateImproves =
+                      calorieRepairImprovesTargets(
+                        finalPlan,
+                        calorieCandidate,
+                        calorieRepairDayTargets
+                      );
+
+                    if (
+                      calorieCandidateQualityIssues.length === 0 &&
+                      calorieCandidateImproves
+                    ) {
+                      finalPlan = calorieCandidate;
+                    } else {
+                      console.warn(
+                        "Meal-plan calorie repair discarded:",
+                        {
+                          qualityIssues:
+                            calorieCandidateQualityIssues,
+                          improves:
+                            calorieCandidateImproves,
+                        }
+                      );
+                    }
+                  }
+                }
+              } else {
+                console.error(
+                  "OpenAI meal-plan calorie repair error:",
+                  calorieRepairData
+                );
+              }
+            } catch (calorieRepairError) {
+              console.error(
+                "Meal-plan calorie repair failed:",
+                calorieRepairError
+              );
+            }
+          }
+
+          const fruitCompletion = applyFruitCalorieSupplements(
+            finalPlan,
+            dailyCalorieTarget,
+            people,
+            avoid,
+            allergies,
+            notes,
+            availableItems
+          );
+
+          if (fruitCompletion.applied) {
+            finalPlan = applyEstimatedDailyCalories(
+              fruitCompletion.plan,
+              true
+            );
+          }
+        }
+
         const shoppingListPreview = aggregateShoppingList(finalPlan);
         const shoppingAccounting = validateShoppingListAccounting(
           finalPlan,
@@ -3190,6 +4390,7 @@ OUTPUT OBBLIGATORIO:
             meals: {
               lunch: includeLunch,
               dinner: includeDinner,
+              dailyCalorieTarget,
             },
             people,
             budget,
@@ -3214,6 +4415,7 @@ OUTPUT OBBLIGATORIO:
           id: savedPlan.id,
           warning: budgetWarning,
           estimatedMinBudget,
+          dailyCalorieTarget,
           startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,
@@ -3233,6 +4435,7 @@ OUTPUT OBBLIGATORIO:
         return {
           warning: budgetWarning,
           estimatedMinBudget,
+          dailyCalorieTarget,
           startDate: startDateParsed.display,
           startDateIso,
           endDate: endDateIso,

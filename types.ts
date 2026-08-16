@@ -66,6 +66,7 @@ export interface MealPlanRequest {
   budget: number | null;
     complexity: MealPlanComplexity;
   style?: MealPlanStyle;
+  dailyCalorieTarget?: number | null;
   notes?: string;
 }
 
@@ -80,14 +81,27 @@ export interface MealPlanRecipe {
   difficulty: string;
   time: string;
   servings: number;
+  estimatedCalories?: number | null;
   description: string;
   ingredientsUsed: IngredientUsage[];
   missingIngredients: MealPlanMissingIngredient[];
   steps: string[];
 }
 
+export interface MealPlanFruitSupplement {
+  name: string;
+  quantityPerPerson: number;
+  totalQuantity: number;
+  unit: string;
+  estimatedCalories: number;
+  pantryQuantity: number;
+  missingQuantity: number;
+}
+
 export interface MealPlanDay {
   day: number;
+  estimatedDailyCalories?: number | null;
+  fruitSupplement?: MealPlanFruitSupplement;
   meals: {
     lunch?: MealPlanRecipe;
     dinner?: MealPlanRecipe;
@@ -108,6 +122,7 @@ export interface MealPlanResponse {
   endDateIso?: string | null;
   warning: string | null;
   estimatedMinBudget: number;
+  dailyCalorieTarget?: number | null;
   plan: MealPlanDay[];
   shoppingListPreview: MealPlanShoppingItem[];
   pantryCoverage: {

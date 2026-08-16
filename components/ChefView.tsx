@@ -88,6 +88,34 @@ async function fetchCredits(): Promise<CreditsResponse> {
   return body as CreditsResponse;
 }
 
+async function fetchPremiumStatus(): Promise<boolean> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    throw new Error("SESSION_MISSING");
+  }
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("plan_type, premium_until")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const premiumUntil = data?.premium_until
+    ? new Date(String(data.premium_until))
+    : null;
+
+  return (
+    data?.plan_type === "premium" &&
+    premiumUntil !== null &&
+    !Number.isNaN(premiumUntil.getTime()) &&
+    premiumUntil.getTime() > Date.now()
+  );
+}
+
 async function postRecipes(payload: any): Promise<{ status: number; body: ApiRecipesResponse }> {
   const token = await getAccessToken();
   if (!token) throw new Error("SESSION_MISSING");
@@ -174,6 +202,10 @@ async function fetchActiveMealPlan(): Promise<MealPlanResponse | null> {
     endDateIso: body.plan.endDateIso ?? null,
     warning: body.plan.warning ?? null,
     estimatedMinBudget: Number(body.plan.estimatedMinBudget ?? 0),
+    dailyCalorieTarget:
+      body.plan.dailyCalorieTarget == null
+        ? null
+        : Number(body.plan.dailyCalorieTarget),
     plan: Array.isArray(body.plan.plan) ? body.plan.plan : [],
     shoppingListPreview: Array.isArray(body.plan.shoppingListPreview) ? body.plan.shoppingListPreview : [],
     pantryCoverage: body.plan.pantryCoverage ?? {
@@ -251,6 +283,8 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
+  const [isPremiumActive, setIsPremiumActive] = useState(false);
+  const [premiumStatusLoading, setPremiumStatusLoading] = useState(true);
 
   const [servings, setServings] = useState<number>(2);
   const [timeMinutes, setTimeMinutes] = useState<number>(25);
@@ -264,7 +298,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [shoppingListAdded, setShoppingListAdded] = useState(false);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
-  const noCredits = (ecoCredits ?? 0) <= 0;
+  const noCredits = !isPremiumActive && (ecoCredits ?? 0) <= 0;
 
   const { expiringItemsCount, expiredItemsCount } = useMemo(() => {
     let expiring = 0;
@@ -302,9 +336,29 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     }
   };
 
+  const refreshPremiumStatus = async () => {
+    try {
+      setPremiumStatusLoading(true);
+      const active = await fetchPremiumStatus();
+      setIsPremiumActive(active);
+    } catch (e: any) {
+      console.error("premium status load error:", e?.message ?? e);
+      setIsPremiumActive(false);
+    } finally {
+      setPremiumStatusLoading(false);
+    }
+  };
+
   useEffect(() => {
     refreshCredits();
+    refreshPremiumStatus();
   }, []);
+
+  useEffect(() => {
+    if (mode === "mealPlan") {
+      refreshPremiumStatus();
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "mealPlan") return;
@@ -713,6 +767,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
     ? {
         startDate: mealPlanResult.startDate ?? undefined,
         days: (mealPlanResult.plan?.length as 1 | 2 | 3 | 5 | 7 | undefined) ?? undefined,
+        dailyCalorieTarget: mealPlanResult.dailyCalorieTarget ?? undefined,
       }
     : undefined;
 
@@ -904,6 +959,8 @@ if (typeof recipesResp?.remainingCredits === "number") {
             onSubmit={handleGenerateMealPlan}
             loading={mealPlanLoading}
             initialValues={initialMealPlanValues}
+            isPremiumActive={isPremiumActive}
+            premiumStatusLoading={premiumStatusLoading}
           />
 
           {loadingSavedMealPlan && (

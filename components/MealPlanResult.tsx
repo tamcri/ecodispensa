@@ -70,6 +70,30 @@ function formatIngredient(item: { name: string; quantity: number; unit: string }
   return `${item.name} — ${item.quantity} ${item.unit}`;
 }
 
+function getDayEstimatedCalories(day: MealPlanResponse["plan"][number]): number | null {
+  if (typeof day.estimatedDailyCalories === "number" && day.estimatedDailyCalories > 0) {
+    return Math.round(day.estimatedDailyCalories);
+  }
+
+  const meals = [day.meals.lunch, day.meals.dinner].filter(Boolean);
+  if (meals.length === 0) return null;
+
+  const calories = meals.map((meal) => meal?.estimatedCalories);
+  if (calories.some((value) => typeof value !== "number" || value <= 0)) {
+    return null;
+  }
+
+  const fruitCalories =
+    typeof day.fruitSupplement?.estimatedCalories === "number" &&
+    day.fruitSupplement.estimatedCalories > 0
+      ? day.fruitSupplement.estimatedCalories
+      : 0;
+
+  return Math.round(
+    calories.reduce((total, value) => total + Number(value ?? 0), fruitCalories)
+  );
+}
+
 export const MealPlanResult = ({
   result,
   onAddMissingToShoppingList,
@@ -90,6 +114,17 @@ export const MealPlanResult = ({
       return total;
     }, 0);
   }, [result.plan]);
+
+  const hasCalorieEstimates = useMemo(
+    () =>
+      result.plan.some(
+        (day) =>
+          getDayEstimatedCalories(day) !== null ||
+          typeof day.meals.lunch?.estimatedCalories === "number" ||
+          typeof day.meals.dinner?.estimatedCalories === "number"
+      ),
+    [result.plan]
+  );
 
   const toggleDay = (dayNumber: number) => {
     setOpenDays((prev) => ({
@@ -137,11 +172,32 @@ export const MealPlanResult = ({
         <div className="text-2xl font-bold text-gray-800">{result.estimatedMinBudget} €</div>
       </div>
 
+      {hasCalorieEstimates && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-wide font-bold text-amber-700 mb-1">
+                Calorie V2 · Premium
+              </div>
+              <div className="text-sm text-amber-900">
+                {typeof result.dailyCalorieTarget === "number"
+                  ? `Obiettivo indicativo: ~${Math.round(result.dailyCalorieTarget)} kcal al giorno per persona.`
+                  : "Stima calorie per persona disponibile nel piano."}
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-amber-800/80 mt-2">
+            Stime indicative, non costituiscono indicazione medica o nutrizionale. Il totale giornaliero include i pasti pianificati e l'eventuale frutta integrativa.
+          </p>
+        </div>
+      )}
+
       {isPlanOpen && (
         <>
           <div className="space-y-4">
             {result.plan.map((day) => {
               const dayOpen = isDayOpen(day.day);
+              const dayCalories = getDayEstimatedCalories(day);
 
               return (
                 <div key={day.day} className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
@@ -153,9 +209,14 @@ export const MealPlanResult = ({
                     <div>
                       <h3 className="text-lg font-bold text-gray-800">Giorno {day.day}</h3>
                       <p className="text-sm text-gray-500 mt-1">
-                        {[day.meals.lunch ? "Pranzo" : null, day.meals.dinner ? "Cena" : null]
+                        {[
+                          day.meals.lunch ? "Pranzo" : null,
+                          day.meals.dinner ? "Cena" : null,
+                          day.fruitSupplement ? "Frutta" : null,
+                        ]
                           .filter(Boolean)
                           .join(" • ")}
+                        {dayCalories !== null ? ` • ~${dayCalories} kcal/persona` : ""}
                       </p>
                     </div>
 
@@ -178,6 +239,11 @@ export const MealPlanResult = ({
                             <div className="text-right text-xs text-gray-500">
                               <div>{day.meals.lunch.time}</div>
                               <div>{day.meals.lunch.difficulty}</div>
+                              {typeof day.meals.lunch.estimatedCalories === "number" && (
+                                <div className="mt-1 font-semibold text-amber-700">
+                                  ~{Math.round(day.meals.lunch.estimatedCalories)} kcal/persona
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -237,6 +303,11 @@ export const MealPlanResult = ({
                             <div className="text-right text-xs text-gray-500">
                               <div>{day.meals.dinner.time}</div>
                               <div>{day.meals.dinner.difficulty}</div>
+                              {typeof day.meals.dinner.estimatedCalories === "number" && (
+                                <div className="mt-1 font-semibold text-amber-700">
+                                  ~{Math.round(day.meals.dinner.estimatedCalories)} kcal/persona
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -281,6 +352,34 @@ export const MealPlanResult = ({
                               ))}
                             </ol>
                           </div>
+                        </div>
+                      )}
+
+                      {day.fruitSupplement && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-emerald-700 font-semibold mb-1">
+                                Frutta
+                              </div>
+                              <h4 className="font-semibold text-gray-800 capitalize">
+                                {day.fruitSupplement.name}
+                              </h4>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {day.fruitSupplement.quantityPerPerson} {day.fruitSupplement.unit}/persona
+                              </p>
+                            </div>
+
+                            <div className="text-right text-xs text-gray-500">
+                              <div className="font-semibold text-amber-700">
+                                ~{Math.round(day.fruitSupplement.estimatedCalories)} kcal/persona
+                              </div>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-emerald-800/80 mt-2">
+                            Complemento di frutta fresca previsto per la giornata.
+                          </p>
                         </div>
                       )}
                     </div>

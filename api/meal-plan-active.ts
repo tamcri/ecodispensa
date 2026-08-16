@@ -75,6 +75,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         notes: data.notes,
         warning: data.warning,
         estimatedMinBudget: data.estimated_min_budget,
+        dailyCalorieTarget:
+          data.meals && typeof data.meals === "object"
+            ? (data.meals as any).dailyCalorieTarget ?? null
+            : null,
         plan: data.plan_json,
         shoppingListPreview: data.shopping_list_json,
         pantryCoverage: data.pantry_coverage_json ?? {
