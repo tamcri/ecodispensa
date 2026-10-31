@@ -57,60 +57,72 @@ export default function AuthView() {
     }
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-      <div className="w-full max-w-sm bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-        <h1 className="text-xl font-bold mb-1">EcoDispensa</h1>
-        <p className="text-sm text-gray-500 mb-4">
-          {mode === "login" ? "Accedi" : "Crea un account"} con username e password
-        </p>
+  const inputClass =
+    "mt-1.5 h-12 w-full rounded-2xl bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500";
 
-        <form onSubmit={onSubmit} className="space-y-3">
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-between bg-ground px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(3.5rem,calc(env(safe-area-inset-top)+1.5rem))]">
+      <div className="flex flex-col gap-3">
+        <img src="/icons/icon-192.png" alt="" className="h-16 w-16 rounded-2xl" />
+        <h1 className="font-display text-[40px] font-extrabold leading-[1.02] tracking-tight text-ink">
+          Meno sprechi,
+          <br />
+          più idee in cucina.
+        </h1>
+        <p className="text-[15px] text-muted">
+          EcoDispensa ricorda cosa hai in casa, ti avvisa prima delle scadenze e ti suggerisce cosa cucinare.
+        </p>
+      </div>
+
+      <div className="mt-8 rounded-4xl bg-forest p-5 text-white">
+        <h2 className="mb-4 font-display text-2xl font-bold">{mode === "login" ? "Bentornato" : "Crea il tuo account"}</h2>
+
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <div>
-            <label className="text-sm text-gray-600">Username</label>
+            <label htmlFor="auth-username" className="text-xs font-bold text-[#BFE3CB]">Username</label>
             <input
+              id="auth-username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 w-full p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-emerald-200"
+              className={inputClass}
               placeholder="es. tammaro"
               autoCapitalize="none"
               autoCorrect="off"
+              autoComplete="username"
             />
           </div>
 
           <div>
-            <label className="text-sm text-gray-600">Password</label>
+            <label htmlFor="auth-password" className="text-xs font-bold text-[#BFE3CB]">Password</label>
             <input
+              id="auth-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-emerald-200"
+              className={inputClass}
               placeholder="min 6 caratteri"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
           </div>
 
-          {msg && (
-            <div className="text-sm p-3 rounded-xl bg-gray-50 border border-gray-100">
-              {msg}
-            </div>
-          )}
+          {msg && <div className="rounded-2xl bg-white/10 p-3 text-sm">{msg}</div>}
 
           <button
             type="submit"
             disabled={!canSubmit || loading}
-            className="w-full p-3 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-50"
+            className="mt-1 h-[52px] w-full rounded-2xl bg-lemon text-[15px] font-bold text-ink disabled:opacity-50"
           >
-            {loading ? "Attendi..." : mode === "login" ? "Accedi" : "Registrati"}
+            {loading ? "Attendi…" : mode === "login" ? "Accedi" : "Registrati"}
           </button>
         </form>
 
-        <div className="mt-4 text-sm text-gray-600">
+        <div className="mt-4 text-center text-sm text-[#BFE3CB]">
           {mode === "login" ? (
             <>
               Non hai un account?{" "}
               <button
                 type="button"
-                className="text-emerald-700 font-semibold"
+                className="font-bold text-white underline underline-offset-2"
                 onClick={() => {
                   setMsg(null);
                   setMode("signup");
@@ -124,7 +136,7 @@ export default function AuthView() {
               Hai già un account?{" "}
               <button
                 type="button"
-                className="text-emerald-700 font-semibold"
+                className="font-bold text-white underline underline-offset-2"
                 onClick={() => {
                   setMsg(null);
                   setMode("login");
@@ -139,4 +151,3 @@ export default function AuthView() {
     </div>
   );
 }
-

@@ -1,19 +1,23 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
-import { useState, useEffect } from "react";
-import { Refrigerator, ShoppingCart, ChefHat, User, BookOpen } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { RecipeBookView } from "./components/RecipeBookView";
+import { HomeView } from "./components/HomeView";
+import { fetchCredits } from "./services/api";
 
 const normalizeShoppingKey = (name: string, unit?: string | null) =>
   `${name.trim().toLowerCase()}__${(unit ?? "").trim().toLowerCase()}`;
 
 const App = () => {
-  const [view, setView] = useState<ViewState>("pantry");
+  const [view, setView] = useState<ViewState>("home");
+  const [credits, setCredits] = useState<number | null>(null);
+  const [openRecipeId, setOpenRecipeId] = useState<string | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [notificationPermission, setNotificationPermission] =
@@ -64,6 +68,14 @@ const App = () => {
     loadPantryFromSupabase();
   }, [session]);
 
+  // Crediti EcoChef mostrati nella schermata Oggi
+  useEffect(() => {
+    if (!session || view !== "home") return;
+    fetchCredits().then((c) => {
+      if (c !== null) setCredits(c);
+    });
+  }, [session, view]);
+
   const checkExpirationsAndNotify = () => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
@@ -92,7 +104,7 @@ const App = () => {
       try {
         new Notification("EcoDispensa - Anti Spreco ⚠️", {
           body: bodyText,
-          icon: "/favicon.ico",
+          icon: "/icons/icon-192.png",
           tag: "expiry-notification",
         });
         localStorage.setItem("eco-last-notification-date", todayStr);
@@ -491,35 +503,47 @@ const App = () => {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="text-sm text-gray-600">Caricamento…</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 bg-ground">
+        <img src="/icons/icon-192.png" alt="" className="h-16 w-16 rounded-2xl animate-pulse" />
+        <div className="text-sm font-semibold text-muted">Caricamento…</div>
       </div>
     );
   }
 
   if (!session) return <AuthView />;
 
+  const userInitial = (session?.user?.email ?? "?").trim().charAt(0).toUpperCase();
+
+  const navItems: Array<{ id: ViewState; label: string; icon: React.ReactNode }> = [
+    { id: "home", label: "Oggi", icon: <Home size={22} /> },
+    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={22} /> },
+    { id: "chef", label: "EcoChef", icon: <ChefHat size={26} /> },
+    { id: "shopping", label: "Spesa", icon: <ShoppingCart size={22} /> },
+    { id: "recipeBook", label: "Ricette", icon: <BookOpen size={22} /> },
+  ];
+
+  const goTo = (next: ViewState) => {
+    setView(next);
+    window.scrollTo({ top: 0 });
+  };
+
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col relative border-x border-gray-100">
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2 text-emerald-700">
-          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-            E
-          </div>
-          <h1 className="font-bold text-xl tracking-tight">EcoDispensa</h1>
-        </div>
-
-        <button
-          onClick={() => setProfileOpen(true)}
-          className="p-2 rounded-full text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-          title="Profilo"
-          type="button"
-        >
-          <User size={20} />
-        </button>
-      </header>
-
-      <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
+    <div className="relative mx-auto flex min-h-screen max-w-md flex-col bg-ground">
+      <main className="flex-1 px-5 pb-40 pt-[max(3.25rem,calc(env(safe-area-inset-top)+1.25rem))]">
+        {view === "home" && (
+          <HomeView
+            pantryItems={pantryItems}
+            shoppingItems={shoppingItems}
+            credits={credits}
+            userInitial={userInitial}
+            onOpenProfile={() => setProfileOpen(true)}
+            onNavigate={goTo}
+            onOpenRecipe={(id) => {
+              setOpenRecipeId(id);
+              goTo("recipeBook");
+            }}
+          />
+        )}
         {view === "pantry" && (
           <PantryView items={pantryItems} onAdd={addPantryItem} onUpdate={updatePantryItem} onRemove={removePantryItem} />
         )}
@@ -537,50 +561,58 @@ const App = () => {
             items={pantryItems}
             onCook={consumePantryItems}
             onAddShoppingItems={addShoppingItemsBulk}
+            onCreditsChange={setCredits}
           />
         )}
-        {view === "recipeBook" && <RecipeBookView />}
+        {view === "recipeBook" && (
+          <RecipeBookView
+            onCreditsChange={setCredits}
+            initialRecipeId={openRecipeId}
+            onInitialRecipeShown={() => setOpenRecipeId(null)}
+          />
+        )}
       </main>
 
-      <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 pb-safe">
-        <div className="flex justify-around items-center p-2">
-          <button
-            onClick={() => setView("pantry")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "pantry" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <Refrigerator size={24} strokeWidth={view === "pantry" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Dispensa</span>
-          </button>
-          <button
-            onClick={() => setView("shopping")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "shopping" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <ShoppingCart size={24} strokeWidth={view === "shopping" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Spesa</span>
-          </button>
-          <button
-            onClick={() => setView("chef")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "chef" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <ChefHat size={24} strokeWidth={view === "chef" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">EcoChef</span>
-          </button>
-          <button
-  onClick={() => setView("recipeBook")}
-  className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-    view === "recipeBook" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-  }`}
->
-  <BookOpen size={24} strokeWidth={view === "recipeBook" ? 2.5 : 2} />
-  <span className="text-[10px] font-medium">Ricettario</span>
-</button>
-        </div>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto h-36 max-w-md bg-gradient-to-b from-ground/0 via-ground/90 to-ground" />
+
+      <nav
+        aria-label="Navigazione principale"
+        className="fixed inset-x-0 z-40 mx-auto grid h-[68px] max-w-[calc(28rem-2rem)] grid-cols-5 items-center rounded-[34px] bg-ink shadow-[0_12px_32px_rgba(23,32,26,0.28)]"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 14px)", left: "1rem", right: "1rem" }}
+      >
+        {navItems.map((item) => {
+          const active = view === item.id;
+          if (item.id === "chef") {
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => goTo("chef")}
+                aria-label="EcoChef"
+                aria-current={active ? "page" : undefined}
+                className={`-mt-8 flex h-[62px] w-[62px] items-center justify-center justify-self-center rounded-full border-[5px] border-ground transition-transform active:scale-95 ${
+                  active ? "bg-emerald-600 text-white" : "bg-lemon text-ink"
+                }`}
+              >
+                {item.icon}
+              </button>
+            );
+          }
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goTo(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={`flex h-full flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+                active ? "font-bold text-lemon" : "font-semibold text-[#A9B3AC]"
+              }`}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
 
       <ProfileSheet

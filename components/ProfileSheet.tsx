@@ -529,9 +529,9 @@ const getPurchaseTitle = (purchase: Purchase) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
-      <div className="bg-white w-full max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col shadow-2xl">
-        <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10 sm:rounded-t-2xl rounded-t-2xl">
+    <div className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end justify-center animate-fade-in">
+      <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
+        <div className="sticky top-0 bg-ground px-5 pt-5 pb-3 flex justify-between items-center z-10 rounded-t-4xl">
           <div className="min-w-0 flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <User size={18} />

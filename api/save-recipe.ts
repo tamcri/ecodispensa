@@ -73,7 +73,7 @@ export default async function handler(
       });
     }
 
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from("recipes_saved")
       .insert({
         user_id: userId,
@@ -88,7 +88,9 @@ export default async function handler(
         steps: recipe.steps ?? [],
         recipe_json: recipe,
         image_url: imageUrl,
-      });
+      })
+      .select("id")
+      .single();
 
     if (error) {
       return res.status(500).json({
@@ -98,6 +100,7 @@ export default async function handler(
 
     return res.status(200).json({
       success: true,
+      id: inserted?.id ?? null,
     });
   } catch (e: any) {
     console.error("save recipe error:", e);

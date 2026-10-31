@@ -43,7 +43,7 @@ export interface Recipe {
   steps: string[];
 }
 
-export type ViewState = 'pantry' | 'shopping' | 'chef' | 'recipeBook';
+export type ViewState = 'home' | 'pantry' | 'shopping' | 'chef' | 'recipeBook';
 
 export type MealPlanComplexity = "easy" | "medium" | "hard" | "mixed";
 

@@ -1,247 +1,229 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Play, Trash2 } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
-import { BookOpen, Clock, ChefHat, CheckCircle2, ShoppingBag } from "lucide-react";
+import { fetchSavedRecipes, SavedRecipe } from "../services/api";
+import { ScreenHeader, Sheet, Spinner } from "./ui";
+import { RecipePhoto, tintFor } from "./RecipePhoto";
+import { RecipeContent } from "./ChefView";
+import { Recipe } from "../types";
 
-type SavedRecipe = {
-  id: string;
-  title: string;
-  difficulty: string | null;
-  time: string | null;
-  source: string;
-  created_at: string;
-  recipe_json: any;
-};
+type SourceFilter = "all" | "suggest" | "search" | "meal_plan";
 
-async function getAccessToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+const FILTERS: Array<[SourceFilter, string]> = [
+  ["all", "Tutte"],
+  ["suggest", "Dalla dispensa"],
+  ["search", "Cercate"],
+  ["meal_plan", "Dai menu"],
+];
+
+function toRecipe(r: SavedRecipe): Recipe {
+  const j = r.recipe_json ?? {};
+  return {
+    title: j.title ?? r.title,
+    difficulty: j.difficulty ?? r.difficulty ?? "",
+    time: j.time ?? r.time ?? "",
+    description: j.description ?? "",
+    ingredientsUsed: Array.isArray(j.ingredientsUsed) ? j.ingredientsUsed : [],
+    missingIngredients: Array.isArray(j.missingIngredients) ? j.missingIngredients : [],
+    steps: Array.isArray(j.steps) ? j.steps : [],
+  };
 }
 
-function formatSource(source: string) {
-  if (source === "search") return "Cerca Ricetta";
-  if (source === "suggest") return "Dispensa Anti-Spreco";
-  if (source === "meal_plan") return "Piano Pasti";
-  return source;
-}
+const meta = (r: SavedRecipe) => [r.time, r.difficulty].filter(Boolean).join(" · ");
 
-function formatDate(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("it-IT");
-}
-
-export function RecipeBookView() {
+export function RecipeBookView({
+  onCreditsChange,
+  initialRecipeId,
+  onInitialRecipeShown,
+}: {
+  onCreditsChange?: (credits: number) => void;
+  initialRecipeId?: string | null;
+  onInitialRecipeShown?: () => void;
+}) {
   const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<SavedRecipe | null>(null);
+  const [filter, setFilter] = useState<SourceFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
-    loadRecipes();
+    fetchSavedRecipes()
+      .then(setRecipes)
+      .catch((e) => console.error("load recipes error:", e))
+      .finally(() => setLoading(false));
   }, []);
 
-  const loadRecipes = async () => {
-    try {
-      setLoading(true);
-
-      const token = await getAccessToken();
-
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      const r = await fetch("/api/saved-recipes", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const body = await r.json();
-
-      if (!r.ok) {
-        throw new Error(body?.error ?? "LOAD_RECIPES_FAILED");
-      }
-
-      setRecipes(body.recipes ?? []);
-    } catch (e) {
-      console.error("load recipes error:", e);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!loading && initialRecipeId) {
+      setSelectedId(initialRecipeId);
+      onInitialRecipeShown?.();
     }
+  }, [loading, initialRecipeId]);
+
+  const visible = useMemo(
+    () => (filter === "all" ? recipes : recipes.filter((r) => r.source === filter)),
+    [recipes, filter]
+  );
+
+  const selected = recipes.find((r) => r.id === selectedId) ?? null;
+
+  const setImage = (id: string, url: string) =>
+    setRecipes((prev) => prev.map((r) => (r.id === id ? { ...r, image_url: url } : r)));
+
+  const closeDetail = () => {
+    setSelectedId(null);
+    setConfirmDelete(false);
   };
 
-  if (loading) {
-    return (
-      <div className="bg-white rounded-2xl p-6 text-center">
-        <p className="text-gray-500">Caricamento ricettario...</p>
-      </div>
-    );
-  }
+  const deleteSelected = async () => {
+    if (!selected) return;
+    const id = selected.id;
+    const { error } = await supabase.from("recipes_saved").delete().eq("id", id);
+    if (error) {
+      console.error("delete recipe error:", error);
+      alert("Non sono riuscito a eliminare la ricetta.");
+      return;
+    }
+    setRecipes((prev) => prev.filter((r) => r.id !== id));
+    closeDetail();
+  };
 
-  if (!selected) {
-    return (
-      <div className="space-y-4">
-        <div className="bg-white rounded-2xl p-5">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <BookOpen size={20} />
-            Ricettario
-          </h2>
-
-          <p className="text-sm text-gray-500 mt-1">
-            Le tue ricette salvate automaticamente.
-          </p>
-        </div>
-
-        {recipes.length === 0 && (
-          <div className="bg-white rounded-2xl p-8 text-center">
-            <p className="text-gray-500">Nessuna ricetta salvata.</p>
-          </div>
-        )}
-
-        {recipes.map((recipe) => (
-          <button
-            key={recipe.id}
-            onClick={() => setSelected(recipe)}
-            className="w-full bg-white rounded-2xl p-5 text-left border border-gray-100 hover:border-emerald-300 transition-colors"
-            type="button"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="font-bold text-lg text-gray-900">{recipe.title}</h3>
-
-                <p className="text-xs text-gray-400 mt-1">
-                  {formatSource(recipe.source)} • {formatDate(recipe.created_at)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4 text-sm text-gray-500 mt-3">
-              <span className="flex items-center gap-1">
-                <Clock size={14} />
-                {recipe.time ?? "-"}
-              </span>
-
-              <span className="flex items-center gap-1">
-                <ChefHat size={14} />
-                {recipe.difficulty ?? "-"}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  const recipe = selected.recipe_json;
-  const ingredientsUsed = Array.isArray(recipe?.ingredientsUsed) ? recipe.ingredientsUsed : [];
-  const missingIngredients = Array.isArray(recipe?.missingIngredients) ? recipe.missingIngredients : [];
-  const steps = Array.isArray(recipe?.steps) ? recipe.steps : [];
+  const [hero, ...rest] = visible;
 
   return (
-    <div className="space-y-4">
-      <button
-        onClick={() => setSelected(null)}
-        className="text-emerald-600 font-medium"
-        type="button"
-      >
-        ← Torna al Ricettario
-      </button>
+    <div className="flex flex-col gap-4">
+      <ScreenHeader
+        title="Ricettario"
+        subtitle={loading ? " " : recipes.length === 1 ? "1 ricetta salvata" : `${recipes.length} ricette salvate`}
+      />
 
-      <div className="bg-white rounded-2xl p-6 space-y-6">
-        <div>
-          <p className="text-xs text-gray-400 mb-2">
-            {formatSource(selected.source)} • {formatDate(selected.created_at)}
-          </p>
-
-          <h2 className="text-2xl font-bold mb-3 text-gray-900">
-            {recipe.title}
-          </h2>
-
-          <div className="flex flex-wrap gap-2 text-sm text-gray-500 mb-4">
-            <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-              <Clock size={14} />
-              {recipe.time ?? selected.time ?? "-"}
-            </span>
-
-            <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-              <ChefHat size={14} />
-              {recipe.difficulty ?? selected.difficulty ?? "-"}
-            </span>
-          </div>
-
-          {recipe.description && (
-            <p className="text-gray-600 leading-relaxed">
-              {recipe.description}
-            </p>
-          )}
+      {recipes.length > 0 && (
+        <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar">
+          {FILTERS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFilter(id)}
+              className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${
+                filter === id ? "bg-ink text-white" : "bg-white text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+      )}
 
-        <div>
-          <h3 className="font-bold mb-3 flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600" />
-            Ingredienti disponibili usati
-          </h3>
-
-          {ingredientsUsed.length > 0 ? (
-            <ul className="space-y-2 text-sm text-gray-700">
-              {ingredientsUsed.map((item: any, idx: number) => (
-                <li key={`${item?.name ?? "ingredient"}-${idx}`}>
-                  • {item?.quantity != null ? `${item.quantity} ` : ""}
-                  {item?.unit ? `${item.unit} ` : ""}
-                  {item?.name ?? String(item)}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-gray-500">
-              Nessun ingrediente disponibile usato dalla dispensa.
-            </p>
-          )}
+      {loading ? (
+        <Spinner label="Apro il ricettario…" />
+      ) : recipes.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-4xl bg-white px-6 py-10 text-center">
+          <p className="font-display text-xl font-bold text-ink">Ancora nessuna ricetta</p>
+          <p className="text-sm text-muted">Le ricette che EcoChef ti propone vengono salvate qui in automatico.</p>
         </div>
-
-        <div>
-          <h3 className="font-bold mb-3 flex items-center gap-2">
-            <ShoppingBag size={16} className="text-orange-500" />
-            Da comprare
-          </h3>
-
-          {missingIngredients.length > 0 ? (
-            <ul className="space-y-2 text-sm text-gray-700">
-              {missingIngredients.map((item: any, idx: number) => (
-                <li key={`${String(item)}-${idx}`}>• {String(item)}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-gray-500">
-              Hai già tutto il necessario.
-            </p>
+      ) : visible.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted">Nessuna ricetta in questo gruppo.</p>
+      ) : (
+        <>
+          {hero && (
+            <button
+              type="button"
+              onClick={() => setSelectedId(hero.id)}
+              className="flex flex-col gap-2.5 rounded-4xl bg-forest p-2.5 pb-5 text-left text-white"
+            >
+              {hero.image_url ? (
+                <img src={hero.image_url} alt="" className="h-40 w-full rounded-3xl object-cover" />
+              ) : (
+                <span className={`flex h-32 items-end rounded-3xl px-4 pb-2 font-display text-6xl font-extrabold text-ink/20 ${tintFor(hero.title)}`}>
+                  {(hero.title.trim()[0] ?? "?").toUpperCase()}
+                </span>
+              )}
+              <span className="flex flex-col gap-2 px-2.5">
+                <span className="self-start rounded-full bg-lemon px-2.5 py-1 text-xs font-bold text-ink">Ultima salvata</span>
+                <span className="font-display text-[26px] font-extrabold leading-[1.1]">{hero.title}</span>
+                <span className="text-[13px] text-[#BFE3CB]">{meta(hero)}</span>
+                <span className="mt-1 inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-white px-4 text-sm font-bold text-ink">
+                  <Play size={16} fill="currentColor" /> Apri la ricetta
+                </span>
+              </span>
+            </button>
           )}
-        </div>
 
-        <div>
-          <h3 className="font-bold mb-3">Preparazione guidata</h3>
-
-          {steps.length > 0 ? (
-            <ol className="space-y-4">
-              {steps.map((step: string, idx: number) => (
-                <li key={idx} className="flex gap-3">
-                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
-                    {idx + 1}
+          <div className="grid grid-cols-2 gap-3">
+            {rest.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setSelectedId(r.id)}
+                className="flex flex-col overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.98]"
+              >
+                {r.image_url ? (
+                  <img src={r.image_url} alt="" className="h-24 w-full object-cover" loading="lazy" />
+                ) : (
+                  <span className={`flex h-24 items-end px-3 pb-1.5 font-display text-[44px] font-extrabold leading-none text-ink/20 ${tintFor(r.title)}`}>
+                    {(r.title.trim()[0] ?? "?").toUpperCase()}
                   </span>
+                )}
+                <span className="flex flex-col gap-1.5 p-3">
+                  <span className="line-clamp-2 text-[15px] font-bold leading-tight text-ink">{r.title}</span>
+                  <span className="text-xs text-muted">{meta(r)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
-                  <p className="text-gray-700 leading-relaxed">
-                    {step}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-gray-500">
-              Preparazione dettagliata non disponibile.
-            </p>
-          )}
-        </div>
-      </div>
+      <Sheet
+        open={!!selected}
+        onClose={closeDetail}
+        title={null}
+        footer={
+          selected ? (
+            confirmDelete ? (
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="h-[52px] flex-1 rounded-2xl bg-white text-[15px] font-bold text-ink"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteSelected}
+                  className="h-[52px] flex-1 rounded-2xl bg-[#C23A4E] text-[15px] font-bold text-white"
+                >
+                  Elimina ricetta
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#FBE0E3] text-[15px] font-bold text-[#9B2335]"
+              >
+                <Trash2 size={18} /> Elimina dal ricettario
+              </button>
+            )
+          ) : null
+        }
+      >
+        {selected && (
+          <div className="flex flex-col gap-5">
+            <RecipePhoto
+              recipeId={selected.id}
+              imageUrl={selected.image_url}
+              title={selected.title}
+              onChange={(url) => setImage(selected.id, url)}
+              onCreditsChange={onCreditsChange}
+              className="h-56"
+            />
+            <h2 className="font-display text-[26px] font-extrabold leading-tight text-ink">{selected.title}</h2>
+            <RecipeContent recipe={toRecipe(selected)} />
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

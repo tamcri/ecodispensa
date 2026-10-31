@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1L9--2lMn9I75ZRRuNXkBBc
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in [.env.local](.env.local). Server functions in `api/` also need `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `OPENAI_API_KEY`
 3. Run the app:
    `npm run dev`
 
@@ -34,3 +34,11 @@ File coinvolti:
 
 Il service worker è attivo solo nella build di produzione (`npm run build && npm run preview`), non con `npm run dev`.
 Se modifichi le regole di cache in `sw.js`, incrementa `VERSION` in cima al file.
+
+## Foto dei piatti e riconoscimento prodotti
+
+- `api/identify-item.ts`: riconosce un prodotto da una foto (fotocamera in Dispensa e Spesa) usando OpenAI sul server. La chiave non arriva mai nel browser.
+- `api/recipe-image.ts`: crea con l'AI la foto di una ricetta salvata. Conta come una generazione di ricetta (gratis per i premium) e viene rimborsata se fallisce.
+- In alternativa l'utente può scattare la foto del proprio piatto: viene caricata nel bucket Supabase `recipe-images`, nella cartella dell'utente.
+
+Variabili opzionali sul server: `OPENAI_IMAGE_MODEL` (default `gpt-image-1-mini`), `OPENAI_IMAGE_QUALITY` (default `medium`), `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o `gpt-4o-mini`).

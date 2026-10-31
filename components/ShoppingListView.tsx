@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ShoppingItem, Category, PantryItem } from '../types';
-import { CATEGORY_COLORS } from '../constants';
-import { Plus, Check, Trash, ArrowRight, Camera, X, Loader2 } from 'lucide-react';
-import { identifyItemFromImage } from '../services/geminiService';
+import { getCategoryTheme } from '../constants';
+import { Camera, Check, Plus, Refrigerator, Trash2 } from 'lucide-react';
+import { identifyItemFromImage } from '../services/api';
+import { AnalyzingOverlay, CameraCapture, ScreenHeader, Sheet } from './ui';
 
 interface ShoppingListViewProps {
   items: ShoppingItem[];
@@ -12,347 +13,309 @@ interface ShoppingListViewProps {
   onMoveToPantry: (itemsToAdd: Omit<PantryItem, 'id' | 'addedAt'>[], shoppingIdsToRemove: string[]) => void;
 }
 
+type MoveRow = {
+  originalId: string;
+  name: string;
+  category: Category;
+  quantity: number;
+  unit: string;
+  expiryDate: string;
+};
+
+const fieldClass =
+  'h-11 w-full rounded-xl border-0 bg-white px-3 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
+
 export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   items,
   onAdd,
   onToggle,
   onClearCompleted,
-  onMoveToPantry
+  onMoveToPantry,
 }) => {
   const [itemName, setItemName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.FRUIT_VEG);
 
-  // Camera State
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Move Modal State
-  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-  const [itemsToMoveData, setItemsToMoveData] = useState<{
-    originalId: string;
-    name: string;
-    category: Category;
-    quantity: number;
-    unit: string;
-    expiryDate: string;
-  }[]>([]);
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [moveRows, setMoveRows] = useState<MoveRow[]>([]);
 
   const formatQuantity = (quantity?: number | null, unit?: string | null) => {
-    if (quantity == null || !unit) return null;
+    if (!unit) return null;
+    if (quantity == null) return unit;
     return `${quantity} ${unit}`;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (itemName.trim()) {
-      onAdd(itemName.trim(), selectedCategory);
-      setItemName('');
-    }
+    if (!itemName.trim()) return;
+    onAdd(itemName.trim(), selectedCategory);
+    setItemName('');
   };
 
-  // --- Camera Logic (Duplicated from PantryView for independence) ---
-  const startCamera = async () => {
-    setShowCamera(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error("Errore fotocamera:", err);
-      alert("Impossibile accedere alla fotocamera.");
-      setShowCamera(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-    }
+  const handleCapture = async (dataUrl: string) => {
     setShowCamera(false);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext('2d');
-    if (context) {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-      stopCamera();
-      setIsAnalyzing(true);
-      try {
-        const result = await identifyItemFromImage(base64Image);
-        if (result && result.name) {
-          setItemName(result.name);
-          if (result.category) setSelectedCategory(result.category);
-        } else {
-          alert("Non sono riuscito a riconoscere il prodotto.");
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsAnalyzing(false);
+    setIsAnalyzing(true);
+    try {
+      const result = await identifyItemFromImage(dataUrl);
+      if (result?.name) {
+        setItemName(result.name);
+        if (result.category) setSelectedCategory(result.category as Category);
+      } else {
+        alert('Non sono riuscito a riconoscere il prodotto. Scrivilo a mano.');
       }
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
-  // --- Move to Pantry Logic ---
-  const handleInitiateMove = () => {
-    const completedItems = items.filter(i => i.isChecked);
+  const completedItems = items.filter((i) => i.isChecked);
+  const activeItems = items.filter((i) => !i.isChecked);
+  const pct = items.length ? Math.round((completedItems.length / items.length) * 100) : 0;
+
+  const groups = useMemo(() => {
+    const map = new Map<string, ShoppingItem[]>();
+    for (const item of activeItems) {
+      const key = item.category || Category.OTHER;
+      map.set(key, [...(map.get(key) ?? []), item]);
+    }
+    const order = Object.values(Category) as string[];
+    return [...map.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+  }, [activeItems]);
+
+  const openMove = () => {
     if (completedItems.length === 0) return;
-
-    // Prepare initial data for the modal
-    const initialData = completedItems.map(item => ({
-      originalId: item.id,
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity != null ? item.quantity : 1,
-      unit: item.unit || 'pz',
-      expiryDate: ''
-    }));
-
-    setItemsToMoveData(initialData);
-    setIsMoveModalOpen(true);
+    setMoveRows(
+      completedItems.map((item) => ({
+        originalId: item.id,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity != null ? item.quantity : 1,
+        unit: item.unit && ['pz', 'kg', 'g', 'l'].includes(item.unit) ? item.unit : 'pz',
+        expiryDate: '',
+      }))
+    );
+    setIsMoveOpen(true);
   };
 
-  const updateMoveItemData = (index: number, field: string, value: any) => {
-    const newData = [...itemsToMoveData];
-    newData[index] = { ...newData[index], [field]: value };
-    setItemsToMoveData(newData);
+  const updateRow = (index: number, field: keyof MoveRow, value: any) => {
+    setMoveRows((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
   };
 
   const confirmMove = () => {
-    const itemsToAdd = itemsToMoveData.map(d => ({
-      name: d.name,
-      category: d.category,
-      quantity: d.quantity,
-      unit: d.unit,
-      expiryDate: d.expiryDate || undefined
-    }));
-    const idsToRemove = itemsToMoveData.map(d => d.originalId);
-
-    onMoveToPantry(itemsToAdd, idsToRemove);
-    setIsMoveModalOpen(false);
+    onMoveToPantry(
+      moveRows.map((d) => ({
+        name: d.name,
+        category: d.category,
+        quantity: d.quantity,
+        unit: d.unit,
+        expiryDate: d.expiryDate || undefined,
+      })),
+      moveRows.map((d) => d.originalId)
+    );
+    setIsMoveOpen(false);
   };
 
-  const completedItems = items.filter(i => i.isChecked);
-  const activeItems = items.filter(i => !i.isChecked);
-
   return (
-    <div className="space-y-6 pb-24">
-      <h2 className="text-2xl font-bold text-gray-800">Lista della Spesa</h2>
+    <div className="flex flex-col gap-4">
+      <ScreenHeader title="Spesa" />
 
-      <div className="flex flex-col sm:flex-row gap-2">
-        <form
-          onSubmit={handleSubmit}
-          className="flex-1 flex gap-2 items-center bg-white p-2 rounded-xl border border-gray-100 min-w-0"
-        >
+      {items.length > 0 && (
+        <section className="flex flex-col gap-2.5 rounded-3xl bg-tangerine px-[18px] py-4 text-ink">
+          <div className="flex items-baseline justify-between">
+            <span className="font-display text-[22px] font-extrabold">
+              {completedItems.length} di {items.length} nel carrello
+            </span>
+            <span className="text-[13px] font-bold">{pct}%</span>
+          </div>
+          <span className="block h-2.5 overflow-hidden rounded-full bg-ink/20">
+            <span className="block h-2.5 rounded-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
+          </span>
+        </section>
+      )}
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
+        <div className="flex gap-2">
           <input
             type="text"
             value={itemName}
             onChange={(e) => setItemName(e.target.value)}
-            placeholder="Aggiungi prodotto..."
-            className="flex-1 p-2 outline-none bg-transparent min-w-0"
+            placeholder="Aggiungi prodotto…"
+            aria-label="Aggiungi prodotto"
+            className="h-[50px] min-w-0 flex-1 rounded-2xl bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500"
           />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value as Category)}
-            className="text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 max-w-[80px] sm:max-w-[100px]"
+          <button
+            type="button"
+            onClick={() => setShowCamera(true)}
+            aria-label="Fotografa il prodotto per aggiungerlo"
+            className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-white text-ink"
           >
-            {Object.values(Category).map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+            <Camera size={22} />
+          </button>
           <button
             type="submit"
-            className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            aria-label="Aggiungi"
             disabled={!itemName.trim()}
+            className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"
           >
-            <Plus size={20} />
+            <Plus size={22} strokeWidth={2.4} />
           </button>
-        </form>
-
-        <button
-          onClick={startCamera}
-          className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center w-full sm:w-auto flex-shrink-0"
-          title="Scansiona per aggiungere alla lista"
-        >
-          <Camera size={25} />
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {activeItems.map((item) => {
-          const quantityLabel = formatQuantity(item.quantity, item.unit);
-
-          return (
-            <div
-              key={item.id}
-              onClick={() => onToggle(item.id)}
-              className="group flex items-center p-3 bg-white rounded-lg border border-gray-100 cursor-pointer hover:border-emerald-200 transition-all"
-            >
-              <div className="w-5 h-5 rounded border-2 border-gray-300 mr-3 flex items-center justify-center transition-colors group-hover:border-emerald-400" />
-              <div className="flex-1 min-w-0">
-                <span className="block font-medium text-gray-700">{item.name}</span>
-                {quantityLabel && (
-                  <span className="block text-xs text-gray-500 mt-0.5">{quantityLabel}</span>
-                )}
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold ${CATEGORY_COLORS[item.category]}`}>
-                {item.category}
-              </span>
-            </div>
-          );
-        })}
-
-        {activeItems.length === 0 && items.length === 0 && (
-          <div className="text-center py-8 text-gray-400 text-sm">Nessun articolo nella lista.</div>
+        </div>
+        {itemName.trim() && (
+          <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar animate-fade-in">
+            {(Object.values(Category) as Category[]).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSelectedCategory(c)}
+                className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-bold ${
+                  selectedCategory === c ? 'bg-ink text-white' : getCategoryTheme(c).chip
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         )}
-      </div>
+      </form>
+
+      {items.length === 0 && (
+        <div className="flex flex-col items-center gap-2 rounded-4xl bg-white px-6 py-10 text-center">
+          <p className="font-display text-xl font-bold text-ink">Lista vuota</p>
+          <p className="text-sm text-muted">Aggiungi quello che ti serve, oppure fattelo suggerire da EcoChef.</p>
+        </div>
+      )}
+
+      {groups.map(([category, groupItems]) => {
+        const theme = getCategoryTheme(category);
+        return (
+          <div key={category} className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${theme.dot}`} />
+              <span className="text-[13px] font-bold uppercase tracking-wider text-muted">{category}</span>
+            </div>
+            <div className="rounded-[20px] bg-white px-3.5 py-1">
+              {groupItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onToggle(item.id)}
+                  className="flex min-h-[52px] w-full items-center gap-3 border-b border-black/5 text-left last:border-0"
+                >
+                  <span className="h-[26px] w-[26px] shrink-0 rounded-full border-2 border-[#C5CCC7]" />
+                  <span className="flex-1 truncate text-[15px] font-semibold text-ink">{item.name}</span>
+                  {formatQuantity(item.quantity, item.unit) && (
+                    <span className="shrink-0 text-[13px] text-muted">{formatQuantity(item.quantity, item.unit)}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       {completedItems.length > 0 && (
-        <div className="mt-8">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Completati ({completedItems.length})</h3>
-            <button onClick={onClearCompleted} className="text-xs text-red-500 hover:underline flex items-center gap-1">
-              <Trash size={12} /> Pulisci
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-bold uppercase tracking-wider text-muted">
+              Nel carrello ({completedItems.length})
+            </span>
+            <button
+              type="button"
+              onClick={onClearCompleted}
+              className="flex h-9 items-center gap-1 rounded-full px-2 text-xs font-bold text-[#9B2335]"
+            >
+              <Trash2 size={14} /> Svuota
             </button>
           </div>
-
-          <div className="space-y-2 opacity-60">
-            {completedItems.map((item) => {
-              const quantityLabel = formatQuantity(item.quantity, item.unit);
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => onToggle(item.id)}
-                  className="flex items-center p-3 bg-gray-50 rounded-lg border border-transparent cursor-pointer"
-                >
-                  <div className="w-5 h-5 rounded bg-emerald-500 border-2 border-emerald-500 mr-3 flex items-center justify-center text-white">
-                    <Check size={14} strokeWidth={3} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="block font-medium text-gray-500 line-through decoration-gray-400">{item.name}</span>
-                    {quantityLabel && (
-                      <span className="block text-xs text-gray-400 mt-0.5">{quantityLabel}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="rounded-[20px] bg-white/60 px-3.5 py-1">
+            {completedItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onToggle(item.id)}
+                className="flex min-h-[48px] w-full items-center gap-3 border-b border-black/5 text-left last:border-0"
+              >
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white animate-pop">
+                  <Check size={16} strokeWidth={3} />
+                </span>
+                <span className="flex-1 truncate text-[15px] text-[#8A948D] line-through">{item.name}</span>
+                {formatQuantity(item.quantity, item.unit) && (
+                  <span className="shrink-0 text-[13px] text-[#8A948D]">{formatQuantity(item.quantity, item.unit)}</span>
+                )}
+              </button>
+            ))}
           </div>
 
           <button
-            onClick={handleInitiateMove}
-            className="w-full mt-4 bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 flex justify-center items-center gap-2 transition-colors"
+            type="button"
+            onClick={openMove}
+            className="mt-2 flex h-[54px] items-center justify-center gap-2 rounded-[18px] bg-emerald-600 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(30,138,78,0.3)]"
           >
-            <ArrowRight size={18} />
-            Sposta {completedItems.length} in Dispensa
+            <Refrigerator size={20} />
+            Sposta {completedItems.length} {completedItems.length === 1 ? 'prodotto' : 'prodotti'} in dispensa
           </button>
         </div>
       )}
 
-      {/* Camera Modal */}
-      {showCamera && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
-          <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-          <canvas ref={canvasRef} className="hidden" />
-          <div className="absolute bottom-10 flex gap-8 items-center">
-            <button onClick={stopCamera} className="bg-white/20 text-white p-4 rounded-full backdrop-blur-md hover:bg-white/30">
-              <X size={24} />
-            </button>
-            <button onClick={capturePhoto} className="bg-white border-4 border-gray-300 w-20 h-20 rounded-full flex items-center justify-center active:scale-95 transition-transform">
-              <div className="w-16 h-16 bg-white rounded-full border-2 border-black" />
-            </button>
-          </div>
-        </div>
-      )}
+      <CameraCapture open={showCamera} onClose={() => setShowCamera(false)} onCapture={handleCapture} />
+      <AnalyzingOverlay open={isAnalyzing} label="Riconosco il prodotto…" />
 
-      {/* Analysis Loader */}
-      {isAnalyzing && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-          <Loader2 className="animate-spin mb-4" size={48} />
-          <p className="font-medium text-lg">Analisi prodotto...</p>
-        </div>
-      )}
-
-      {/* Move to Pantry Detail Modal */}
-      {isMoveModalOpen && (
-        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl p-6 animate-fade-in max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Dettagli Prodotti</h3>
-              <button onClick={() => setIsMoveModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-500 mb-6">Inserisci quantità e scadenza prima di spostare in dispensa.</p>
-
-            <div className="space-y-6">
-              {itemsToMoveData.map((item, idx) => (
-                <div key={item.originalId} className="border-b border-gray-100 pb-4 last:border-0">
-                  <h4 className="font-semibold text-emerald-700 mb-2">{item.name}</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Quantità</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          className="w-2/3 p-2 border border-gray-200 rounded-lg text-sm"
-                          value={item.quantity}
-                          onChange={(e) => updateMoveItemData(idx, 'quantity', Number(e.target.value))}
-                        />
-                        <select
-                          className="w-1/3 p-2 border border-gray-200 rounded-lg text-sm bg-gray-50"
-                          value={item.unit}
-                          onChange={(e) => updateMoveItemData(idx, 'unit', e.target.value)}
-                        >
-                          <option value="pz">pz</option>
-                          <option value="kg">kg</option>
-                          <option value="g">g</option>
-                          <option value="l">l</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Scadenza</label>
-                      <input
-                        type="date"
-                        className="w-full p-2 border border-gray-200 rounded-lg text-sm"
-                        value={item.expiryDate}
-                        onChange={(e) => updateMoveItemData(idx, 'expiryDate', e.target.value)}
-                      />
-                    </div>
-                  </div>
+      <Sheet
+        open={isMoveOpen}
+        onClose={() => setIsMoveOpen(false)}
+        title="In dispensa"
+        footer={
+          <button
+            type="button"
+            onClick={confirmMove}
+            className="h-[52px] w-full rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
+          >
+            Conferma
+          </button>
+        }
+      >
+        <p className="mb-4 text-sm text-muted">Controlla quantità e scadenza: così ti avviso in tempo.</p>
+        <div className="flex flex-col gap-3">
+          {moveRows.map((row, idx) => (
+            <div key={row.originalId} className="rounded-[20px] bg-white p-3.5">
+              <p className="mb-2.5 font-bold text-ink">{row.name}</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    aria-label={`Quantità di ${row.name}`}
+                    className={`${fieldClass} min-w-0 flex-1 bg-ground`}
+                    value={row.quantity}
+                    onChange={(e) => updateRow(idx, 'quantity', Number(e.target.value))}
+                  />
+                  <select
+                    aria-label={`Unità di ${row.name}`}
+                    className={`${fieldClass} w-[62px] bg-ground px-1.5`}
+                    value={row.unit}
+                    onChange={(e) => updateRow(idx, 'unit', e.target.value)}
+                  >
+                    {['pz', 'kg', 'g', 'l'].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
                 </div>
-              ))}
+                <input
+                  type="date"
+                  aria-label={`Scadenza di ${row.name}`}
+                  className={`${fieldClass} bg-ground`}
+                  value={row.expiryDate}
+                  onChange={(e) => updateRow(idx, 'expiryDate', e.target.value)}
+                />
+              </div>
             </div>
-
-            <div className="mt-6 pt-4 border-t border-gray-100 flex gap-3">
-              <button
-                onClick={() => setIsMoveModalOpen(false)}
-                className="flex-1 py-3 text-gray-500 font-medium hover:bg-gray-50 rounded-xl transition-colors"
-              >
-                Annulla
-              </button>
-              <button
-                onClick={confirmMove}
-                className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors"
-              >
-                Conferma Spostamento
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
+      </Sheet>
     </div>
   );
 };
