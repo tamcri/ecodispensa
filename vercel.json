@@ -1,6 +1,5 @@
 {
   "functions": {
-    "api/recipe-image.ts": { "maxDuration": 60 },
     "api/identify-item.ts": { "maxDuration": 30 }
   }
 }

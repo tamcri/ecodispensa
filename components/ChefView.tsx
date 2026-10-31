@@ -1116,7 +1116,7 @@ const RecipeCard = ({ recipe, photo, onOpen }: { recipe: Recipe; photo: string |
             {(recipe.title.trim()[0] ?? "?").toUpperCase()}
           </span>
           <span className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-ink">
-            <Camera size={13} /> Aggiungi foto
+            <Camera size={13} /> La tua foto
           </span>
         </span>
       )}

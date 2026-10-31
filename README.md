@@ -38,7 +38,6 @@ Se modifichi le regole di cache in `sw.js`, incrementa `VERSION` in cima al file
 ## Foto dei piatti e riconoscimento prodotti
 
 - `api/identify-item.ts`: riconosce un prodotto da una foto (fotocamera in Dispensa e Spesa) usando OpenAI sul server. La chiave non arriva mai nel browser.
-- `api/recipe-image.ts`: crea con l'AI la foto di una ricetta salvata. Conta come una generazione di ricetta (gratis per i premium) e viene rimborsata se fallisce.
-- In alternativa l'utente può scattare la foto del proprio piatto: viene caricata nel bucket Supabase `recipe-images`, nella cartella dell'utente.
+- L'utente può scattare la foto del piatto che ha cucinato: viene caricata nel bucket Supabase `recipe-images`, nella cartella dell'utente, e collegata alla ricetta.
 
-Variabili opzionali sul server: `OPENAI_IMAGE_MODEL` (default `gpt-image-1-mini`), `OPENAI_IMAGE_QUALITY` (default `medium`), `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o `gpt-4o-mini`).
+Variabile opzionale sul server: `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o `gpt-4o-mini`).

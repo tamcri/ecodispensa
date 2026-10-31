@@ -77,37 +77,6 @@ export async function identifyItemFromImage(
   }
 }
 
-export type GenerateImageResult =
-  | { ok: true; imageUrl: string; remainingCredits: number | null }
-  | { ok: false; error: string; message: string };
-
-/** Chiede all'AI una foto del piatto per una ricetta salvata. */
-export async function generateRecipeImage(recipeId: string): Promise<GenerateImageResult> {
-  try {
-    const { ok, status, body } = await authFetch("/api/recipe-image", {
-      method: "POST",
-      body: JSON.stringify({ recipeId }),
-    });
-    if (ok && body?.imageUrl) {
-      return {
-        ok: true,
-        imageUrl: body.imageUrl,
-        remainingCredits: typeof body.remainingCredits === "number" ? body.remainingCredits : null,
-      };
-    }
-    if (status === 402) {
-      return { ok: false, error: "NO_CREDITS", message: "Crediti EcoChef esauriti." };
-    }
-    return {
-      ok: false,
-      error: body?.error ?? "IMAGE_FAILED",
-      message: body?.message ?? "Non sono riuscito a creare la foto. Riprova tra poco.",
-    };
-  } catch (e: any) {
-    return { ok: false, error: "NETWORK", message: "Connessione assente. Riprova." };
-  }
-}
-
 /** Riduce la foto scattata dall'utente a max 1280px in jpeg, per caricarla velocemente. */
 async function resizeImage(file: File, maxSide = 1280): Promise<Blob> {
   const url = URL.createObjectURL(file);
