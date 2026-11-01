@@ -37,7 +37,7 @@ Se modifichi le regole di cache in `sw.js`, incrementa `VERSION` in cima al file
 
 ## Foto dei piatti e riconoscimento prodotti
 
-- `api/identify-item.ts`: riconosce un prodotto da una foto (fotocamera in Dispensa e Spesa) usando OpenAI sul server. La chiave non arriva mai nel browser.
+- `api/product.ts` (POST): riconosce un prodotto da una foto (fotocamera in Dispensa e Spesa) usando OpenAI sul server. La chiave non arriva mai nel browser.
 - L'utente può scattare la foto del piatto che ha cucinato: viene caricata nel bucket Supabase `recipe-images`, nella cartella dell'utente, e collegata alla ricetta.
 
 Variabile opzionale sul server: `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o `gpt-4o-mini`).
@@ -47,5 +47,7 @@ Variabile opzionale sul server: `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o 
 - **Famiglia**: dispensa, lista spesa e statistiche sono legate a una famiglia (`households`, `household_members`). Ogni utente ne ha una personale; con il codice invito (Profilo → Famiglia) si entra in quella di un altro. Le regole RLS filtrano per famiglia.
 - **Consumato/buttato**: ogni prodotto tolto dalla dispensa può essere registrato in `pantry_events`; la home mostra il riepilogo del mese.
 - **Scadenze stimate e consigli**: `foodGuide.ts` contiene giorni di conservazione e consigli per i prodotti freschi (frutta, verdura, pane, banco). Solo per questi la scadenza viene proposta in automatico.
-- **Notifiche push**: `api/cron-expiry.ts` gira ogni mattina (cron in `vercel.json`, solo in produzione) e avvisa i dispositivi iscritti se qualcosa scade entro 2 giorni. Variabili: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`.
-- **Codice a barre**: lettura con il `BarcodeDetector` del browser o, dove manca (iPhone), con `barcode-detector` (WebAssembly). Il prodotto viene cercato su Open Food Facts tramite `api/barcode.ts`.
+- **Notifiche push**: `api/cron-expiry.ts` gira ogni mattina (cron in `vercel.json`, solo in produzione) e avvisa i dispositivi iscritti se qualcosa scade entro 2 giorni. Variabili: `VAPID_PUBLIC_KEY` (e la stessa come `VITE_VAPID_PUBLIC_KEY` per l'app), `VAPID_PRIVATE_KEY`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`.
+- **Codice a barre**: lettura con il `BarcodeDetector` del browser o, dove manca (iPhone), con `barcode-detector` (WebAssembly). Il prodotto viene cercato su Open Food Facts tramite `api/product.ts` (GET `?code=`).
+
+Nota: il piano Vercel gratuito accetta al massimo 12 funzioni in `api/` (i file in `api/_lib/` non contano).

@@ -23,14 +23,8 @@ function urlBase64ToUint8Array(base64: string) {
 }
 
 async function getPublicKey(): Promise<string | null> {
-  try {
-    const r = await fetch("/api/push-key");
-    if (!r.ok) return null;
-    const body = await r.json();
-    return typeof body?.publicKey === "string" && body.publicKey ? body.publicKey : null;
-  } catch {
-    return null;
-  }
+  const key = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+  return key && key.trim() ? key.trim() : null;
 }
 
 async function saveSubscription(sub: PushSubscription) {

@@ -57,7 +57,7 @@ export async function identifyItemFromImage(
   base64Image: string
 ): Promise<Partial<PantryItem> | null> {
   try {
-    const { ok, body } = await authFetch("/api/identify-item", {
+    const { ok, body } = await authFetch("/api/product", {
       method: "POST",
       body: JSON.stringify({ image: base64Image }),
     });
@@ -143,7 +143,7 @@ export type BarcodeProduct = {
 /** Cerca un prodotto confezionato dal codice a barre (Open Food Facts, tramite il nostro server). */
 export async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
   try {
-    const { ok, body } = await authFetch(`/api/barcode?code=${encodeURIComponent(code)}`);
+    const { ok, body } = await authFetch(`/api/product?code=${encodeURIComponent(code)}`);
     if (!ok || !body?.product) return null;
     return body.product as BarcodeProduct;
   } catch {

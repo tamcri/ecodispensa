@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/identify-item.ts": { "maxDuration": 30 },
+    "api/product.ts": { "maxDuration": 30 },
     "api/cron-expiry.ts": { "maxDuration": 60 }
   },
   "crons": [
