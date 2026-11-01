@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 import { HouseholdCard } from "./HouseholdCard";
+import { isAppInstalled, requestInstall } from "./PwaBanners";
 import {
   X,
   User,
@@ -993,6 +994,23 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   </div>
                 )}
               </div>
+
+              {!isAppInstalled() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    window.setTimeout(requestInstall, 250);
+                  }}
+                  className="flex items-center gap-3 rounded-2xl bg-ink p-4 text-left text-white"
+                >
+                  <img src="/icons/icon-192.png" alt="" className="h-11 w-11 shrink-0 rounded-xl" />
+                  <span className="flex-1 text-sm text-white/80">
+                    <span className="block text-base font-bold text-white">Installa l'app sul telefono</span>
+                    Si apre dall'icona, a schermo intero, e ricevi gli avvisi di scadenza.
+                  </span>
+                </button>
+              )}
 
               <HouseholdCard userEmail={userEmail} onChanged={onHouseholdChanged} />
 

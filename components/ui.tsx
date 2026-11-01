@@ -409,3 +409,98 @@ export const CreditsBadge = ({
     {credits === null ? "…" : credits} {credits === 1 ? "credito" : "crediti"}
   </button>
 );
+
+const QTY_UNITS = ["pz", "kg", "g", "l"];
+const stepFor = (unit: string) => (unit === "g" ? 50 : unit === "kg" || unit === "l" ? 0.5 : 1);
+const fmtQty = (n: number) => (Number.isFinite(n) ? String(parseFloat(n.toFixed(3))).replace(".", ",") : "");
+
+/**
+ * Quantità con − e +, campo largo e unità a pulsanti.
+ * Toccando il numero viene selezionato tutto, così quello che scrivi lo sostituisce.
+ */
+export const QuantityInput = ({
+  id,
+  value,
+  unit,
+  onChange,
+  onUnitChange,
+  label = "Quantità",
+  compact = false,
+}: {
+  id: string;
+  value: number;
+  unit: string;
+  onChange: (qty: number) => void;
+  onUnitChange: (unit: string) => void;
+  label?: string;
+  compact?: boolean;
+}) => {
+  const [text, setText] = useState(fmtQty(value));
+
+  // si riallinea quando il valore cambia da fuori (es. pulsanti, prodotto scansionato)
+  useEffect(() => {
+    const parsed = parseFloat(text.replace(",", "."));
+    if (parsed !== value) setText(fmtQty(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    setText(raw);
+    const parsed = parseFloat(raw.replace(",", "."));
+    if (Number.isFinite(parsed) && parsed >= 0) onChange(parsed);
+  };
+
+  const bump = (dir: 1 | -1) => {
+    const next = Math.max(0, parseFloat(((value || 0) + dir * stepFor(unit)).toFixed(3)));
+    onChange(next);
+    setText(fmtQty(next));
+  };
+
+  const btn = `flex shrink-0 items-center justify-center rounded-2xl bg-white text-xl font-bold text-ink ring-1 ring-black/5 active:scale-95 ${
+    compact ? "h-11 w-11" : "h-12 w-12"
+  }`;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className={compact ? "sr-only" : "block text-xs font-bold text-muted"}>
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => bump(-1)} aria-label="Diminuisci" className={btn}>
+          −
+        </button>
+        <input
+          id={id}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={text}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => commit(e.target.value.replace(/[^\d.,]/g, ""))}
+          onBlur={() => setText(fmtQty(value))}
+          className={`min-w-0 flex-1 rounded-2xl border-0 bg-white px-3 text-center font-display font-extrabold text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500 ${
+            compact ? "h-11 text-lg" : "h-12 text-xl"
+          }`}
+        />
+        <button type="button" onClick={() => bump(1)} aria-label="Aumenta" className={btn}>
+          +
+        </button>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Unità di misura">
+        {QTY_UNITS.map((u) => (
+          <button
+            key={u}
+            type="button"
+            role="radio"
+            aria-checked={unit === u}
+            onClick={() => onUnitChange(u)}
+            className={`h-9 rounded-xl text-sm font-bold transition-colors ${
+              unit === u ? "bg-ink text-white" : "bg-white text-ink ring-1 ring-black/5"
+            }`}
+          >
+            {u}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
