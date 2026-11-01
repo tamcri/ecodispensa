@@ -4,7 +4,7 @@ import { daysUntil, expiryLabel, getCategoryTheme } from '../constants';
 import { Camera, Check, Info, Plus, Refrigerator, Trash2 } from 'lucide-react';
 import { identifyItemFromImage, lookupBarcode } from '../services/api';
 import { findFoodGuide, sameProduct, suggestedExpiry } from '../foodGuide';
-import { AnalyzingOverlay, CameraCapture, ScreenHeader, Sheet } from './ui';
+import { AnalyzingOverlay, CameraCapture, QuantityInput, ScreenHeader, Sheet } from './ui';
 
 interface ShoppingListViewProps {
   items: ShoppingItem[];
@@ -532,38 +532,27 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           {moveRows.map((row, idx) => (
             <div key={row.originalId} className="rounded-[20px] bg-white p-3.5">
               <p className="mb-2.5 font-bold text-ink">{row.name}</p>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="flex gap-1.5">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
-                    aria-label={`Quantità di ${row.name}`}
-                    className={`${fieldClass} min-w-0 flex-1 bg-ground`}
-                    value={row.quantity}
-                    onChange={(e) => updateRow(idx, 'quantity', Number(e.target.value))}
-                  />
-                  <select
-                    aria-label={`Unità di ${row.name}`}
-                    className={`${fieldClass} w-[62px] bg-ground px-1.5`}
-                    value={row.unit}
-                    onChange={(e) => updateRow(idx, 'unit', e.target.value)}
-                  >
-                    {['pz', 'kg', 'g', 'l'].map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="flex flex-col gap-3">
+                <QuantityInput
+                  id={`move-qty-${idx}`}
+                  label={`Quantità di ${row.name}`}
+                  compact
+                  value={row.quantity}
+                  unit={row.unit}
+                  onChange={(q) => updateRow(idx, 'quantity', q)}
+                  onUnitChange={(u) => updateRow(idx, 'unit', u)}
+                />
                 <div>
+                  <label htmlFor={`move-exp-${idx}`} className="mb-1 block text-xs font-bold text-muted">
+                    Scadenza {row.estimated && <span className="text-emerald-700">· stimata</span>}
+                  </label>
                   <input
+                    id={`move-exp-${idx}`}
                     type="date"
-                    aria-label={`Scadenza di ${row.name}`}
                     className={`${fieldClass} bg-ground`}
                     value={row.expiryDate}
                     onChange={(e) => updateRow(idx, 'expiryDate', e.target.value)}
                   />
-                  {row.estimated && <span className="mt-1 block text-[11px] font-bold text-emerald-700">Scadenza stimata</span>}
                 </div>
               </div>
             </div>

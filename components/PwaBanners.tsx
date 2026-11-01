@@ -29,6 +29,12 @@ const saveDismissed = () => {
   }
 };
 
+/** Chiede di mostrare l'installazione (es. dal pulsante nel Profilo), anche se il banner era stato chiuso. */
+export const requestInstall = () => window.dispatchEvent(new Event("eco:install-request"));
+
+export const isAppInstalled = () =>
+  window.matchMedia?.("(display-mode: standalone)").matches || (navigator as any).standalone === true;
+
 const isStandalone = () =>
   window.matchMedia?.("(display-mode: standalone)").matches ||
   (navigator as any).standalone === true;
@@ -41,6 +47,9 @@ export const PwaBanners = () => {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosHint, setShowIosHint] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const [showGenericHint, setShowGenericHint] = useState(false);
+  // l'evento di installazione di Chrome si conserva anche se il banner è stato chiuso
+  const savedPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const waitingWorker = useRef<ServiceWorker | null>(null);
 
   // Service worker: registrazione e controllo aggiornamenti
@@ -96,8 +105,25 @@ export const PwaBanners = () => {
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
+      savedPrompt.current = e as BeforeInstallPromptEvent;
       if (!readDismissed()) setInstallEvent(e as BeforeInstallPromptEvent);
     };
+    const onRequest = () => {
+      if (isStandalone()) {
+        alert("EcoDispensa è già installata: la trovi tra le app del telefono.");
+        return;
+      }
+      if (savedPrompt.current) {
+        setInstallEvent(savedPrompt.current);
+        return;
+      }
+      if (isIos()) {
+        setShowIosHint(true);
+        return;
+      }
+      setShowGenericHint(true);
+    };
+    window.addEventListener("eco:install-request", onRequest);
     const onInstalled = () => {
       setInstallEvent(null);
       setShowIosHint(false);
@@ -111,6 +137,7 @@ export const PwaBanners = () => {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("eco:install-request", onRequest);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
@@ -119,6 +146,7 @@ export const PwaBanners = () => {
     saveDismissed();
     setInstallEvent(null);
     setShowIosHint(false);
+    setShowGenericHint(false);
   };
 
   const install = async () => {
@@ -126,6 +154,7 @@ export const PwaBanners = () => {
     await installEvent.prompt();
     const choice = await installEvent.userChoice.catch(() => null);
     if (choice?.outcome !== "accepted") saveDismissed();
+    else savedPrompt.current = null;
     setInstallEvent(null);
   };
 
@@ -134,7 +163,7 @@ export const PwaBanners = () => {
     setUpdateReady(false);
   };
 
-  if (!updateReady && !installEvent && !showIosHint) return null;
+  if (!updateReady && !installEvent && !showIosHint && !showGenericHint) return null;
 
   return (
     <div
@@ -181,18 +210,40 @@ export const PwaBanners = () => {
         </div>
       )}
 
+      {showGenericHint && !installEvent && !showIosHint && (
+        <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-lg">
+          <div className="flex items-start gap-3">
+            <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
+            <div className="flex-1 text-sm text-gray-700">
+              <p className="font-semibold text-gray-900">Installa EcoDispensa</p>
+              <p className="mt-1">
+                Apri il menu del browser (i tre puntini ⋮ in alto a destra) e scegli <b>Installa app</b> oppure{" "}
+                <b>Aggiungi a schermata Home</b>. Se non compare, apri l'app da Chrome all'indirizzo ecodispensa.vercel.app.
+              </p>
+            </div>
+            <button type="button" onClick={dismissInstall} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Chiudi">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {showIosHint && !installEvent && (
         <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-lg">
           <div className="flex items-start gap-3">
             <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
             <div className="flex-1 text-sm text-gray-700">
               <p className="font-semibold text-gray-900">Installa EcoDispensa sull'iPhone</p>
-              <p className="mt-1 flex flex-wrap items-center gap-1">
-                Tocca <Share size={16} className="inline text-blue-500" /> Condividi, poi
-                <span className="inline-flex items-center gap-1 font-medium">
-                  <SquarePlus size={16} /> Aggiungi alla schermata Home
-                </span>
-              </p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                <li>
+                  Tocca <Share size={15} className="inline align-[-2px] text-blue-500" /> <b>Condividi</b> (in Safari è in basso, in Chrome
+                  in alto a destra)
+                </li>
+                <li>
+                  Scorri e scegli <SquarePlus size={15} className="inline align-[-2px]" /> <b>Aggiungi alla schermata Home</b>
+                </li>
+                <li>Tocca <b>Aggiungi</b> e apri EcoDispensa dall'icona</li>
+              </ol>
             </div>
             <button
               type="button"

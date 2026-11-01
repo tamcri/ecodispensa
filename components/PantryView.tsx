@@ -3,7 +3,7 @@ import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
 import { Camera, Check, Lightbulb, Plus, Search, Trash2 } from 'lucide-react';
 import { identifyItemFromImage, lookupBarcode } from '../services/api';
-import { AnalyzingOverlay, CameraCapture, Monogram, ScreenHeader, Sheet } from './ui';
+import { AnalyzingOverlay, CameraCapture, Monogram, QuantityInput, ScreenHeader, Sheet } from './ui';
 import { findFoodGuide, guideSummary, suggestedExpiry } from '../foodGuide';
 import { Outcome } from '../services/household';
 
@@ -264,31 +264,13 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   );
 
   const qtyFields = (state: FormState, set: (s: FormState) => void, idPrefix: string) => (
-    <div>
-      <label className={labelClass} htmlFor={`${idPrefix}-qty`}>Quantità</label>
-      <div className="flex gap-2">
-        <input
-          id={`${idPrefix}-qty`}
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="any"
-          className={`${fieldClass} min-w-0 flex-1 px-3`}
-          value={state.quantity}
-          onChange={(e) => set({ ...state, quantity: Number(e.target.value) })}
-        />
-        <select
-          aria-label="Unità"
-          className={`${fieldClass} w-[68px] px-2`}
-          value={state.unit}
-          onChange={(e) => set({ ...state, unit: e.target.value })}
-        >
-          {UNITS.map((u) => (
-            <option key={u} value={u}>{u}</option>
-          ))}
-        </select>
-      </div>
-    </div>
+    <QuantityInput
+      id={`${idPrefix}-qty`}
+      value={state.quantity}
+      unit={state.unit}
+      onChange={(q) => set({ ...state, quantity: q })}
+      onUnitChange={(u) => set({ ...state, unit: u })}
+    />
   );
 
   return (
@@ -452,7 +434,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-4">
             {qtyFields(form, setForm, 'pantry')}
             <div>
               <label className={labelClass} htmlFor="pantry-exp">
@@ -555,7 +537,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         }
       >
         <form id="pantry-edit-form" onSubmit={saveEdit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-4">
             {qtyFields(editForm, setEditForm, 'edit')}
             <div>
               <label className={labelClass} htmlFor="edit-exp">Scadenza</label>
