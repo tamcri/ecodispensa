@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { ShoppingItem, Category, PantryItem } from '../types';
-import { getCategoryTheme } from '../constants';
-import { Camera, Check, Plus, Refrigerator, Trash2 } from 'lucide-react';
-import { identifyItemFromImage } from '../services/api';
+import { daysUntil, expiryLabel, getCategoryTheme } from '../constants';
+import { Camera, Check, Info, Plus, Refrigerator, Trash2 } from 'lucide-react';
+import { identifyItemFromImage, lookupBarcode } from '../services/api';
+import { findFoodGuide, sameProduct, suggestedExpiry } from '../foodGuide';
 import { AnalyzingOverlay, CameraCapture, ScreenHeader, Sheet } from './ui';
 
 interface ShoppingListViewProps {
   items: ShoppingItem[];
+  pantryItems?: PantryItem[];
   onAdd: (name: string, category: Category, quantity?: number | null, unit?: string | null) => void;
   onToggle: (id: string) => void;
   onClearCompleted: () => void;
@@ -20,6 +22,7 @@ type MoveRow = {
   quantity: number;
   unit: string;
   expiryDate: string;
+  estimated: boolean;
 };
 
 const fieldClass =
@@ -27,6 +30,7 @@ const fieldClass =
 
 export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   items,
+  pantryItems = [],
   onAdd,
   onToggle,
   onClearCompleted,
@@ -47,11 +51,43 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
     return `${quantity} ${unit}`;
   };
 
+  // "Ce l'hai già": prodotti in dispensa con lo stesso nome
+  const inPantry = (name: string) => pantryItems.filter((p) => sameProduct(name, p.name));
+  const typedMatches = itemName.trim().length >= 3 ? inPantry(itemName) : [];
+
+  const describe = (p: PantryItem) => {
+    const days = daysUntil(p.expiryDate);
+    const exp = days === null ? '' : ` · ${expiryLabel(days).toLowerCase()}`;
+    return `${p.quantity} ${p.unit}${exp}`;
+  };
+
+  const handleNameChange = (value: string) => {
+    setItemName(value);
+    const g = findFoodGuide(value);
+    if (g) setSelectedCategory(g.category);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName.trim()) return;
     onAdd(itemName.trim(), selectedCategory);
     setItemName('');
+  };
+
+  const handleBarcode = async (code: string) => {
+    setShowCamera(false);
+    setIsAnalyzing(true);
+    try {
+      const p = await lookupBarcode(code);
+      if (p) {
+        setItemName(p.name);
+        if (p.category) setSelectedCategory(p.category as Category);
+      } else {
+        alert('Non trovo questo codice a barre: scrivi il nome a mano.');
+      }
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleCapture = async (dataUrl: string) => {
@@ -93,14 +129,17 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         category: item.category,
         quantity: item.quantity != null ? item.quantity : 1,
         unit: item.unit && ['pz', 'kg', 'g', 'l'].includes(item.unit) ? item.unit : 'pz',
-        expiryDate: '',
+        expiryDate: suggestedExpiry(item.name) ?? '',
+        estimated: !!suggestedExpiry(item.name),
       }))
     );
     setIsMoveOpen(true);
   };
 
   const updateRow = (index: number, field: keyof MoveRow, value: any) => {
-    setMoveRows((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+    setMoveRows((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, [field]: value, ...(field === 'expiryDate' ? { estimated: false } : {}) } : r))
+    );
   };
 
   const confirmMove = () => {
@@ -140,7 +179,8 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           <input
             type="text"
             value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
+            onChange={(e) => handleNameChange(e.target.value)}
+            autoComplete="off"
             placeholder="Aggiungi prodotto…"
             aria-label="Aggiungi prodotto"
             className="h-[50px] min-w-0 flex-1 rounded-2xl bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500"
@@ -162,6 +202,20 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             <Plus size={22} strokeWidth={2.4} />
           </button>
         </div>
+        {typedMatches.length > 0 && (
+          <div className="flex gap-3 rounded-2xl bg-lemon/50 p-3.5 animate-fade-in" role="status">
+            <Info size={18} className="mt-0.5 shrink-0 text-ink" />
+            <div className="text-sm text-[#3D3A1F]">
+              <p className="font-bold text-ink">Ce l'hai già in dispensa</p>
+              {typedMatches.slice(0, 3).map((p) => (
+                <p key={p.id}>
+                  {p.name}: {describe(p)}
+                </p>
+              ))}
+              <p className="mt-1 text-xs">Se ti serve comunque, aggiungilo con +.</p>
+            </div>
+          </div>
+        )}
         {itemName.trim() && (
           <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar animate-fade-in">
             {(Object.values(Category) as Category[]).map((c) => (
@@ -204,7 +258,14 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                   className="flex min-h-[52px] w-full items-center gap-3 border-b border-black/5 text-left last:border-0"
                 >
                   <span className="h-[26px] w-[26px] shrink-0 rounded-full border-2 border-[#C5CCC7]" />
-                  <span className="flex-1 truncate text-[15px] font-semibold text-ink">{item.name}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold text-ink">{item.name}</span>
+                    {inPantry(item.name)[0] && (
+                      <span className="block truncate text-xs font-semibold text-[#8A3B0C]">
+                        In dispensa: {describe(inPantry(item.name)[0])}
+                      </span>
+                    )}
+                  </span>
                   {formatQuantity(item.quantity, item.unit) && (
                     <span className="shrink-0 text-[13px] text-muted">{formatQuantity(item.quantity, item.unit)}</span>
                   )}
@@ -259,7 +320,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         </div>
       )}
 
-      <CameraCapture open={showCamera} onClose={() => setShowCamera(false)} onCapture={handleCapture} />
+      <CameraCapture open={showCamera} onClose={() => setShowCamera(false)} onCapture={handleCapture} onBarcode={handleBarcode} />
       <AnalyzingOverlay open={isAnalyzing} label="Riconosco il prodotto…" />
 
       <Sheet
@@ -276,7 +337,9 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           </button>
         }
       >
-        <p className="mb-4 text-sm text-muted">Controlla quantità e scadenza: così ti avviso in tempo.</p>
+        <p className="mb-4 text-sm text-muted">
+          Per frutta, verdura e pane ho già stimato la scadenza; per le confezioni guarda la data stampata.
+        </p>
         <div className="flex flex-col gap-3">
           {moveRows.map((row, idx) => (
             <div key={row.originalId} className="rounded-[20px] bg-white p-3.5">
@@ -304,13 +367,16 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                     ))}
                   </select>
                 </div>
-                <input
-                  type="date"
-                  aria-label={`Scadenza di ${row.name}`}
-                  className={`${fieldClass} bg-ground`}
-                  value={row.expiryDate}
-                  onChange={(e) => updateRow(idx, 'expiryDate', e.target.value)}
-                />
+                <div>
+                  <input
+                    type="date"
+                    aria-label={`Scadenza di ${row.name}`}
+                    className={`${fieldClass} bg-ground`}
+                    value={row.expiryDate}
+                    onChange={(e) => updateRow(idx, 'expiryDate', e.target.value)}
+                  />
+                  {row.estimated && <span className="mt-1 block text-[11px] font-bold text-emerald-700">Scadenza stimata</span>}
+                </div>
               </div>
             </div>
           ))}

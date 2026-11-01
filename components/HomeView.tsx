@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChefHat, ChevronRight, Plus } from "lucide-react";
+import { ChefHat, ChevronRight, Lightbulb, Plus } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState } from "../types";
 import { daysUntil, expiryLabel, getCategoryTheme, getInitial } from "../constants";
 import { CreditsBadge } from "./ui";
 import { fetchSavedRecipes, SavedRecipe } from "../services/api";
 import { tintFor } from "./RecipePhoto";
+import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
+import { findFoodGuide } from "../foodGuide";
 
 interface HomeViewProps {
   pantryItems: PantryItem[];
@@ -14,6 +16,9 @@ interface HomeViewProps {
   onOpenProfile: () => void;
   onNavigate: (view: ViewState) => void;
   onOpenRecipe?: (id: string) => void;
+  onResolveExpired?: (id: string, outcome: Outcome) => void;
+  onPostpone?: (id: string, days: number) => void;
+  statsVersion?: number;
 }
 
 const greeting = () => {
@@ -36,8 +41,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenProfile,
   onNavigate,
   onOpenRecipe,
+  onResolveExpired,
+  onPostpone,
+  statsVersion = 0,
 }) => {
   const [recipes, setRecipes] = useState<SavedRecipe[] | null>(null);
+  const [stats, setStats] = useState<WasteStats | null>(null);
+
+  useEffect(() => {
+    fetchMonthStats().then(setStats);
+  }, [statsVersion]);
 
   useEffect(() => {
     fetchSavedRecipes()
@@ -45,14 +58,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
       .catch(() => setRecipes([]));
   }, []);
 
-  const expiring = useMemo(
-    () =>
-      pantryItems
-        .map((item) => ({ item, days: daysUntil(item.expiryDate) }))
-        .filter((x) => x.days !== null && (x.days as number) <= 3)
-        .sort((a, b) => (a.days as number) - (b.days as number)),
+  const withDays = useMemo(
+    () => pantryItems.map((item) => ({ item, days: daysUntil(item.expiryDate) })),
     [pantryItems]
   );
+
+  // Da salvare: scadono oggi o nei prossimi 3 giorni
+  const expiring = useMemo(
+    () =>
+      withDays
+        .filter((x) => x.days !== null && (x.days as number) >= 0 && (x.days as number) <= 3)
+        .sort((a, b) => (a.days as number) - (b.days as number)),
+    [withDays]
+  );
+
+  // Già scaduti: chiediamo all'utente cosa ne è stato, così la dispensa resta vera
+  const expired = useMemo(
+    () => withDays.filter((x) => x.days !== null && (x.days as number) < 0).sort((a, b) => (a.days as number) - (b.days as number)),
+    [withDays]
+  );
+
+  // Consiglio di conservazione per il primo prodotto da salvare che la guida conosce
+  const tip = useMemo(() => {
+    for (const { item } of expiring) {
+      const g = findFoodGuide(item.name);
+      if (g) return { name: item.name, text: g.tip };
+    }
+    for (const item of pantryItems) {
+      const g = findFoodGuide(item.name);
+      if (g) return { name: item.name, text: g.tip };
+    }
+    return null;
+  }, [expiring, pantryItems]);
+
+  const totalEvents = stats ? stats.consumed + stats.wasted : 0;
+  const savedPct = stats && totalEvents ? Math.round((stats.consumed / totalEvents) * 100) : null;
 
   const categoriesCount = useMemo(() => new Set(pantryItems.map((i) => i.category)).size, [pantryItems]);
   const toBuy = shoppingItems.filter((i) => !i.isChecked).length;
@@ -157,6 +197,71 @@ export const HomeView: React.FC<HomeViewProps> = ({
         )}
       </section>
 
+      {expired.length > 0 && onResolveExpired && (
+        <section className="flex flex-col gap-3 rounded-4xl bg-white p-4">
+          <div>
+            <h2 className="font-display text-lg font-bold text-ink">
+              {expired.length === 1 ? "Questo è scaduto" : `${expired.length} prodotti sono scaduti`}
+            </h2>
+            <p className="text-[13px] text-muted">Dimmi cosa ne è stato: così la dispensa resta aggiornata.</p>
+          </div>
+          {expired.slice(0, 4).map(({ item, days }) => (
+            <div key={item.id} className="flex flex-col gap-2 rounded-2xl bg-ground p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-bold text-ink">{item.name}</span>
+                <span className="shrink-0 text-xs font-bold text-[#9B2335]">{expiryLabel(days)}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onResolveExpired(item.id, "consumed")}
+                  className="h-10 rounded-xl bg-mint text-[13px] font-bold text-[#1E5A35]"
+                >
+                  Usato
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onResolveExpired(item.id, "wasted")}
+                  className="h-10 rounded-xl bg-[#FBE0E3] text-[13px] font-bold text-[#9B2335]"
+                >
+                  Buttato
+                </button>
+                {onPostpone && (
+                  <button
+                    type="button"
+                    onClick={() => onPostpone(item.id, 2)}
+                    className="h-10 rounded-xl bg-white text-[13px] font-bold text-ink ring-1 ring-black/5"
+                    title="È ancora buono: ricordamelo tra 2 giorni"
+                  >
+                    Ancora buono
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {expired.length > 4 && (
+            <button type="button" onClick={() => onNavigate("pantry")} className="text-left text-[13px] font-semibold text-emerald-700">
+              e altri {expired.length - 4} in dispensa
+            </button>
+          )}
+        </section>
+      )}
+
+      {stats && totalEvents > 0 && (
+        <section className="flex items-center gap-4 rounded-3xl bg-white p-4">
+          <span className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-mint">
+            <span className="font-display text-2xl font-extrabold leading-none text-[#155A34]">{savedPct}%</span>
+            <span className="text-[10px] font-bold uppercase text-[#1E5A35]">salvato</span>
+          </span>
+          <span className="text-sm text-muted">
+            <span className="block font-display text-base font-bold text-ink">Questo mese</span>
+            {stats.consumed} {stats.consumed === 1 ? "prodotto usato" : "prodotti usati"}
+            {" · "}
+            {stats.wasted} {stats.wasted === 1 ? "buttato" : "buttati"}
+          </span>
+        </section>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -182,6 +287,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </span>
         </button>
       </div>
+
+      {tip && (
+        <section className="flex gap-3 rounded-3xl bg-lemon/40 p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-lemon text-ink">
+            <Lightbulb size={20} />
+          </span>
+          <span className="text-sm text-[#3D3A1F]">
+            <span className="block font-bold text-ink">Per {tip.name.toLowerCase()}</span>
+            {tip.text}
+          </span>
+        </section>
+      )}
 
       <div className="flex items-baseline justify-between">
         <h3 className="font-display text-xl font-bold text-ink">Dal tuo ricettario</h3>

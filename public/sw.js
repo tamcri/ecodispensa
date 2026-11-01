@@ -7,7 +7,7 @@
  *   dati personali e crediti passano sempre dalla rete.
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `ecodispensa-shell-${VERSION}`;
 const ASSET_CACHE = `ecodispensa-assets-${VERSION}`;
 const FONT_CACHE = `ecodispensa-fonts-${VERSION}`;
@@ -118,3 +118,42 @@ async function staleWhileRevalidate(req, cacheName) {
     .catch(() => undefined);
   return cached || (await network) || fetch(req);
 }
+
+// ---------------------------------------------------------------
+// Notifiche push (scadenze)
+// ---------------------------------------------------------------
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "EcoDispensa";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "Hai prodotti da usare presto.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag || "ecodispensa-expiry",
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of all) {
+        if ("focus" in client) {
+          await client.navigate(target).catch(() => undefined);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })()
+  );
+});

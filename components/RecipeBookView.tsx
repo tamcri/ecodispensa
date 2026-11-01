@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, Trash2 } from "lucide-react";
+import { CheckCircle2, Play, Trash2, Utensils } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { fetchSavedRecipes, SavedRecipe } from "../services/api";
 import { ScreenHeader, Sheet, Spinner } from "./ui";
 import { RecipePhoto, tintFor } from "./RecipePhoto";
 import { RecipeContent } from "./ChefView";
-import { Recipe } from "../types";
+import { IngredientUsage, Recipe } from "../types";
 
 type SourceFilter = "all" | "suggest" | "search" | "meal_plan";
 
@@ -33,10 +33,12 @@ const meta = (r: SavedRecipe) => [r.time, r.difficulty].filter(Boolean).join(" Â
 
 export function RecipeBookView({
   onCreditsChange,
+  onCook,
   initialRecipeId,
   onInitialRecipeShown,
 }: {
   onCreditsChange?: (credits: number) => void;
+  onCook?: (ingredients: IngredientUsage[]) => void;
   initialRecipeId?: string | null;
   onInitialRecipeShown?: () => void;
 }) {
@@ -45,6 +47,7 @@ export function RecipeBookView({
   const [filter, setFilter] = useState<SourceFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [cookedId, setCookedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSavedRecipes()
@@ -198,13 +201,33 @@ export function RecipeBookView({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#FBE0E3] text-[15px] font-bold text-[#9B2335]"
-              >
-                <Trash2 size={18} /> Elimina dal ricettario
-              </button>
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label="Elimina dal ricettario"
+                  className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-[#FBE0E3] text-[#9B2335]"
+                >
+                  <Trash2 size={20} />
+                </button>
+                {onCook &&
+                  (cookedId === selected.id ? (
+                    <div className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink animate-pop">
+                      <CheckCircle2 size={20} /> Dispensa aggiornata
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCook(toRecipe(selected).ingredientsUsed);
+                        setCookedId(selected.id);
+                      }}
+                      className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
+                    >
+                      <Utensils size={20} /> L'ho cucinato!
+                    </button>
+                  ))}
+              </div>
             )
           ) : null
         }

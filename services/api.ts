@@ -130,3 +130,23 @@ export async function uploadRecipePhoto(recipeId: string, file: File): Promise<s
 
   return imageUrl;
 }
+
+export type BarcodeProduct = {
+  code: string;
+  name: string;
+  brand: string | null;
+  quantity: number;
+  unit: string;
+  category: string;
+};
+
+/** Cerca un prodotto confezionato dal codice a barre (Open Food Facts, tramite il nostro server). */
+export async function lookupBarcode(code: string): Promise<BarcodeProduct | null> {
+  try {
+    const { ok, body } = await authFetch(`/api/barcode?code=${encodeURIComponent(code)}`);
+    if (!ok || !body?.product) return null;
+    return body.product as BarcodeProduct;
+  } catch {
+    return null;
+  }
+}

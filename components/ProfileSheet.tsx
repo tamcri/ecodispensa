@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../services/supabaseClient";
+import { HouseholdCard } from "./HouseholdCard";
 import {
   X,
   User,
@@ -162,6 +163,8 @@ export type ProfileSheetProps = {
   userEmail: string | null;
   notificationPermission: NotificationPermission;
   onRequestNotificationPermission: () => Promise<void>;
+  pushActive?: boolean;
+  onHouseholdChanged?: () => void;
   onLogout: () => Promise<void>;
 };
 
@@ -171,6 +174,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   userEmail,
   notificationPermission,
   onRequestNotificationPermission,
+  pushActive = false,
+  onHouseholdChanged,
   onLogout,
 }) => {
   const [tab, setTab] = useState<"profilo" | "preferenze">("profilo");
@@ -202,10 +207,11 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const notifLabel = useMemo(() => {
-    if (notificationPermission === "granted") return "Attive";
+    if (pushActive) return "Attive su questo dispositivo";
+    if (notificationPermission === "granted") return "Permesso dato, da completare";
     if (notificationPermission === "denied") return "Bloccate";
     return "Non attive";
-  }, [notificationPermission]);
+  }, [notificationPermission, pushActive]);
 
   const loadPreferences = async () => {
     try {
@@ -988,9 +994,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                 )}
               </div>
 
+              <HouseholdCard userEmail={userEmail} onChanged={onHouseholdChanged} />
+
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  {notificationPermission === "granted" ? (
+                  {pushActive ? (
                     <Bell size={16} className="text-emerald-600" />
                   ) : (
                     <BellOff size={16} className="text-gray-400" />
@@ -1008,14 +1016,18 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     type="button"
                     onClick={onRequestNotificationPermission}
                     className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${
-                      notificationPermission === "granted"
+                      pushActive
                         ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                         : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                     }`}
                     title={notificationPermission === "denied" ? "Sbloccala dalle impostazioni del browser" : "Attiva notifiche"}
                   >
-                    {notificationPermission === "granted" ? "Attive" : "Attiva"}
+                    {pushActive ? "Attive" : "Attiva"}
                   </button>
+                </div>
+
+                <div className="mt-3 text-xs text-gray-500">
+                  Ogni mattina ti avviso se qualcosa scade entro 2 giorni, anche ad app chiusa.
                 </div>
 
                 {notificationPermission === "denied" && (

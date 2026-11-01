@@ -10,12 +10,27 @@ import { ProfileSheet } from "./components/ProfileSheet";
 import { RecipeBookView } from "./components/RecipeBookView";
 import { HomeView } from "./components/HomeView";
 import { fetchCredits } from "./services/api";
+import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
+import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
+import { dateInDays, nameMatchScore } from "./foodGuide";
 
 const normalizeShoppingKey = (name: string, unit?: string | null) =>
   `${name.trim().toLowerCase()}__${(unit ?? "").trim().toLowerCase()}`;
 
 const App = () => {
-  const [view, setView] = useState<ViewState>("home");
+  // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
+  const [view, setView] = useState<ViewState>(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("view");
+      if (v === "chef" || v === "pantry" || v === "shopping" || v === "recipeBook") {
+        window.history.replaceState(null, "", window.location.pathname);
+        return v;
+      }
+    } catch {
+      /* ignora */
+    }
+    return "home";
+  });
   const [credits, setCredits] = useState<number | null>(null);
   const [openRecipeId, setOpenRecipeId] = useState<string | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
@@ -24,6 +39,8 @@ const App = () => {
     useState<NotificationPermission>("default");
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const [pushActive, setPushActive] = useState(false);
+  const [statsVersion, setStatsVersion] = useState(0);
 
   // ✅ Supabase session
   const [session, setSession] = useState<any>(null);
@@ -58,14 +75,28 @@ const App = () => {
     }
   }, []);
 
+  // Famiglia: la crea al primo accesso; poi carica dispensa e spesa (condivise)
   useEffect(() => {
     if (!session) return;
-    loadShoppingFromSupabase();
+    const name = displayNameFromEmail(session.user?.email);
+    ensureHousehold(name).finally(() => {
+      loadPantryFromSupabase();
+      loadShoppingFromSupabase();
+    });
+    refreshPushSubscription().then(setPushActive);
   }, [session]);
 
+  // Quando si torna sull'app ricarica: un familiare potrebbe aver cambiato qualcosa
   useEffect(() => {
     if (!session) return;
-    loadPantryFromSupabase();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadPantryFromSupabase();
+        loadShoppingFromSupabase();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [session]);
 
   // Crediti EcoChef mostrati nella schermata Oggi
@@ -76,34 +107,33 @@ const App = () => {
     });
   }, [session, view]);
 
+  // Avviso locale solo dove le notifiche push non esistono
   const checkExpirationsAndNotify = () => {
+    if (pushActive || isPushSupported()) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
-    const lastNotifiedDate = localStorage.getItem("eco-last-notification-date");
-
+    let lastNotifiedDate: string | null = null;
+    try {
+      lastNotifiedDate = localStorage.getItem("eco-last-notification-date");
+    } catch {
+      /* storage non disponibile */
+    }
     if (lastNotifiedDate === todayStr) return;
 
     const expiringItems = pantryItems.filter((item) => {
       if (!item.expiryDate) return false;
-      const expiry = new Date(item.expiryDate);
-      const diffTime = expiry.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 3;
+      const diffDays = Math.ceil((new Date(item.expiryDate).getTime() - now.getTime()) / 86_400_000);
+      return diffDays >= 0 && diffDays <= 2;
     });
 
     if (expiringItems.length > 0) {
-      const itemNames = expiringItems
-        .map((i) => i.name)
-        .slice(0, 2)
-        .join(", ");
+      const itemNames = expiringItems.map((i) => i.name).slice(0, 2).join(", ");
       const suffix = expiringItems.length > 2 ? ` e altri ${expiringItems.length - 2}` : "";
-      const bodyText = `Hai ${expiringItems.length} prodotti in scadenza: ${itemNames}${suffix}. Cucinali subito con EcoChef!`;
-
       try {
-        new Notification("EcoDispensa - Anti Spreco ⚠️", {
-          body: bodyText,
+        new Notification("EcoDispensa", {
+          body: `Da usare presto: ${itemNames}${suffix}. Apri EcoChef per un'idea!`,
           icon: "/icons/icon-192.png",
           tag: "expiry-notification",
         });
@@ -118,19 +148,23 @@ const App = () => {
     if (notificationPermission === "granted" && pantryItems.length > 0) {
       checkExpirationsAndNotify();
     }
-  }, [pantryItems, notificationPermission]);
+  }, [pantryItems, notificationPermission, pushActive]);
 
   const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      alert("Il tuo browser non supporta le notifiche.");
+    const result = await enablePush();
+    if ("Notification" in window) setNotificationPermission(Notification.permission);
+    if (result.ok === true) {
+      setPushActive(true);
       return;
     }
-
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-
-    if (permission === "granted") {
-      checkExpirationsAndNotify();
+    if (result.ok === false) {
+      // Dove le push non esistono resta l'avviso all'apertura dell'app
+      if (result.reason === "unsupported" && "Notification" in window) {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        if (permission === "granted") return;
+      }
+      alert(PUSH_MESSAGES[result.reason]);
     }
   };
 
@@ -176,8 +210,7 @@ const App = () => {
     const { error } = await supabase
       .from("pantry_items")
       .update(payload)
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("id", id);
 
     if (error) {
       console.error("Supabase pantry update error:", error);
@@ -185,46 +218,117 @@ const App = () => {
     }
   };
 
-  const removePantryItem = async (id: string) => {
-    setPantryItems((prev) => prev.filter((item) => item.id !== id));
+  /**
+   * Toglie un prodotto dalla dispensa.
+   * outcome: "consumed" (usato) o "wasted" (buttato) finiscono nelle statistiche; null = eliminato per errore.
+   */
+  const removePantryItem = async (id: string, outcome: Outcome | null = null) => {
+    const item = pantryItems.find((i) => i.id === id);
+    setPantryItems((prev) => prev.filter((i) => i.id !== id));
 
-    const { error } = await supabase
-      .from("pantry_items")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+    const { error } = await supabase.from("pantry_items").delete().eq("id", id);
 
     if (error) {
       console.error("Supabase pantry delete error:", error);
       await loadPantryFromSupabase();
+      return;
+    }
+    if (item && outcome) {
+      await logPantryEvents([
+        { name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, outcome },
+      ]);
+      setStatsVersion((v) => v + 1);
     }
   };
 
-  const consumePantryItems = (usedIngredients: IngredientUsage[]) => {
-    setPantryItems((prevItems) => {
-      return prevItems.map((pantryItem) => {
-        const usage = usedIngredients.find(
-          (u) =>
-            u.name.toLowerCase().includes(pantryItem.name.toLowerCase()) ||
-            pantryItem.name.toLowerCase().includes(u.name.toLowerCase())
-        );
+  /** Converte una quantità nell'unità del prodotto in dispensa (null se le unità non sono confrontabili). */
+  const convertQuantity = (qty: number, from: string, to: string): number | null => {
+    const f = (from || "").trim().toLowerCase();
+    const t = (to || "").trim().toLowerCase();
+    if (!f || f === t) return qty;
+    if (t === "kg" && f === "g") return qty / 1000;
+    if (t === "g" && f === "kg") return qty * 1000;
+    if (t === "l" && f === "ml") return qty / 1000;
+    if (t === "ml" && f === "l") return qty * 1000;
+    if (t === "l" && f === "cl") return qty / 100;
+    return null;
+  };
 
-        if (usage) {
-          let amountToSubtract = usage.quantity;
-
-          if (usage.unit !== pantryItem.unit) {
-            if (pantryItem.unit === "kg" && usage.unit === "g") amountToSubtract = usage.quantity / 1000;
-            else if (pantryItem.unit === "g" && usage.unit === "kg") amountToSubtract = usage.quantity * 1000;
-            else if (pantryItem.unit === "l" && usage.unit === "ml") amountToSubtract = usage.quantity / 1000;
-            else if (pantryItem.unit === "ml" && usage.unit === "l") amountToSubtract = usage.quantity * 1000;
-          }
-
-          const newQuantity = Math.max(0, parseFloat((pantryItem.quantity - amountToSubtract).toFixed(2)));
-          return { ...pantryItem, quantity: newQuantity };
-        }
-        return pantryItem;
-      });
+  /**
+   * "L'ho cucinato!": scala gli ingredienti usati dalla dispensa e lo salva davvero.
+   * Usa per primo il prodotto che scade prima; i prodotti finiti vengono tolti.
+   */
+  const consumePantryItems = async (usedIngredients: IngredientUsage[]) => {
+    const byExpiry = [...pantryItems].sort((a, b) => {
+      if (!a.expiryDate) return 1;
+      if (!b.expiryDate) return -1;
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
     });
+
+    const changes = new Map<string, { item: PantryItem; newQty: number; used: number }>();
+
+    for (const usage of usedIngredients) {
+      let best: PantryItem | null = null;
+      let bestScore = 1;
+      for (const p of byExpiry) {
+        if (changes.get(p.id)?.newQty === 0) continue;
+        const score = nameMatchScore(usage.name, p.name);
+        if (score > bestScore) {
+          best = p;
+          bestScore = score;
+        }
+      }
+      if (!best) continue;
+
+      const current = changes.get(best.id)?.newQty ?? best.quantity;
+      const amount = convertQuantity(Number(usage.quantity) || 0, usage.unit, best.unit);
+      // unità non confrontabili (es. "2 pz" contro "500 g"): non tocco la quantità
+      if (amount === null || amount <= 0) {
+        if (!changes.has(best.id)) changes.set(best.id, { item: best, newQty: current, used: 0 });
+        continue;
+      }
+      const newQty = Math.max(0, parseFloat((current - amount).toFixed(3)));
+      changes.set(best.id, { item: best, newQty, used: (changes.get(best.id)?.used ?? 0) + (current - newQty) });
+    }
+
+    if (changes.size === 0) return;
+
+    const finished = [...changes.values()].filter((c) => c.newQty <= 0);
+    const reduced = [...changes.values()].filter((c) => c.newQty > 0 && c.used > 0);
+
+    setPantryItems((prev) =>
+      prev
+        .filter((p) => !finished.some((f) => f.item.id === p.id))
+        .map((p) => {
+          const r = reduced.find((c) => c.item.id === p.id);
+          return r ? { ...p, quantity: r.newQty } : p;
+        })
+    );
+
+    let failed = false;
+    if (finished.length) {
+      const { error } = await supabase.from("pantry_items").delete().in("id", finished.map((f) => f.item.id));
+      if (error) failed = true;
+    }
+    for (const r of reduced) {
+      const { error } = await supabase.from("pantry_items").update({ quantity: r.newQty }).eq("id", r.item.id);
+      if (error) failed = true;
+    }
+    if (failed) {
+      console.error("Aggiornamento dispensa dopo cottura non riuscito");
+      await loadPantryFromSupabase();
+    }
+
+    await logPantryEvents(
+      [...changes.values()].map((c) => ({
+        name: c.item.name,
+        category: c.item.category,
+        quantity: c.used || null,
+        unit: c.item.unit,
+        outcome: "consumed" as const,
+      }))
+    );
+    setStatsVersion((v) => v + 1);
   };
 
   const addShoppingItem = async (
@@ -270,7 +374,6 @@ const App = () => {
     const { data: existingRows, error: existingError } = await supabase
       .from("shopping_items")
       .select("id, name, category, is_checked, quantity, unit")
-      .eq("user_id", session.user.id)
       .eq("is_checked", false);
 
     if (existingError) {
@@ -351,8 +454,7 @@ const App = () => {
       const { error } = await supabase
         .from("shopping_items")
         .update({ quantity: update.quantity })
-        .eq("id", update.id)
-        .eq("user_id", session.user.id);
+        .eq("id", update.id);
 
       if (error) {
         console.error("Supabase bulk update error:", error);
@@ -385,8 +487,7 @@ const App = () => {
     const { error } = await supabase
       .from("shopping_items")
       .update({ is_checked: nextChecked })
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("id", id);
 
     if (error) {
       console.error("Supabase toggle error:", error);
@@ -400,7 +501,6 @@ const App = () => {
     const { error } = await supabase
       .from("shopping_items")
       .delete()
-      .eq("user_id", session.user.id)
       .eq("is_checked", true);
 
     if (error) {
@@ -434,8 +534,7 @@ const App = () => {
     const { error: delErr } = await supabase
       .from("shopping_items")
       .delete()
-      .in("id", shoppingIdsToRemove)
-      .eq("user_id", session.user.id);
+      .in("id", shoppingIdsToRemove);
 
     if (delErr) {
       console.error("Supabase shopping delete (move) error:", delErr);
@@ -542,6 +641,9 @@ const App = () => {
               setOpenRecipeId(id);
               goTo("recipeBook");
             }}
+            onResolveExpired={removePantryItem}
+            onPostpone={(id, days) => updatePantryItem(id, { expiryDate: dateInDays(days) })}
+            statsVersion={statsVersion}
           />
         )}
         {view === "pantry" && (
@@ -550,6 +652,7 @@ const App = () => {
         {view === "shopping" && (
           <ShoppingListView
             items={shoppingItems}
+            pantryItems={pantryItems}
             onAdd={addShoppingItem}
             onToggle={toggleShoppingItem}
             onClearCompleted={clearCompletedShopping}
@@ -567,6 +670,7 @@ const App = () => {
         {view === "recipeBook" && (
           <RecipeBookView
             onCreditsChange={setCredits}
+            onCook={consumePantryItems}
             initialRecipeId={openRecipeId}
             onInitialRecipeShown={() => setOpenRecipeId(null)}
           />
@@ -621,6 +725,12 @@ const App = () => {
         userEmail={session?.user?.email ?? null}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={requestNotificationPermission}
+        pushActive={pushActive}
+        onHouseholdChanged={() => {
+          loadPantryFromSupabase();
+          loadShoppingFromSupabase();
+          setStatsVersion((v) => v + 1);
+        }}
         onLogout={handleLogout}
       />
     </div>
