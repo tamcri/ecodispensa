@@ -144,6 +144,20 @@ export async function buildShareImage(opts: {
   }
 }
 
+/**
+ * Indirizzo pubblico dell'app per i link condivisi.
+ * Le anteprime di Vercel sono protette da login: un link creato da lì non funzionerebbe
+ * per chi lo riceve, quindi si usa sempre l'indirizzo di produzione.
+ */
+export function publicAppUrl(): string {
+  const configured = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const host = window.location.hostname;
+  const isVercelInternal = host.endsWith(".vercel.app") && host !== "ecodispensa.vercel.app";
+  if (isVercelInternal || host === "localhost" || host === "127.0.0.1") return "https://ecodispensa.vercel.app";
+  return window.location.origin;
+}
+
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "error";
 
 /** Condivide la ricetta (o lancia la sfida) con il menu di condivisione del telefono. */
@@ -158,7 +172,7 @@ export async function shareRecipe(opts: {
   const token = await getRecipeShareToken(opts.recipeId);
   if (!token) return "error";
 
-  const url = `${window.location.origin}/?ricetta=${token}${opts.challenge ? "&sfida=1" : ""}`;
+  const url = `${publicAppUrl()}/?ricetta=${token}${opts.challenge ? "&sfida=1" : ""}`;
   const casa = opts.used > 0 ? ` con ${opts.used === 1 ? "un prodotto" : `${opts.used} prodotti`} che avevo già in casa` : "";
   const text = opts.challenge
     ? `Ti sfido a rifare "${opts.title}"! Io l'ho cucinata${casa}. Accetti?`
