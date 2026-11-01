@@ -51,3 +51,9 @@ Variabile opzionale sul server: `OPENAI_VISION_MODEL` (default `OPENAI_MODEL` o 
 - **Codice a barre**: lettura con il `BarcodeDetector` del browser o, dove manca (iPhone), con `barcode-detector` (WebAssembly). Il prodotto viene cercato su Open Food Facts tramite `api/product.ts` (GET `?code=`).
 
 Nota: il piano Vercel gratuito accetta al massimo 12 funzioni in `api/` (i file in `api/_lib/` non contano).
+
+## Scansione nella Spesa e percorso della ricetta
+
+- **Scansione nella Spesa**: se il prodotto è in lista viene messo nel carrello; se è già in dispensa compare "Ce l'hai già" con quantità e scadenza; altrimenti finisce nel carrello. Il codice a barre viene salvato su `pantry_items.barcode` e `shopping_items.barcode` per riconoscerlo con certezza la volta dopo.
+- **Ricetta**: "Pensi di prepararla?" → "In programma" (con i mancanti in lista spesa) → "L'ho cucinato!" → festa con prodotti salvati, voto (1-5), foto del piatto, condividi o sfida un amico. Campi in `recipes_saved`: `status`, `rating`, `cooked_at`, `saved_items_count`, `share_token`.
+- **Link condivisi**: `/?ricetta=TOKEN` (con `&sfida=1` per la sfida) apre la ricetta anche senza account (`get_shared_recipe`); "Accetto" la salva nel Ricettario (`accept_shared_recipe`). L'immagine da condividere è generata nel browser (`services/share.ts`).

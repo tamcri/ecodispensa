@@ -54,7 +54,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   useEffect(() => {
     fetchSavedRecipes()
-      .then((r) => setRecipes(r.slice(0, 6)))
+      // prima quelle in programma: sono le prossime da cucinare
+      .then((r) => setRecipes([...r].sort((a, b) => Number(b.status === "planned") - Number(a.status === "planned")).slice(0, 6)))
       .catch(() => setRecipes([]));
   }, []);
 
@@ -301,7 +302,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
       )}
 
       <div className="flex items-baseline justify-between">
-        <h3 className="font-display text-xl font-bold text-ink">Dal tuo ricettario</h3>
+        <h3 className="font-display text-xl font-bold text-ink">
+          {recipes?.some((r) => r.status === "planned") ? "Da cucinare" : "Dal tuo ricettario"}
+        </h3>
         <button type="button" onClick={() => onNavigate("recipeBook")} className="flex items-center text-[13px] font-semibold text-emerald-600">
           Tutte <ChevronRight size={16} />
         </button>
@@ -338,12 +341,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {r.image_url ? (
                 <img src={r.image_url} alt="" className="h-[100px] w-full object-cover" loading="lazy" />
               ) : (
-                <span className={`flex h-[100px] items-end px-4 pb-2 font-display text-5xl font-extrabold text-ink/20 ${tintFor(r.title)}`}>
-                  {getInitial(r.title)}
-                </span>
+                <span className={`h-2 w-full ${tintFor(r.title)}`} aria-hidden="true" />
               )}
-              <span className="flex flex-col gap-1 p-3.5">
-                <span className="line-clamp-2 font-display text-[17px] font-bold leading-tight text-ink">{r.title}</span>
+              <span className="flex flex-1 flex-col gap-1 p-3.5">
+                {r.status === "planned" && (
+                  <span className="mb-0.5 self-start rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-[#155A34]">In programma</span>
+                )}
+                <span className="line-clamp-3 font-display text-[17px] font-bold leading-tight text-ink">{r.title}</span>
                 <span className="text-xs text-muted">{[r.time, r.difficulty].filter(Boolean).join(" · ")}</span>
               </span>
             </button>

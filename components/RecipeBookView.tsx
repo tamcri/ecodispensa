@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Play, Trash2, Utensils } from "lucide-react";
+import { Play, Star, Trash2 } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
-import { fetchSavedRecipes, SavedRecipe } from "../services/api";
-import { ScreenHeader, Sheet, Spinner } from "./ui";
-import { RecipePhoto, tintFor } from "./RecipePhoto";
-import { RecipeContent } from "./ChefView";
-import { IngredientUsage, Recipe } from "../types";
+import { fetchSavedRecipes, RecipeMeta, SavedRecipe } from "../services/api";
+import { ScreenHeader, Spinner } from "./ui";
+import { tintFor } from "./RecipePhoto";
+import { RecipeDetailSheet } from "./RecipeDetailSheet";
+import { Category, CookResult, IngredientUsage, Recipe } from "../types";
 
-type SourceFilter = "all" | "suggest" | "search" | "meal_plan";
+type Filter = "all" | "planned" | "cooked" | "suggest" | "search" | "meal_plan" | "shared";
 
-const FILTERS: Array<[SourceFilter, string]> = [
+const FILTERS: Array<[Filter, string]> = [
   ["all", "Tutte"],
+  ["planned", "Da cucinare"],
+  ["cooked", "Cucinate"],
   ["suggest", "Dalla dispensa"],
   ["search", "Cercate"],
   ["meal_plan", "Dai menu"],
+  ["shared", "Sfide e regali"],
 ];
 
 function toRecipe(r: SavedRecipe): Recipe {
@@ -29,25 +32,53 @@ function toRecipe(r: SavedRecipe): Recipe {
   };
 }
 
-const meta = (r: SavedRecipe) => [r.time, r.difficulty].filter(Boolean).join(" · ");
+const metaLine = (r: SavedRecipe) => [r.time, r.difficulty].filter(Boolean).join(" · ");
+
+const metaOf = (r: SavedRecipe): RecipeMeta => ({
+  imageUrl: r.image_url ?? null,
+  status: (r.status as RecipeMeta["status"]) ?? "saved",
+  rating: r.rating ?? null,
+});
+
+const StatusBadge = ({ r }: { r: SavedRecipe }) => {
+  if (r.status === "planned") {
+    return <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-[#155A34]">In programma</span>;
+  }
+  if (r.status === "cooked") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 text-[11px] font-bold text-lemon">
+        {r.rating ? (
+          <>
+            <Star size={11} className="fill-lemon" /> {r.rating}
+          </>
+        ) : (
+          "Cucinata"
+        )}
+      </span>
+    );
+  }
+  return null;
+};
 
 export function RecipeBookView({
-  onCreditsChange,
   onCook,
+  onAddShoppingItems,
   initialRecipeId,
   onInitialRecipeShown,
 }: {
   onCreditsChange?: (credits: number) => void;
-  onCook?: (ingredients: IngredientUsage[]) => void;
+  onCook?: (ingredients: IngredientUsage[]) => Promise<CookResult | void> | void;
+  onAddShoppingItems?: (
+    items: Array<{ name: string; category: Category; quantity?: number | null; unit?: string | null }>
+  ) => Promise<void>;
   initialRecipeId?: string | null;
   onInitialRecipeShown?: () => void;
 }) {
   const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<SourceFilter>("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [cookedId, setCookedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSavedRecipes()
@@ -58,20 +89,54 @@ export function RecipeBookView({
 
   useEffect(() => {
     if (!loading && initialRecipeId) {
-      setSelectedId(initialRecipeId);
+      // una ricetta appena accettata potrebbe non essere ancora in lista
+      if (!recipes.some((r) => r.id === initialRecipeId)) {
+        fetchSavedRecipes()
+          .then((all) => {
+            setRecipes(all);
+            setSelectedId(initialRecipeId);
+          })
+          .catch(() => undefined);
+      } else {
+        setSelectedId(initialRecipeId);
+      }
       onInitialRecipeShown?.();
     }
   }, [loading, initialRecipeId]);
 
-  const visible = useMemo(
-    () => (filter === "all" ? recipes : recipes.filter((r) => r.source === filter)),
-    [recipes, filter]
+  // le ricette in programma vengono prima: sono quelle da fare
+  const sorted = useMemo(
+    () => [...recipes].sort((a, b) => Number(b.status === "planned") - Number(a.status === "planned")),
+    [recipes]
   );
+
+  const visible = useMemo(() => {
+    if (filter === "all") return sorted;
+    if (filter === "planned" || filter === "cooked") return sorted.filter((r) => r.status === filter);
+    return sorted.filter((r) => r.source === filter);
+  }, [sorted, filter]);
+
+  const available = FILTERS.filter(([id]) => {
+    if (id === "all") return true;
+    if (id === "planned" || id === "cooked") return recipes.some((r) => r.status === id);
+    return recipes.some((r) => r.source === id);
+  });
 
   const selected = recipes.find((r) => r.id === selectedId) ?? null;
 
-  const setImage = (id: string, url: string) =>
-    setRecipes((prev) => prev.map((r) => (r.id === id ? { ...r, image_url: url } : r)));
+  const applyMeta = (id: string, p: Partial<RecipeMeta>) =>
+    setRecipes((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              ...(p.imageUrl !== undefined ? { image_url: p.imageUrl } : {}),
+              ...(p.status !== undefined ? { status: p.status } : {}),
+              ...(p.rating !== undefined ? { rating: p.rating } : {}),
+            }
+          : r
+      )
+    );
 
   const closeDetail = () => {
     setSelectedId(null);
@@ -92,17 +157,24 @@ export function RecipeBookView({
   };
 
   const [hero, ...rest] = visible;
+  const plannedCount = recipes.filter((r) => r.status === "planned").length;
 
   return (
     <div className="flex flex-col gap-4">
       <ScreenHeader
         title="Ricettario"
-        subtitle={loading ? " " : recipes.length === 1 ? "1 ricetta salvata" : `${recipes.length} ricette salvate`}
+        subtitle={
+          loading
+            ? " "
+            : `${recipes.length === 1 ? "1 ricetta salvata" : `${recipes.length} ricette salvate`}${
+                plannedCount ? ` · ${plannedCount} da cucinare` : ""
+              }`
+        }
       />
 
       {recipes.length > 0 && (
         <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar">
-          {FILTERS.map(([id, label]) => (
+          {available.map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -134,17 +206,13 @@ export function RecipeBookView({
               onClick={() => setSelectedId(hero.id)}
               className="flex flex-col gap-2.5 rounded-4xl bg-forest p-2.5 pb-5 text-left text-white"
             >
-              {hero.image_url ? (
-                <img src={hero.image_url} alt="" className="h-40 w-full rounded-3xl object-cover" />
-              ) : (
-                <span className={`flex h-32 items-end rounded-3xl px-4 pb-2 font-display text-6xl font-extrabold text-ink/20 ${tintFor(hero.title)}`}>
-                  {(hero.title.trim()[0] ?? "?").toUpperCase()}
+              {hero.image_url && <img src={hero.image_url} alt="" className="h-40 w-full rounded-3xl object-cover" />}
+              <span className={`flex flex-col gap-2 px-2.5 ${hero.image_url ? "" : "pt-2.5"}`}>
+                <span className="self-start rounded-full bg-lemon px-2.5 py-1 text-xs font-bold text-ink">
+                  {hero.status === "planned" ? "Da cucinare" : hero.status === "cooked" ? "Cucinata da te" : "Ultima salvata"}
                 </span>
-              )}
-              <span className="flex flex-col gap-2 px-2.5">
-                <span className="self-start rounded-full bg-lemon px-2.5 py-1 text-xs font-bold text-ink">Ultima salvata</span>
                 <span className="font-display text-[26px] font-extrabold leading-[1.1]">{hero.title}</span>
-                <span className="text-[13px] text-[#BFE3CB]">{meta(hero)}</span>
+                <span className="text-[13px] text-[#BFE3CB]">{metaLine(hero)}</span>
                 <span className="mt-1 inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-white px-4 text-sm font-bold text-ink">
                   <Play size={16} fill="currentColor" /> Apri la ricetta
                 </span>
@@ -163,13 +231,14 @@ export function RecipeBookView({
                 {r.image_url ? (
                   <img src={r.image_url} alt="" className="h-24 w-full object-cover" loading="lazy" />
                 ) : (
-                  <span className={`flex h-24 items-end px-3 pb-1.5 font-display text-[44px] font-extrabold leading-none text-ink/20 ${tintFor(r.title)}`}>
-                    {(r.title.trim()[0] ?? "?").toUpperCase()}
-                  </span>
+                  <span className={`h-2 w-full ${tintFor(r.title)}`} aria-hidden="true" />
                 )}
-                <span className="flex flex-col gap-1.5 p-3">
-                  <span className="line-clamp-2 text-[15px] font-bold leading-tight text-ink">{r.title}</span>
-                  <span className="text-xs text-muted">{meta(r)}</span>
+                <span className="flex flex-1 flex-col gap-1.5 p-3">
+                  <span className="line-clamp-3 text-[15px] font-bold leading-tight text-ink">{r.title}</span>
+                  <span className="text-xs text-muted">{metaLine(r)}</span>
+                  <span className="mt-auto pt-1">
+                    <StatusBadge r={r} />
+                  </span>
                 </span>
               </button>
             ))}
@@ -177,76 +246,46 @@ export function RecipeBookView({
         </>
       )}
 
-      <Sheet
+      <RecipeDetailSheet
         open={!!selected}
         onClose={closeDetail}
-        title={null}
-        footer={
-          selected ? (
-            confirmDelete ? (
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="h-[52px] flex-1 rounded-2xl bg-white text-[15px] font-bold text-ink"
-                >
-                  Annulla
-                </button>
-                <button
-                  type="button"
-                  onClick={deleteSelected}
-                  className="h-[52px] flex-1 rounded-2xl bg-[#C23A4E] text-[15px] font-bold text-white"
-                >
-                  Elimina ricetta
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  aria-label="Elimina dal ricettario"
-                  className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-[#FBE0E3] text-[#9B2335]"
-                >
-                  <Trash2 size={20} />
-                </button>
-                {onCook &&
-                  (cookedId === selected.id ? (
-                    <div className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink animate-pop">
-                      <CheckCircle2 size={20} /> Dispensa aggiornata
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onCook(toRecipe(selected).ingredientsUsed);
-                        setCookedId(selected.id);
-                      }}
-                      className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
-                    >
-                      <Utensils size={20} /> L'ho cucinato!
-                    </button>
-                  ))}
-              </div>
-            )
-          ) : null
+        recipe={selected ? toRecipe(selected) : null}
+        recipeId={selected?.id ?? null}
+        meta={selected ? metaOf(selected) : { imageUrl: null, status: "saved", rating: null }}
+        onMetaChange={(p) => selected && applyMeta(selected.id, p)}
+        onCook={onCook}
+        onAddShoppingItems={onAddShoppingItems}
+        footerLeft={
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            aria-label="Elimina dal ricettario"
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-[#FBE0E3] text-[#9B2335]"
+          >
+            <Trash2 size={20} />
+          </button>
         }
-      >
-        {selected && (
-          <div className="flex flex-col gap-5">
-            <RecipePhoto
-              recipeId={selected.id}
-              imageUrl={selected.image_url}
-              title={selected.title}
-              onChange={(url) => setImage(selected.id, url)}
-              onCreditsChange={onCreditsChange}
-              className="h-56"
-            />
-            <h2 className="font-display text-[26px] font-extrabold leading-tight text-ink">{selected.title}</h2>
-            <RecipeContent recipe={toRecipe(selected)} />
-          </div>
-        )}
-      </Sheet>
+        footerOverride={
+          confirmDelete ? (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="h-[52px] flex-1 rounded-2xl bg-white text-[15px] font-bold text-ink"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={deleteSelected}
+                className="h-[52px] flex-1 rounded-2xl bg-[#C23A4E] text-[15px] font-bold text-white"
+              >
+                Elimina ricetta
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

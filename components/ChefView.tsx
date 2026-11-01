@@ -6,7 +6,9 @@ import {
   MealPlanRequest,
   MealPlanResponse,
   Category,
+  CookResult,
 } from "../types";
+import { RecipeMeta } from "../services/api";
 import { supabase } from "../services/supabaseClient";
 import { MealPlanForm } from "./MealPlanForm";
 import { MealPlanResult } from "./MealPlanResult";
@@ -21,15 +23,15 @@ import {
   CheckCircle2,
   Utensils,
   CalendarDays,
-  Camera,
-  ShoppingCart,
 } from "lucide-react";
 import { CreditsBadge, ScreenHeader, Sheet, Spinner } from "./ui";
-import { RecipePhoto, tintFor } from "./RecipePhoto";
+import { tintFor } from "./RecipePhoto";
+import { RecipeContent } from "./RecipeContent";
+import { RecipeDetailSheet } from "./RecipeDetailSheet";
 
 interface ChefViewProps {
   items: PantryItem[];
-  onCook?: (ingredients: IngredientUsage[]) => void;
+  onCook?: (ingredients: IngredientUsage[]) => Promise<CookResult | void> | void;
   onAddShoppingItems?: (
     items: Array<{
       name: string;
@@ -285,7 +287,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [cookedRecipeTitle, setCookedRecipeTitle] = useState<string | null>(null);
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -305,7 +306,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
 
   // id delle ricette salvate (per indice) e foto dei piatti create in questa sessione
   const [savedIds, setSavedIds] = useState<Record<number, string>>({});
-  const [images, setImages] = useState<Record<string, string>>({});
+  const [metaById, setMetaById] = useState<Record<string, Partial<RecipeMeta>>>({});
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -417,7 +418,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setRecipes([]);
     setMealPlanError(null);
     setSelectedRecipe(null);
-    setCookedRecipeTitle(null);
 
     try {
       const validPantryItems = getValidPantryItems(items);
@@ -475,7 +475,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
         if (id) ids[i] = id;
       }
       setSavedIds(ids);
-      setImages({});
+      setMetaById({});
 
 if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
@@ -516,7 +516,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     setRecipes([]);
     setMealPlanError(null);
     setSelectedRecipe(null);
-    setCookedRecipeTitle(null);
 
     try {
       const validPantryItems = getValidPantryItems(items);
@@ -575,7 +574,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
         if (id) ids[i] = id;
       }
       setSavedIds(ids);
-      setImages({});
+      setMetaById({});
 
 if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
@@ -616,7 +615,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     setError(null);
     setSelectedRecipe(null);
     setShoppingListAdded(false);
-    setCookedRecipeTitle(null);
 
     try {
       const { status, body } = await postMealPlan(payload);
@@ -756,21 +754,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     }
   };
 
-  const handleCookRecipe = (recipe: Recipe) => {
-    if (!onCook) return;
-
-    onCook(recipe.ingredientsUsed);
-    setCookedRecipeTitle(recipe.title);
-
-    setTimeout(() => {
-      setCookedRecipeTitle(null);
-      if (selectedRecipe?.title === recipe.title) {
-        setSelectedRecipe(null);
-      }
-    }, 2000);
-  };
-
-
   const initialMealPlanValues: Partial<MealPlanRequest> | undefined = mealPlanResult
     ? {
         startDate: mealPlanResult.startDate ?? undefined,
@@ -803,14 +786,17 @@ if (typeof recipesResp?.remainingCredits === "number") {
   const TIMES = [10, 15, 20, 25, 30, 40, 60];
   const timeIdx = Math.max(0, TIMES.indexOf(timeMinutes));
 
-  const photoFor = (idx: number) => {
+  const metaFor = (idx: number): RecipeMeta => {
     const id = savedIds[idx];
-    return id ? images[id] ?? null : null;
+    const m = id ? metaById[id] ?? {} : {};
+    return { imageUrl: m.imageUrl ?? null, status: m.status ?? "saved", rating: m.rating ?? null };
   };
 
-  const setPhoto = (idx: number, url: string) => {
+  const photoFor = (idx: number) => metaFor(idx).imageUrl;
+
+  const updateMeta = (idx: number, p: Partial<RecipeMeta>) => {
     const id = savedIds[idx];
-    if (id) setImages((prev) => ({ ...prev, [id]: url }));
+    if (id) setMetaById((prev) => ({ ...prev, [id]: { ...prev[id], ...p } }));
   };
 
   const openRecipe = (recipe: Recipe, idx: number) => {
@@ -1012,50 +998,28 @@ if (typeof recipesResp?.remainingCredits === "number") {
             {mode === "suggest" ? "Le mie proposte" : "Ecco cosa ho trovato"}
           </h3>
           {recipes.map((recipe, idx) => (
-            <RecipeCard key={`${recipe.title}-${idx}`} recipe={recipe} photo={photoFor(idx)} onOpen={() => openRecipe(recipe, idx)} />
+            <RecipeCard
+              key={`${recipe.title}-${idx}`}
+              recipe={recipe}
+              photo={photoFor(idx)}
+              status={metaFor(idx).status}
+              onOpen={() => openRecipe(recipe, idx)}
+            />
           ))}
           <p className="text-center text-xs text-muted">Le ricette sono già salvate nel Ricettario</p>
         </div>
       )}
 
-      <Sheet
+      <RecipeDetailSheet
         open={!!selectedRecipe}
         onClose={closeRecipe}
-        title={null}
-        footer={
-          selectedRecipe ? (
-            cookedRecipeTitle === selectedRecipe.title ? (
-              <CookedConfirmation />
-            ) : (
-              <button
-                onClick={() => handleCookRecipe(selectedRecipe)}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white"
-                type="button"
-              >
-                <Utensils size={20} />
-                L'ho cucinato!
-              </button>
-            )
-          ) : null
-        }
-      >
-        {selectedRecipe && (
-          <div className="flex flex-col gap-5">
-            <RecipePhoto
-              recipeId={selectedIndex !== null ? savedIds[selectedIndex] ?? null : null}
-              imageUrl={selectedIndex !== null ? photoFor(selectedIndex) : null}
-              title={selectedRecipe.title}
-              onChange={(url) => selectedIndex !== null && setPhoto(selectedIndex, url)}
-              onCreditsChange={(c) => setEcoCredits(c)}
-              className="h-56"
-            />
-            <div>
-              <h2 className="font-display text-[26px] font-extrabold leading-tight text-ink">{selectedRecipe.title}</h2>
-            </div>
-            <RecipeContent recipe={selectedRecipe} />
-          </div>
-        )}
-      </Sheet>
+        recipe={selectedRecipe}
+        recipeId={selectedIndex !== null ? savedIds[selectedIndex] ?? null : null}
+        meta={selectedIndex !== null ? metaFor(selectedIndex) : { imageUrl: null, status: "saved", rating: null }}
+        onMetaChange={(p) => selectedIndex !== null && updateMeta(selectedIndex, p)}
+        onCook={onCook}
+        onAddShoppingItems={onAddShoppingItems}
+      />
     </div>
   );
 };
@@ -1099,7 +1063,17 @@ const Stepper = ({
   </div>
 );
 
-const RecipeCard = ({ recipe, photo, onOpen }: { recipe: Recipe; photo: string | null; onOpen: () => void }) => {
+const RecipeCard = ({
+  recipe,
+  photo,
+  status,
+  onOpen,
+}: {
+  recipe: Recipe;
+  photo: string | null;
+  status?: string;
+  onOpen: () => void;
+}) => {
   const used = recipe.ingredientsUsed?.length ?? 0;
   const missing = recipe.missingIngredients?.length ?? 0;
   return (
@@ -1115,9 +1089,12 @@ const RecipeCard = ({ recipe, photo, onOpen }: { recipe: Recipe; photo: string |
           <span className="font-display text-5xl font-extrabold leading-none text-ink/20">
             {(recipe.title.trim()[0] ?? "?").toUpperCase()}
           </span>
-          <span className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-ink">
-            <Camera size={13} /> La tua foto
-          </span>
+          {status === "planned" && (
+            <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-ink">In programma</span>
+          )}
+          {status === "cooked" && (
+            <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold text-lemon">Cucinata</span>
+          )}
         </span>
       )}
       <span className="flex flex-col gap-2 p-4">
@@ -1146,85 +1123,4 @@ const RecipeCard = ({ recipe, photo, onOpen }: { recipe: Recipe; photo: string |
   );
 };
 
-const CookedConfirmation = () => (
-  <div className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink animate-pop">
-    <CheckCircle2 size={22} />
-    Ottimo! Dispensa aggiornata.
-  </div>
-);
 
-export const RecipeContent = ({ recipe }: { recipe: Recipe }) => (
-  <div className="flex flex-col gap-6">
-    <div className="flex flex-wrap gap-2 text-[13px] font-bold text-ink">
-      {recipe.time && (
-        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5">
-          <Clock size={15} /> {recipe.time}
-        </span>
-      )}
-      {recipe.difficulty && (
-        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5">
-          <BarChart size={15} /> {recipe.difficulty}
-        </span>
-      )}
-    </div>
-
-    {recipe.description && <p className="text-[15px] leading-relaxed text-[#3D4840]">{recipe.description}</p>}
-
-    <div className="flex flex-col gap-4">
-      <div>
-        <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700">
-          <CheckCircle2 size={14} /> Dalla tua dispensa
-        </h4>
-        <div className="flex flex-wrap gap-2">
-          {(recipe.ingredientsUsed ?? []).map((ing, i) => (
-            <span key={`${ing.name}-${i}`} className="rounded-xl bg-mint px-3 py-1.5 text-sm text-[#155A34]">
-              {(ing.quantity || ing.unit) && (
-                <span className="font-bold">
-                  {ing.quantity} {ing.unit}{" "}
-                </span>
-              )}
-              {ing.name}
-            </span>
-          ))}
-          {(recipe.ingredientsUsed ?? []).length === 0 && (
-            <span className="text-sm italic text-muted">Nessun ingrediente dalla dispensa.</span>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#C2410C]">
-          <ShoppingCart size={14} /> Da comprare
-        </h4>
-        <div className="flex flex-wrap gap-2">
-          {(recipe.missingIngredients ?? []).map((ing: any, i) => (
-            <span key={`${String(ing)}-${i}`} className="rounded-xl bg-peach px-3 py-1.5 text-sm text-[#8A3B0C]">
-              {typeof ing === "string" ? ing : ing?.name ?? String(ing)}
-            </span>
-          ))}
-          {(recipe.missingIngredients ?? []).length === 0 && (
-            <span className="text-sm italic text-muted">Hai tutto il necessario!</span>
-          )}
-        </div>
-      </div>
-    </div>
-
-    <div>
-      <h4 className="mb-3 font-display text-xl font-bold text-ink">Preparazione</h4>
-      {recipe.steps && recipe.steps.length > 0 ? (
-        <ol className="flex flex-col gap-3">
-          {recipe.steps.map((step, idx) => (
-            <li key={idx} className="flex gap-3 rounded-2xl bg-white p-3.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lemon font-display text-sm font-extrabold text-ink">
-                {idx + 1}
-              </span>
-              <p className="text-[15px] leading-relaxed text-[#3D4840]">{step}</p>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-sm italic text-muted">{recipe.description}</p>
-      )}
-    </div>
-  </div>
-);

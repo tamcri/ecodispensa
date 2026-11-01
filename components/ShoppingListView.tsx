@@ -9,8 +9,15 @@ import { AnalyzingOverlay, CameraCapture, ScreenHeader, Sheet } from './ui';
 interface ShoppingListViewProps {
   items: ShoppingItem[];
   pantryItems?: PantryItem[];
-  onAdd: (name: string, category: Category, quantity?: number | null, unit?: string | null) => void;
+  onAdd: (
+    name: string,
+    category: Category,
+    quantity?: number | null,
+    unit?: string | null,
+    opts?: { barcode?: string | null; checked?: boolean }
+  ) => void;
   onToggle: (id: string) => void;
+  onScanCheck?: (id: string, barcode: string | null) => void;
   onClearCompleted: () => void;
   onMoveToPantry: (itemsToAdd: Omit<PantryItem, 'id' | 'addedAt'>[], shoppingIdsToRemove: string[]) => void;
 }
@@ -23,7 +30,23 @@ type MoveRow = {
   unit: string;
   expiryDate: string;
   estimated: boolean;
+  barcode?: string | null;
 };
+
+type ScanResult =
+  | { kind: 'inList'; item: ShoppingItem }
+  | { kind: 'inCart'; item: ShoppingItem }
+  | {
+      kind: 'inPantry';
+      name: string;
+      category: Category;
+      quantity: number | null;
+      unit: string | null;
+      barcode: string;
+      matches: PantryItem[];
+    }
+  | { kind: 'added'; name: string }
+  | { kind: 'unknown' };
 
 const fieldClass =
   'h-11 w-full rounded-xl border-0 bg-white px-3 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
@@ -33,6 +56,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   pantryItems = [],
   onAdd,
   onToggle,
+  onScanCheck,
   onClearCompleted,
   onMoveToPantry,
 }) => {
@@ -41,6 +65,9 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
 
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  // codice scansionato ma sconosciuto: lo collego al prossimo prodotto scritto a mano
+  const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
 
   const [isMoveOpen, setIsMoveOpen] = useState(false);
   const [moveRows, setMoveRows] = useState<MoveRow[]>([]);
@@ -70,21 +97,63 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName.trim()) return;
-    onAdd(itemName.trim(), selectedCategory);
+    onAdd(itemName.trim(), selectedCategory, null, null, { barcode: pendingBarcode });
     setItemName('');
+    setPendingBarcode(null);
   };
 
+  /**
+   * Scansione nella Spesa:
+   * 1. è in lista → lo metto nel carrello;
+   * 2. è già nel carrello → lo dico;
+   * 3. è già in dispensa → avviso con quantità e scadenza, decidi tu;
+   * 4. altrimenti → lo aggiungo direttamente al carrello.
+   * Il confronto usa prima il codice a barre (esatto), poi il nome.
+   */
   const handleBarcode = async (code: string) => {
     setShowCamera(false);
     setIsAnalyzing(true);
     try {
-      const p = await lookupBarcode(code);
-      if (p) {
-        setItemName(p.name);
-        if (p.category) setSelectedCategory(p.category as Category);
-      } else {
-        alert('Non trovo questo codice a barre: scrivi il nome a mano.');
+      const listByCode = items.find((i) => i.barcode === code);
+      const pantryByCode = pantryItems.filter((p) => p.barcode === code);
+
+      let name = listByCode?.name ?? pantryByCode[0]?.name ?? '';
+      let category: Category = (listByCode?.category ?? pantryByCode[0]?.category ?? Category.PANTRY) as Category;
+      let quantity: number | null = pantryByCode[0]?.quantity ?? null;
+      let unit: string | null = pantryByCode[0]?.unit ?? null;
+
+      if (!name) {
+        const p = await lookupBarcode(code);
+        if (!p) {
+          setPendingBarcode(code);
+          setScanResult({ kind: 'unknown' });
+          return;
+        }
+        name = p.name;
+        category = p.category as Category;
+        quantity = p.quantity;
+        unit = p.unit;
       }
+
+      const listMatch = listByCode ?? items.find((i) => sameProduct(name, i.name));
+      if (listMatch && !listMatch.isChecked) {
+        onScanCheck ? onScanCheck(listMatch.id, code) : onToggle(listMatch.id);
+        setScanResult({ kind: 'inList', item: listMatch });
+        return;
+      }
+      if (listMatch && listMatch.isChecked) {
+        setScanResult({ kind: 'inCart', item: listMatch });
+        return;
+      }
+
+      const matches = pantryByCode.length ? pantryByCode : pantryItems.filter((p) => sameProduct(name, p.name));
+      if (matches.length) {
+        setScanResult({ kind: 'inPantry', name, category, quantity, unit, barcode: code, matches });
+        return;
+      }
+
+      onAdd(name, category, quantity, unit, { barcode: code, checked: true });
+      setScanResult({ kind: 'added', name });
     } finally {
       setIsAnalyzing(false);
     }
@@ -129,8 +198,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         category: item.category,
         quantity: item.quantity != null ? item.quantity : 1,
         unit: item.unit && ['pz', 'kg', 'g', 'l'].includes(item.unit) ? item.unit : 'pz',
-        expiryDate: suggestedExpiry(item.name) ?? '',
-        estimated: !!suggestedExpiry(item.name),
+        // le confezioni scansionate hanno la data stampata: niente stima
+        expiryDate: item.barcode ? '' : suggestedExpiry(item.name) ?? '',
+        estimated: !item.barcode && !!suggestedExpiry(item.name),
+        barcode: item.barcode ?? null,
       }))
     );
     setIsMoveOpen(true);
@@ -150,6 +221,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         quantity: d.quantity,
         unit: d.unit,
         expiryDate: d.expiryDate || undefined,
+        barcode: d.barcode ?? null,
       })),
       moveRows.map((d) => d.originalId)
     );
@@ -319,6 +391,122 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           </button>
         </div>
       )}
+
+      <Sheet
+        open={!!scanResult}
+        onClose={() => setScanResult(null)}
+        title={
+          scanResult?.kind === 'inList'
+            ? 'Trovato in lista'
+            : scanResult?.kind === 'inCart'
+            ? 'È già nel carrello'
+            : scanResult?.kind === 'inPantry'
+            ? 'Ce l\'hai già in dispensa'
+            : scanResult?.kind === 'added'
+            ? 'Aggiunto al carrello'
+            : 'Prodotto non trovato'
+        }
+        footer={
+          scanResult?.kind === 'inPantry' ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setScanResult(null)}
+                className="h-[52px] rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
+              >
+                Non lo compro
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const r = scanResult;
+                  onAdd(r.name, r.category, r.quantity, r.unit, { barcode: r.barcode, checked: true });
+                  setScanResult(null);
+                }}
+                className="h-[52px] rounded-2xl bg-white text-[15px] font-bold text-ink ring-1 ring-black/10"
+              >
+                Mi serve comunque
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {scanResult?.kind === 'inList' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggle(scanResult.item.id);
+                    setScanResult(null);
+                  }}
+                  className="h-[52px] rounded-2xl bg-white text-[15px] font-bold text-ink ring-1 ring-black/10"
+                >
+                  Annulla
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setScanResult(null);
+                  if (scanResult?.kind !== 'unknown') setShowCamera(true);
+                }}
+                className={`h-[52px] rounded-2xl bg-ink text-[15px] font-bold text-white ${scanResult?.kind === 'inList' ? '' : 'col-span-2'}`}
+              >
+                {scanResult?.kind === 'unknown' ? 'Lo scrivo io' : 'Scansiona il prossimo'}
+              </button>
+            </div>
+          )
+        }
+      >
+        {scanResult?.kind === 'inList' && (
+          <p className="text-[15px] text-[#3D4840]">
+            <span className="font-bold text-ink">{scanResult.item.name}</span> era nella tua lista: l'ho messo nel carrello.
+          </p>
+        )}
+        {scanResult?.kind === 'inCart' && (
+          <p className="text-[15px] text-[#3D4840]">
+            <span className="font-bold text-ink">{scanResult.item.name}</span> l'hai già preso: è tra i prodotti nel carrello.
+          </p>
+        )}
+        {scanResult?.kind === 'added' && (
+          <p className="text-[15px] text-[#3D4840]">
+            <span className="font-bold text-ink">{scanResult.name}</span> non era in lista: l'ho aggiunto tra i prodotti nel carrello.
+          </p>
+        )}
+        {scanResult?.kind === 'unknown' && (
+          <p className="text-[15px] text-[#3D4840]">
+            Non trovo questo codice nell'archivio prodotti. Scrivi il nome nel campo "Aggiungi prodotto": la prossima volta lo riconosco io.
+          </p>
+        )}
+        {scanResult?.kind === 'inPantry' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[15px] text-[#3D4840]">
+              Forse non ti serve: di <span className="font-bold text-ink">{scanResult.name}</span> hai già
+            </p>
+            {scanResult.matches.slice(0, 3).map((m) => {
+              const days = daysUntil(m.expiryDate);
+              const urgent = days !== null && days <= 3;
+              return (
+                <div key={m.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-black/5">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-ink">{m.name}</p>
+                    <p className="text-sm text-muted">
+                      {m.quantity} {m.unit}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                      urgent ? 'bg-peach text-[#9A3412]' : 'bg-mint text-[#1E5A35]'
+                    }`}
+                  >
+                    {expiryLabel(days)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
 
       <CameraCapture open={showCamera} onClose={() => setShowCamera(false)} onCapture={handleCapture} onBarcode={handleBarcode} />
       <AnalyzingOverlay open={isAnalyzing} label="Riconosco il prodotto…" />

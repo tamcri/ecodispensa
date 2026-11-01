@@ -2,14 +2,15 @@ import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home } from "lucide-react";
-import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage } from "./types";
+import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { RecipeBookView } from "./components/RecipeBookView";
 import { HomeView } from "./components/HomeView";
-import { fetchCredits } from "./services/api";
+import { acceptSharedRecipe, fetchCredits } from "./services/api";
+import { SharedRecipeView } from "./components/SharedRecipeView";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
 import { dateInDays, nameMatchScore } from "./foodGuide";
@@ -32,6 +33,21 @@ const App = () => {
     return "home";
   });
   const [credits, setCredits] = useState<number | null>(null);
+
+  // Ricetta aperta da un link condiviso: ?ricetta=TOKEN (&sfida=1 se è una sfida)
+  const [shared, setShared] = useState<{ token: string; challenge: boolean } | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("ricetta");
+      if (token && /^[a-z0-9]{12}$/.test(token)) {
+        window.history.replaceState(null, "", window.location.pathname);
+        return { token, challenge: params.get("sfida") === "1" };
+      }
+    } catch {
+      /* ignora */
+    }
+    return null;
+  });
   const [openRecipeId, setOpenRecipeId] = useState<string | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
@@ -85,6 +101,43 @@ const App = () => {
     });
     refreshPushSubscription().then(setPushActive);
   }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    let pending: string | null = null;
+    try {
+      pending = localStorage.getItem("eco-pending-shared-recipe");
+      if (pending) localStorage.removeItem("eco-pending-shared-recipe");
+    } catch {
+      /* storage non disponibile */
+    }
+    if (!pending) return;
+    acceptSharedRecipe(pending).then((id) => {
+      if (id) {
+        setOpenRecipeId(id);
+        setView("recipeBook");
+      }
+    });
+  }, [session]);
+
+  const acceptShared = async () => {
+    if (!shared) return;
+    if (!session) {
+      try {
+        localStorage.setItem("eco-pending-shared-recipe", shared.token);
+      } catch {
+        /* senza storage la ricetta andrà riaperta dal link dopo il login */
+      }
+      setShared(null);
+      return;
+    }
+    const id = await acceptSharedRecipe(shared.token);
+    setShared(null);
+    if (id) {
+      setOpenRecipeId(id);
+      setView("recipeBook");
+    }
+  };
 
   // Quando si torna sull'app ricarica: un familiare potrebbe aver cambiato qualcosa
   useEffect(() => {
@@ -184,6 +237,7 @@ const App = () => {
       unit: item.unit,
       expiry_date: item.expiryDate ?? null,
       category: item.category,
+      barcode: item.barcode ?? null,
     });
 
     if (error) {
@@ -258,7 +312,7 @@ const App = () => {
    * "L'ho cucinato!": scala gli ingredienti usati dalla dispensa e lo salva davvero.
    * Usa per primo il prodotto che scade prima; i prodotti finiti vengono tolti.
    */
-  const consumePantryItems = async (usedIngredients: IngredientUsage[]) => {
+  const consumePantryItems = async (usedIngredients: IngredientUsage[]): Promise<CookResult> => {
     const byExpiry = [...pantryItems].sort((a, b) => {
       if (!a.expiryDate) return 1;
       if (!b.expiryDate) return -1;
@@ -291,7 +345,7 @@ const App = () => {
       changes.set(best.id, { item: best, newQty, used: (changes.get(best.id)?.used ?? 0) + (current - newQty) });
     }
 
-    if (changes.size === 0) return;
+    if (changes.size === 0) return { used: 0, expiring: 0 };
 
     const finished = [...changes.values()].filter((c) => c.newQty <= 0);
     const reduced = [...changes.values()].filter((c) => c.newQty > 0 && c.used > 0);
@@ -329,17 +383,27 @@ const App = () => {
       }))
     );
     setStatsVersion((v) => v + 1);
+
+    const touched = [...changes.values()];
+    const expiring = touched.filter((c) => {
+      if (!c.item.expiryDate) return false;
+      const d = Math.ceil((new Date(c.item.expiryDate).getTime() - Date.now()) / 86_400_000);
+      return d <= 3;
+    }).length;
+    return { used: touched.length, expiring };
   };
 
   const addShoppingItem = async (
     name: string,
     category: Category,
     quantity?: number | null,
-    unit?: string | null
+    unit?: string | null,
+    opts: { barcode?: string | null; checked?: boolean } = {}
   ) => {
     const tempId = crypto.randomUUID();
+    const checked = !!opts.checked;
     setShoppingItems((prev) => [
-      { id: tempId, name, category, isChecked: false, quantity: quantity ?? null, unit: unit ?? null },
+      { id: tempId, name, category, isChecked: checked, quantity: quantity ?? null, unit: unit ?? null, barcode: opts.barcode ?? null },
       ...prev,
     ]);
 
@@ -347,9 +411,10 @@ const App = () => {
       user_id: session.user.id,
       name,
       category,
-      is_checked: false,
+      is_checked: checked,
       quantity: quantity ?? null,
       unit: unit ?? null,
+      barcode: opts.barcode ?? null,
     });
 
     if (error) {
@@ -476,6 +541,20 @@ const App = () => {
     await loadShoppingFromSupabase();
   };
 
+  /** Scansione al supermercato: mette l'articolo nel carrello e ne ricorda il codice a barre. */
+  const checkShoppingFromScan = async (id: string, barcode: string | null) => {
+    setShoppingItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isChecked: true, barcode: barcode ?? item.barcode ?? null } : item))
+    );
+    const payload: any = { is_checked: true };
+    if (barcode) payload.barcode = barcode;
+    const { error } = await supabase.from("shopping_items").update(payload).eq("id", id);
+    if (error) {
+      console.error("Supabase scan check error:", error);
+      await loadShoppingFromSupabase();
+    }
+  };
+
   const toggleShoppingItem = async (id: string) => {
     setShoppingItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, isChecked: !item.isChecked } : item))
@@ -520,6 +599,7 @@ const App = () => {
       unit: item.unit,
       expiry_date: item.expiryDate ?? null,
       category: item.category,
+      barcode: item.barcode ?? null,
     }));
 
     const { error: insErr } = await supabase.from("pantry_items").insert(pantryRows);
@@ -555,7 +635,7 @@ const App = () => {
   const loadPantryFromSupabase = async () => {
     const { data, error } = await supabase
       .from("pantry_items")
-      .select("id, name, quantity, unit, expiry_date, category, added_at")
+      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode")
       .order("added_at", { ascending: false });
 
     if (error) {
@@ -571,6 +651,7 @@ const App = () => {
       expiryDate: r.expiry_date ?? null,
       category: r.category,
       addedAt: r.added_at ? new Date(r.added_at).getTime() : Date.now(),
+      barcode: r.barcode ?? null,
     }));
 
     setPantryItems(items);
@@ -579,7 +660,7 @@ const App = () => {
   const loadShoppingFromSupabase = async () => {
     const { data, error } = await supabase
       .from("shopping_items")
-      .select("id, name, category, is_checked, quantity, unit")
+      .select("id, name, category, is_checked, quantity, unit, barcode")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -595,6 +676,7 @@ const App = () => {
         isChecked: !!r.is_checked,
         quantity: r.quantity != null ? Number(r.quantity) : null,
         unit: r.unit ?? null,
+        barcode: r.barcode ?? null,
       })) || [];
 
     setShoppingItems(items);
@@ -606,6 +688,18 @@ const App = () => {
         <img src="/icons/icon-192.png" alt="" className="h-16 w-16 rounded-2xl animate-pulse" />
         <div className="text-sm font-semibold text-muted">Caricamento…</div>
       </div>
+    );
+  }
+
+  if (shared) {
+    return (
+      <SharedRecipeView
+        token={shared.token}
+        challenge={shared.challenge}
+        loggedIn={!!session}
+        onAccept={acceptShared}
+        onClose={() => setShared(null)}
+      />
     );
   }
 
@@ -653,6 +747,7 @@ const App = () => {
           <ShoppingListView
             items={shoppingItems}
             pantryItems={pantryItems}
+            onScanCheck={checkShoppingFromScan}
             onAdd={addShoppingItem}
             onToggle={toggleShoppingItem}
             onClearCompleted={clearCompletedShopping}
@@ -671,6 +766,7 @@ const App = () => {
           <RecipeBookView
             onCreditsChange={setCredits}
             onCook={consumePantryItems}
+            onAddShoppingItems={addShoppingItemsBulk}
             initialRecipeId={openRecipeId}
             onInitialRecipeShown={() => setOpenRecipeId(null)}
           />

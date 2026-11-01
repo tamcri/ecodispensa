@@ -14,7 +14,14 @@ interface PantryViewProps {
   onRemove: (id: string, outcome?: Outcome | null) => void;
 }
 
-type FormState = { name: string; quantity: number; unit: string; category: Category; expiryDate: string };
+type FormState = {
+  name: string;
+  quantity: number;
+  unit: string;
+  category: Category;
+  expiryDate: string;
+  barcode?: string | null;
+};
 
 const emptyForm = (): FormState => ({
   name: '',
@@ -22,6 +29,7 @@ const emptyForm = (): FormState => ({
   unit: 'pz',
   category: Category.FRUIT_VEG,
   expiryDate: '',
+  barcode: null,
 });
 
 const UNITS = ['pz', 'kg', 'g', 'l'];
@@ -73,7 +81,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
 
   const save = (keepOpen: boolean) => {
     if (!form.name.trim()) return;
-    onAdd({ ...form, name: form.name.trim(), expiryDate: form.expiryDate || undefined });
+    onAdd({ ...form, name: form.name.trim(), expiryDate: form.expiryDate || undefined, barcode: form.barcode ?? null });
     if (keepOpen) {
       setAddedCount((n) => n + 1);
       setForm(emptyForm());
@@ -131,7 +139,8 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       ...next,
       name,
       category: (next.category as Category) || g?.category || base.category,
-      expiryDate: next.expiryDate || suggestedExpiry(name) || '',
+      // i prodotti confezionati hanno la data stampata: niente stima
+      expiryDate: next.expiryDate || (next.barcode ? '' : suggestedExpiry(name)) || '',
     });
     setTouched({ category: !!next.category, expiry: !!next.expiryDate });
     setNotice(message);
@@ -142,14 +151,29 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
     setShowCamera(false);
     setIsAnalyzing('Cerco il prodotto…');
     try {
+      // Già in dispensa con lo stesso codice? Riuso nome e categoria e lo segnalo
+      const same = items.find((i) => i.barcode === code);
+      const already = same
+        ? `Ne hai già ${same.quantity} ${same.unit}${same.expiryDate ? `, ${expiryLabel(daysUntil(same.expiryDate)).toLowerCase()}` : ''}. Salvando ne aggiungi un'altra confezione. `
+        : '';
+      if (same) {
+        prefill(
+          { name: same.name, quantity: same.quantity, unit: same.unit, category: same.category, barcode: code },
+          `${already}Controlla la data di scadenza sulla confezione.`
+        );
+        return;
+      }
       const p = await lookupBarcode(code);
       if (p) {
         prefill(
-          { name: p.name, quantity: p.quantity, unit: p.unit, category: p.category as Category },
+          { name: p.name, quantity: p.quantity, unit: p.unit, category: p.category as Category, barcode: code },
           'Controlla la data di scadenza sulla confezione e inseriscila qui sotto.'
         );
       } else {
-        prefill({}, `Non trovo il codice ${code} nell'archivio prodotti: scrivi il nome a mano o riprova con una foto.`);
+        prefill(
+          { barcode: code },
+          `Non trovo questo codice nell'archivio prodotti: scrivi il nome, la prossima volta lo riconosco io.`
+        );
       }
     } finally {
       setIsAnalyzing(null);

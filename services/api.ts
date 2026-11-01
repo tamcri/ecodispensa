@@ -13,7 +13,69 @@ export type SavedRecipe = {
   created_at: string;
   image_url: string | null;
   recipe_json: any;
+  status?: RecipeStatus | null;
+  rating?: number | null;
+  cooked_at?: string | null;
+  saved_items_count?: number | null;
 };
+
+export type RecipeStatus = "saved" | "planned" | "cooked";
+
+export type RecipeMeta = {
+  imageUrl: string | null;
+  status: RecipeStatus;
+  rating: number | null;
+};
+
+/** Aggiorna stato, voto o foto di una propria ricetta salvata. */
+export async function updateRecipe(
+  id: string,
+  patch: Partial<{ status: RecipeStatus; rating: number | null; cooked_at: string; saved_items_count: number; image_url: string }>
+) {
+  const { error } = await supabase.from("recipes_saved").update(patch).eq("id", id);
+  if (error) console.error("update recipe error:", error);
+  return !error;
+}
+
+/** Link pubblico della ricetta (creato al primo uso). */
+export async function getRecipeShareToken(id: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc("share_recipe", { p_recipe_id: id });
+  if (error) {
+    console.error("share_recipe error:", error);
+    return null;
+  }
+  return data as string;
+}
+
+export type SharedRecipe = {
+  title: string;
+  difficulty: string | null;
+  time: string | null;
+  servings: number | null;
+  description: string | null;
+  ingredients_used: any[];
+  missing_ingredients: any[];
+  steps: string[];
+  image_url: string | null;
+  rating: number | null;
+};
+
+/** Ricetta condivisa con un link (funziona anche senza login). */
+export async function fetchSharedRecipe(token: string): Promise<SharedRecipe | null> {
+  const { data, error } = await supabase.rpc("get_shared_recipe", { p_token: token });
+  if (error || !data) return null;
+  return data as SharedRecipe;
+}
+
+/** Salva nel proprio Ricettario una ricetta ricevuta (accetta la sfida). */
+export async function acceptSharedRecipe(token: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc("accept_shared_recipe", { p_token: token });
+  if (error) {
+    console.error("accept_shared_recipe error:", error);
+    return null;
+  }
+  return data as string;
+}
 
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
