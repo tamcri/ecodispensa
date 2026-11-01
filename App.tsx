@@ -1,25 +1,62 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
-import { useState, useEffect } from "react";
-import { Refrigerator, ShoppingCart, ChefHat, User, BookOpen } from "lucide-react";
-import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage } from "./types";
+import React, { useState, useEffect } from "react";
+import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home } from "lucide-react";
+import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
 import { ProfileSheet } from "./components/ProfileSheet";
 import { RecipeBookView } from "./components/RecipeBookView";
+import { HomeView } from "./components/HomeView";
+import { acceptSharedRecipe, fetchCredits } from "./services/api";
+import { SharedRecipeView } from "./components/SharedRecipeView";
+import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
+import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
+import { dateInDays, nameMatchScore } from "./foodGuide";
 
 const normalizeShoppingKey = (name: string, unit?: string | null) =>
   `${name.trim().toLowerCase()}__${(unit ?? "").trim().toLowerCase()}`;
 
 const App = () => {
-  const [view, setView] = useState<ViewState>("pantry");
+  // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
+  const [view, setView] = useState<ViewState>(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("view");
+      if (v === "chef" || v === "pantry" || v === "shopping" || v === "recipeBook") {
+        window.history.replaceState(null, "", window.location.pathname);
+        return v;
+      }
+    } catch {
+      /* ignora */
+    }
+    return "home";
+  });
+  const [credits, setCredits] = useState<number | null>(null);
+
+  // Ricetta aperta da un link condiviso: ?ricetta=TOKEN (&sfida=1 se è una sfida)
+  const [shared, setShared] = useState<{ token: string; challenge: boolean } | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("ricetta");
+      if (token && /^[a-z0-9]{12}$/.test(token)) {
+        window.history.replaceState(null, "", window.location.pathname);
+        return { token, challenge: params.get("sfida") === "1" };
+      }
+    } catch {
+      /* ignora */
+    }
+    return null;
+  });
+  const [openRecipeId, setOpenRecipeId] = useState<string | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermission>("default");
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const [pushActive, setPushActive] = useState(false);
+  const [statsVersion, setStatsVersion] = useState(0);
 
   // ✅ Supabase session
   const [session, setSession] = useState<any>(null);
@@ -54,45 +91,103 @@ const App = () => {
     }
   }, []);
 
+  // Famiglia: la crea al primo accesso; poi carica dispensa e spesa (condivise)
   useEffect(() => {
     if (!session) return;
-    loadShoppingFromSupabase();
+    const name = displayNameFromEmail(session.user?.email);
+    ensureHousehold(name).finally(() => {
+      loadPantryFromSupabase();
+      loadShoppingFromSupabase();
+    });
+    refreshPushSubscription().then(setPushActive);
   }, [session]);
 
   useEffect(() => {
     if (!session) return;
-    loadPantryFromSupabase();
+    let pending: string | null = null;
+    try {
+      pending = localStorage.getItem("eco-pending-shared-recipe");
+      if (pending) localStorage.removeItem("eco-pending-shared-recipe");
+    } catch {
+      /* storage non disponibile */
+    }
+    if (!pending) return;
+    acceptSharedRecipe(pending).then((id) => {
+      if (id) {
+        setOpenRecipeId(id);
+        setView("recipeBook");
+      }
+    });
   }, [session]);
 
+  const acceptShared = async () => {
+    if (!shared) return;
+    if (!session) {
+      try {
+        localStorage.setItem("eco-pending-shared-recipe", shared.token);
+      } catch {
+        /* senza storage la ricetta andrà riaperta dal link dopo il login */
+      }
+      setShared(null);
+      return;
+    }
+    const id = await acceptSharedRecipe(shared.token);
+    setShared(null);
+    if (id) {
+      setOpenRecipeId(id);
+      setView("recipeBook");
+    }
+  };
+
+  // Quando si torna sull'app ricarica: un familiare potrebbe aver cambiato qualcosa
+  useEffect(() => {
+    if (!session) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadPantryFromSupabase();
+        loadShoppingFromSupabase();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [session]);
+
+  // Crediti EcoChef mostrati nella schermata Oggi
+  useEffect(() => {
+    if (!session || view !== "home") return;
+    fetchCredits().then((c) => {
+      if (c !== null) setCredits(c);
+    });
+  }, [session, view]);
+
+  // Avviso locale solo dove le notifiche push non esistono
   const checkExpirationsAndNotify = () => {
+    if (pushActive || isPushSupported()) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
-    const lastNotifiedDate = localStorage.getItem("eco-last-notification-date");
-
+    let lastNotifiedDate: string | null = null;
+    try {
+      lastNotifiedDate = localStorage.getItem("eco-last-notification-date");
+    } catch {
+      /* storage non disponibile */
+    }
     if (lastNotifiedDate === todayStr) return;
 
     const expiringItems = pantryItems.filter((item) => {
       if (!item.expiryDate) return false;
-      const expiry = new Date(item.expiryDate);
-      const diffTime = expiry.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 3;
+      const diffDays = Math.ceil((new Date(item.expiryDate).getTime() - now.getTime()) / 86_400_000);
+      return diffDays >= 0 && diffDays <= 2;
     });
 
     if (expiringItems.length > 0) {
-      const itemNames = expiringItems
-        .map((i) => i.name)
-        .slice(0, 2)
-        .join(", ");
+      const itemNames = expiringItems.map((i) => i.name).slice(0, 2).join(", ");
       const suffix = expiringItems.length > 2 ? ` e altri ${expiringItems.length - 2}` : "";
-      const bodyText = `Hai ${expiringItems.length} prodotti in scadenza: ${itemNames}${suffix}. Cucinali subito con EcoChef!`;
-
       try {
-        new Notification("EcoDispensa - Anti Spreco ⚠️", {
-          body: bodyText,
-          icon: "/favicon.ico",
+        new Notification("EcoDispensa", {
+          body: `Da usare presto: ${itemNames}${suffix}. Apri EcoChef per un'idea!`,
+          icon: "/icons/icon-192.png",
           tag: "expiry-notification",
         });
         localStorage.setItem("eco-last-notification-date", todayStr);
@@ -106,19 +201,23 @@ const App = () => {
     if (notificationPermission === "granted" && pantryItems.length > 0) {
       checkExpirationsAndNotify();
     }
-  }, [pantryItems, notificationPermission]);
+  }, [pantryItems, notificationPermission, pushActive]);
 
   const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      alert("Il tuo browser non supporta le notifiche.");
+    const result = await enablePush();
+    if ("Notification" in window) setNotificationPermission(Notification.permission);
+    if (result.ok === true) {
+      setPushActive(true);
       return;
     }
-
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-
-    if (permission === "granted") {
-      checkExpirationsAndNotify();
+    if (result.ok === false) {
+      // Dove le push non esistono resta l'avviso all'apertura dell'app
+      if (result.reason === "unsupported" && "Notification" in window) {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        if (permission === "granted") return;
+      }
+      alert(PUSH_MESSAGES[result.reason]);
     }
   };
 
@@ -138,6 +237,7 @@ const App = () => {
       unit: item.unit,
       expiry_date: item.expiryDate ?? null,
       category: item.category,
+      barcode: item.barcode ?? null,
     });
 
     if (error) {
@@ -164,8 +264,7 @@ const App = () => {
     const { error } = await supabase
       .from("pantry_items")
       .update(payload)
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("id", id);
 
     if (error) {
       console.error("Supabase pantry update error:", error);
@@ -173,57 +272,138 @@ const App = () => {
     }
   };
 
-  const removePantryItem = async (id: string) => {
-    setPantryItems((prev) => prev.filter((item) => item.id !== id));
+  /**
+   * Toglie un prodotto dalla dispensa.
+   * outcome: "consumed" (usato) o "wasted" (buttato) finiscono nelle statistiche; null = eliminato per errore.
+   */
+  const removePantryItem = async (id: string, outcome: Outcome | null = null) => {
+    const item = pantryItems.find((i) => i.id === id);
+    setPantryItems((prev) => prev.filter((i) => i.id !== id));
 
-    const { error } = await supabase
-      .from("pantry_items")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+    const { error } = await supabase.from("pantry_items").delete().eq("id", id);
 
     if (error) {
       console.error("Supabase pantry delete error:", error);
       await loadPantryFromSupabase();
+      return;
+    }
+    if (item && outcome) {
+      await logPantryEvents([
+        { name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, outcome },
+      ]);
+      setStatsVersion((v) => v + 1);
     }
   };
 
-  const consumePantryItems = (usedIngredients: IngredientUsage[]) => {
-    setPantryItems((prevItems) => {
-      return prevItems.map((pantryItem) => {
-        const usage = usedIngredients.find(
-          (u) =>
-            u.name.toLowerCase().includes(pantryItem.name.toLowerCase()) ||
-            pantryItem.name.toLowerCase().includes(u.name.toLowerCase())
-        );
+  /** Converte una quantità nell'unità del prodotto in dispensa (null se le unità non sono confrontabili). */
+  const convertQuantity = (qty: number, from: string, to: string): number | null => {
+    const f = (from || "").trim().toLowerCase();
+    const t = (to || "").trim().toLowerCase();
+    if (!f || f === t) return qty;
+    if (t === "kg" && f === "g") return qty / 1000;
+    if (t === "g" && f === "kg") return qty * 1000;
+    if (t === "l" && f === "ml") return qty / 1000;
+    if (t === "ml" && f === "l") return qty * 1000;
+    if (t === "l" && f === "cl") return qty / 100;
+    return null;
+  };
 
-        if (usage) {
-          let amountToSubtract = usage.quantity;
-
-          if (usage.unit !== pantryItem.unit) {
-            if (pantryItem.unit === "kg" && usage.unit === "g") amountToSubtract = usage.quantity / 1000;
-            else if (pantryItem.unit === "g" && usage.unit === "kg") amountToSubtract = usage.quantity * 1000;
-            else if (pantryItem.unit === "l" && usage.unit === "ml") amountToSubtract = usage.quantity / 1000;
-            else if (pantryItem.unit === "ml" && usage.unit === "l") amountToSubtract = usage.quantity * 1000;
-          }
-
-          const newQuantity = Math.max(0, parseFloat((pantryItem.quantity - amountToSubtract).toFixed(2)));
-          return { ...pantryItem, quantity: newQuantity };
-        }
-        return pantryItem;
-      });
+  /**
+   * "L'ho cucinato!": scala gli ingredienti usati dalla dispensa e lo salva davvero.
+   * Usa per primo il prodotto che scade prima; i prodotti finiti vengono tolti.
+   */
+  const consumePantryItems = async (usedIngredients: IngredientUsage[]): Promise<CookResult> => {
+    const byExpiry = [...pantryItems].sort((a, b) => {
+      if (!a.expiryDate) return 1;
+      if (!b.expiryDate) return -1;
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
     });
+
+    const changes = new Map<string, { item: PantryItem; newQty: number; used: number }>();
+
+    for (const usage of usedIngredients) {
+      let best: PantryItem | null = null;
+      let bestScore = 1;
+      for (const p of byExpiry) {
+        if (changes.get(p.id)?.newQty === 0) continue;
+        const score = nameMatchScore(usage.name, p.name);
+        if (score > bestScore) {
+          best = p;
+          bestScore = score;
+        }
+      }
+      if (!best) continue;
+
+      const current = changes.get(best.id)?.newQty ?? best.quantity;
+      const amount = convertQuantity(Number(usage.quantity) || 0, usage.unit, best.unit);
+      // unità non confrontabili (es. "2 pz" contro "500 g"): non tocco la quantità
+      if (amount === null || amount <= 0) {
+        if (!changes.has(best.id)) changes.set(best.id, { item: best, newQty: current, used: 0 });
+        continue;
+      }
+      const newQty = Math.max(0, parseFloat((current - amount).toFixed(3)));
+      changes.set(best.id, { item: best, newQty, used: (changes.get(best.id)?.used ?? 0) + (current - newQty) });
+    }
+
+    if (changes.size === 0) return { used: 0, expiring: 0 };
+
+    const finished = [...changes.values()].filter((c) => c.newQty <= 0);
+    const reduced = [...changes.values()].filter((c) => c.newQty > 0 && c.used > 0);
+
+    setPantryItems((prev) =>
+      prev
+        .filter((p) => !finished.some((f) => f.item.id === p.id))
+        .map((p) => {
+          const r = reduced.find((c) => c.item.id === p.id);
+          return r ? { ...p, quantity: r.newQty } : p;
+        })
+    );
+
+    let failed = false;
+    if (finished.length) {
+      const { error } = await supabase.from("pantry_items").delete().in("id", finished.map((f) => f.item.id));
+      if (error) failed = true;
+    }
+    for (const r of reduced) {
+      const { error } = await supabase.from("pantry_items").update({ quantity: r.newQty }).eq("id", r.item.id);
+      if (error) failed = true;
+    }
+    if (failed) {
+      console.error("Aggiornamento dispensa dopo cottura non riuscito");
+      await loadPantryFromSupabase();
+    }
+
+    await logPantryEvents(
+      [...changes.values()].map((c) => ({
+        name: c.item.name,
+        category: c.item.category,
+        quantity: c.used || null,
+        unit: c.item.unit,
+        outcome: "consumed" as const,
+      }))
+    );
+    setStatsVersion((v) => v + 1);
+
+    const touched = [...changes.values()];
+    const expiring = touched.filter((c) => {
+      if (!c.item.expiryDate) return false;
+      const d = Math.ceil((new Date(c.item.expiryDate).getTime() - Date.now()) / 86_400_000);
+      return d <= 3;
+    }).length;
+    return { used: touched.length, expiring };
   };
 
   const addShoppingItem = async (
     name: string,
     category: Category,
     quantity?: number | null,
-    unit?: string | null
+    unit?: string | null,
+    opts: { barcode?: string | null; checked?: boolean } = {}
   ) => {
     const tempId = crypto.randomUUID();
+    const checked = !!opts.checked;
     setShoppingItems((prev) => [
-      { id: tempId, name, category, isChecked: false, quantity: quantity ?? null, unit: unit ?? null },
+      { id: tempId, name, category, isChecked: checked, quantity: quantity ?? null, unit: unit ?? null, barcode: opts.barcode ?? null },
       ...prev,
     ]);
 
@@ -231,9 +411,10 @@ const App = () => {
       user_id: session.user.id,
       name,
       category,
-      is_checked: false,
+      is_checked: checked,
       quantity: quantity ?? null,
       unit: unit ?? null,
+      barcode: opts.barcode ?? null,
     });
 
     if (error) {
@@ -258,7 +439,6 @@ const App = () => {
     const { data: existingRows, error: existingError } = await supabase
       .from("shopping_items")
       .select("id, name, category, is_checked, quantity, unit")
-      .eq("user_id", session.user.id)
       .eq("is_checked", false);
 
     if (existingError) {
@@ -339,8 +519,7 @@ const App = () => {
       const { error } = await supabase
         .from("shopping_items")
         .update({ quantity: update.quantity })
-        .eq("id", update.id)
-        .eq("user_id", session.user.id);
+        .eq("id", update.id);
 
       if (error) {
         console.error("Supabase bulk update error:", error);
@@ -362,6 +541,20 @@ const App = () => {
     await loadShoppingFromSupabase();
   };
 
+  /** Scansione al supermercato: mette l'articolo nel carrello e ne ricorda il codice a barre. */
+  const checkShoppingFromScan = async (id: string, barcode: string | null) => {
+    setShoppingItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isChecked: true, barcode: barcode ?? item.barcode ?? null } : item))
+    );
+    const payload: any = { is_checked: true };
+    if (barcode) payload.barcode = barcode;
+    const { error } = await supabase.from("shopping_items").update(payload).eq("id", id);
+    if (error) {
+      console.error("Supabase scan check error:", error);
+      await loadShoppingFromSupabase();
+    }
+  };
+
   const toggleShoppingItem = async (id: string) => {
     setShoppingItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, isChecked: !item.isChecked } : item))
@@ -373,8 +566,7 @@ const App = () => {
     const { error } = await supabase
       .from("shopping_items")
       .update({ is_checked: nextChecked })
-      .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("id", id);
 
     if (error) {
       console.error("Supabase toggle error:", error);
@@ -388,7 +580,6 @@ const App = () => {
     const { error } = await supabase
       .from("shopping_items")
       .delete()
-      .eq("user_id", session.user.id)
       .eq("is_checked", true);
 
     if (error) {
@@ -408,6 +599,7 @@ const App = () => {
       unit: item.unit,
       expiry_date: item.expiryDate ?? null,
       category: item.category,
+      barcode: item.barcode ?? null,
     }));
 
     const { error: insErr } = await supabase.from("pantry_items").insert(pantryRows);
@@ -422,8 +614,7 @@ const App = () => {
     const { error: delErr } = await supabase
       .from("shopping_items")
       .delete()
-      .in("id", shoppingIdsToRemove)
-      .eq("user_id", session.user.id);
+      .in("id", shoppingIdsToRemove);
 
     if (delErr) {
       console.error("Supabase shopping delete (move) error:", delErr);
@@ -444,7 +635,7 @@ const App = () => {
   const loadPantryFromSupabase = async () => {
     const { data, error } = await supabase
       .from("pantry_items")
-      .select("id, name, quantity, unit, expiry_date, category, added_at")
+      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode")
       .order("added_at", { ascending: false });
 
     if (error) {
@@ -460,6 +651,7 @@ const App = () => {
       expiryDate: r.expiry_date ?? null,
       category: r.category,
       addedAt: r.added_at ? new Date(r.added_at).getTime() : Date.now(),
+      barcode: r.barcode ?? null,
     }));
 
     setPantryItems(items);
@@ -468,7 +660,7 @@ const App = () => {
   const loadShoppingFromSupabase = async () => {
     const { data, error } = await supabase
       .from("shopping_items")
-      .select("id, name, category, is_checked, quantity, unit")
+      .select("id, name, category, is_checked, quantity, unit, barcode")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -484,6 +676,7 @@ const App = () => {
         isChecked: !!r.is_checked,
         quantity: r.quantity != null ? Number(r.quantity) : null,
         unit: r.unit ?? null,
+        barcode: r.barcode ?? null,
       })) || [];
 
     setShoppingItems(items);
@@ -491,41 +684,70 @@ const App = () => {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="text-sm text-gray-600">Caricamento…</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 bg-ground">
+        <img src="/icons/icon-192.png" alt="" className="h-16 w-16 rounded-2xl animate-pulse" />
+        <div className="text-sm font-semibold text-muted">Caricamento…</div>
       </div>
+    );
+  }
+
+  if (shared) {
+    return (
+      <SharedRecipeView
+        token={shared.token}
+        challenge={shared.challenge}
+        loggedIn={!!session}
+        onAccept={acceptShared}
+        onClose={() => setShared(null)}
+      />
     );
   }
 
   if (!session) return <AuthView />;
 
+  const userInitial = (session?.user?.email ?? "?").trim().charAt(0).toUpperCase();
+
+  const navItems: Array<{ id: ViewState; label: string; icon: React.ReactNode }> = [
+    { id: "home", label: "Oggi", icon: <Home size={22} /> },
+    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={22} /> },
+    { id: "chef", label: "EcoChef", icon: <ChefHat size={26} /> },
+    { id: "shopping", label: "Spesa", icon: <ShoppingCart size={22} /> },
+    { id: "recipeBook", label: "Ricette", icon: <BookOpen size={22} /> },
+  ];
+
+  const goTo = (next: ViewState) => {
+    setView(next);
+    window.scrollTo({ top: 0 });
+  };
+
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col relative border-x border-gray-100">
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2 text-emerald-700">
-          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-            E
-          </div>
-          <h1 className="font-bold text-xl tracking-tight">EcoDispensa</h1>
-        </div>
-
-        <button
-          onClick={() => setProfileOpen(true)}
-          className="p-2 rounded-full text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-          title="Profilo"
-          type="button"
-        >
-          <User size={20} />
-        </button>
-      </header>
-
-      <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
+    <div className="relative mx-auto flex min-h-screen max-w-md flex-col bg-ground">
+      <main className="flex-1 px-5 pb-40 pt-[max(3.25rem,calc(env(safe-area-inset-top)+1.25rem))]">
+        {view === "home" && (
+          <HomeView
+            pantryItems={pantryItems}
+            shoppingItems={shoppingItems}
+            credits={credits}
+            userInitial={userInitial}
+            onOpenProfile={() => setProfileOpen(true)}
+            onNavigate={goTo}
+            onOpenRecipe={(id) => {
+              setOpenRecipeId(id);
+              goTo("recipeBook");
+            }}
+            onResolveExpired={removePantryItem}
+            onPostpone={(id, days) => updatePantryItem(id, { expiryDate: dateInDays(days) })}
+            statsVersion={statsVersion}
+          />
+        )}
         {view === "pantry" && (
           <PantryView items={pantryItems} onAdd={addPantryItem} onUpdate={updatePantryItem} onRemove={removePantryItem} />
         )}
         {view === "shopping" && (
           <ShoppingListView
             items={shoppingItems}
+            pantryItems={pantryItems}
+            onScanCheck={checkShoppingFromScan}
             onAdd={addShoppingItem}
             onToggle={toggleShoppingItem}
             onClearCompleted={clearCompletedShopping}
@@ -537,50 +759,60 @@ const App = () => {
             items={pantryItems}
             onCook={consumePantryItems}
             onAddShoppingItems={addShoppingItemsBulk}
+            onCreditsChange={setCredits}
           />
         )}
-        {view === "recipeBook" && <RecipeBookView />}
+        {view === "recipeBook" && (
+          <RecipeBookView
+            onCreditsChange={setCredits}
+            onCook={consumePantryItems}
+            onAddShoppingItems={addShoppingItemsBulk}
+            initialRecipeId={openRecipeId}
+            onInitialRecipeShown={() => setOpenRecipeId(null)}
+          />
+        )}
       </main>
 
-      <nav className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 pb-safe">
-        <div className="flex justify-around items-center p-2">
-          <button
-            onClick={() => setView("pantry")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "pantry" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <Refrigerator size={24} strokeWidth={view === "pantry" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Dispensa</span>
-          </button>
-          <button
-            onClick={() => setView("shopping")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "shopping" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <ShoppingCart size={24} strokeWidth={view === "shopping" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">Spesa</span>
-          </button>
-          <button
-            onClick={() => setView("chef")}
-            className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-              view === "chef" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <ChefHat size={24} strokeWidth={view === "chef" ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">EcoChef</span>
-          </button>
-          <button
-  onClick={() => setView("recipeBook")}
-  className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-    view === "recipeBook" ? "text-emerald-600 bg-emerald-50" : "text-gray-400 hover:text-gray-600"
-  }`}
->
-  <BookOpen size={24} strokeWidth={view === "recipeBook" ? 2.5 : 2} />
-  <span className="text-[10px] font-medium">Ricettario</span>
-</button>
-        </div>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto h-36 max-w-md bg-gradient-to-b from-ground/0 via-ground/90 to-ground" />
+
+      <nav
+        aria-label="Navigazione principale"
+        className="fixed inset-x-0 z-40 mx-auto grid h-[68px] max-w-[calc(28rem-2rem)] grid-cols-5 items-center rounded-[34px] bg-ink shadow-[0_12px_32px_rgba(23,32,26,0.28)]"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 14px)", left: "1rem", right: "1rem" }}
+      >
+        {navItems.map((item) => {
+          const active = view === item.id;
+          if (item.id === "chef") {
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => goTo("chef")}
+                aria-label="EcoChef"
+                aria-current={active ? "page" : undefined}
+                className={`-mt-8 flex h-[62px] w-[62px] items-center justify-center justify-self-center rounded-full border-[5px] border-ground transition-transform active:scale-95 ${
+                  active ? "bg-emerald-600 text-white" : "bg-lemon text-ink"
+                }`}
+              >
+                {item.icon}
+              </button>
+            );
+          }
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goTo(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={`flex h-full flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+                active ? "font-bold text-lemon" : "font-semibold text-[#A9B3AC]"
+              }`}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
 
       <ProfileSheet
@@ -589,6 +821,12 @@ const App = () => {
         userEmail={session?.user?.email ?? null}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={requestNotificationPermission}
+        pushActive={pushActive}
+        onHouseholdChanged={() => {
+          loadPantryFromSupabase();
+          loadShoppingFromSupabase();
+          setStatsVersion((v) => v + 1);
+        }}
         onLogout={handleLogout}
       />
     </div>

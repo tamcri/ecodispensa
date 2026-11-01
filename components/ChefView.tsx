@@ -6,28 +6,32 @@ import {
   MealPlanRequest,
   MealPlanResponse,
   Category,
+  CookResult,
 } from "../types";
+import { RecipeMeta } from "../services/api";
 import { supabase } from "../services/supabaseClient";
 import { MealPlanForm } from "./MealPlanForm";
 import { MealPlanResult } from "./MealPlanResult";
 import {
-  ChefHat,
   Clock,
   BarChart,
   Loader2,
   Sparkles,
   AlertTriangle,
   Search,
-  X,
   ChevronRight,
   CheckCircle2,
   Utensils,
   CalendarDays,
 } from "lucide-react";
+import { CreditsBadge, ScreenHeader, Sheet, Spinner } from "./ui";
+import { tintFor } from "./RecipePhoto";
+import { RecipeContent } from "./RecipeContent";
+import { RecipeDetailSheet } from "./RecipeDetailSheet";
 
 interface ChefViewProps {
   items: PantryItem[];
-  onCook?: (ingredients: IngredientUsage[]) => void;
+  onCook?: (ingredients: IngredientUsage[]) => Promise<CookResult | void> | void;
   onAddShoppingItems?: (
     items: Array<{
       name: string;
@@ -36,6 +40,7 @@ interface ChefViewProps {
       unit?: string | null;
     }>
   ) => Promise<void>;
+  onCreditsChange?: (credits: number) => void;
 }
 
 type ChefMode = "suggest" | "search" | "mealPlan";
@@ -153,13 +158,13 @@ async function postMealPlan(payload: MealPlanRequest): Promise<{ status: number;
 async function saveRecipe(
   source: "suggest" | "search" | "meal_plan",
   recipe: Recipe
-): Promise<void> {
+): Promise<string | null> {
   const token = await getAccessToken();
 
-  if (!token) return;
+  if (!token) return null;
 
   try {
-    await fetch("/api/save-recipe", {
+    const r = await fetch("/api/save-recipe", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -170,8 +175,11 @@ async function saveRecipe(
         recipe,
       }),
     });
+    const body = await r.json().catch(() => null);
+    return typeof body?.id === "string" ? body.id : null;
   } catch (e) {
     console.error("save recipe error:", e);
+    return null;
   }
 }
 
@@ -269,7 +277,7 @@ function isMealPlanQuantityAsNeeded(name: string, unit?: string | null) {
   );
 }
 
-export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems }) => {
+export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShoppingItems, onCreditsChange }) => {
   const [mode, setMode] = useState<ChefMode>("suggest");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
@@ -279,7 +287,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [cookedRecipeTitle, setCookedRecipeTitle] = useState<string | null>(null);
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -296,6 +303,15 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   const [loadingSavedMealPlan, setLoadingSavedMealPlan] = useState(false);
   const [hasFetchedSavedMealPlan, setHasFetchedSavedMealPlan] = useState(false);
   const [shoppingListAdded, setShoppingListAdded] = useState(false);
+
+  // id delle ricette salvate (per indice) e foto dei piatti create in questa sessione
+  const [savedIds, setSavedIds] = useState<Record<number, string>>({});
+  const [metaById, setMetaById] = useState<Record<string, Partial<RecipeMeta>>>({});
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (ecoCredits !== null) onCreditsChange?.(ecoCredits);
+  }, [ecoCredits]);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
   const noCredits = !isPremiumActive && (ecoCredits ?? 0) <= 0;
@@ -402,7 +418,6 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
     setRecipes([]);
     setMealPlanError(null);
     setSelectedRecipe(null);
-    setCookedRecipeTitle(null);
 
     try {
       const validPantryItems = getValidPantryItems(items);
@@ -454,9 +469,13 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
 
       setRecipes(result);
 
-for (const recipe of result) {
-  await saveRecipe("suggest", recipe);
-}
+      const ids: Record<number, string> = {};
+      for (let i = 0; i < result.length; i++) {
+        const id = await saveRecipe("suggest", result[i]);
+        if (id) ids[i] = id;
+      }
+      setSavedIds(ids);
+      setMetaById({});
 
 if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
@@ -497,7 +516,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     setRecipes([]);
     setMealPlanError(null);
     setSelectedRecipe(null);
-    setCookedRecipeTitle(null);
 
     try {
       const validPantryItems = getValidPantryItems(items);
@@ -550,9 +568,13 @@ if (typeof recipesResp?.remainingCredits === "number") {
 
       setRecipes(result);
 
-for (const recipe of result) {
-  await saveRecipe("search", recipe);
-}
+      const ids: Record<number, string> = {};
+      for (let i = 0; i < result.length; i++) {
+        const id = await saveRecipe("search", result[i]);
+        if (id) ids[i] = id;
+      }
+      setSavedIds(ids);
+      setMetaById({});
 
 if (typeof recipesResp?.remainingCredits === "number") {
         setEcoCredits(recipesResp.remainingCredits);
@@ -593,7 +615,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     setError(null);
     setSelectedRecipe(null);
     setShoppingListAdded(false);
-    setCookedRecipeTitle(null);
 
     try {
       const { status, body } = await postMealPlan(payload);
@@ -733,36 +754,6 @@ if (typeof recipesResp?.remainingCredits === "number") {
     }
   };
 
-  const handleCookRecipe = (recipe: Recipe) => {
-    if (!onCook) return;
-
-    onCook(recipe.ingredientsUsed);
-    setCookedRecipeTitle(recipe.title);
-
-    setTimeout(() => {
-      setCookedRecipeTitle(null);
-      if (selectedRecipe?.title === recipe.title) {
-        setSelectedRecipe(null);
-      }
-    }, 2000);
-  };
-
-  const CreditsPill = () => (
-    <div className="inline-flex items-center gap-2 bg-white/15 border border-white/20 px-3 py-1.5 rounded-xl text-xs">
-      <span className="font-semibold">Crediti:</span>
-      <span className="font-bold">
-        {creditsLoading ? "…" : ecoCredits === null ? "—" : ecoCredits}
-      </span>
-      <button
-        onClick={refreshCredits}
-        className="ml-1 text-white/90 hover:text-white underline underline-offset-2"
-        type="button"
-      >
-        aggiorna
-      </button>
-    </div>
-  );
-
   const initialMealPlanValues: Partial<MealPlanRequest> | undefined = mealPlanResult
     ? {
         startDate: mealPlanResult.startDate ?? undefined,
@@ -771,190 +762,202 @@ if (typeof recipesResp?.remainingCredits === "number") {
       }
     : undefined;
 
+  const switchMode = (next: ChefMode) => {
+    setMode(next);
+    setRecipes([]);
+    setError(null);
+    setMealPlanError(null);
+    setSelectedRecipe(null);
+    setSelectedIndex(null);
+  };
+
+  // Ingredienti che EcoChef userà per primi: quelli che scadono prima
+  const priorityItems = useMemo(() => {
+    const valid = getValidPantryItems(items);
+    return [...valid]
+      .sort((a, b) => {
+        if (!a.expiryDate) return 1;
+        if (!b.expiryDate) return -1;
+        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+      })
+      .slice(0, 6);
+  }, [items]);
+
+  const TIMES = [10, 15, 20, 25, 30, 40, 60];
+  const timeIdx = Math.max(0, TIMES.indexOf(timeMinutes));
+
+  const metaFor = (idx: number): RecipeMeta => {
+    const id = savedIds[idx];
+    const m = id ? metaById[id] ?? {} : {};
+    return { imageUrl: m.imageUrl ?? null, status: m.status ?? "saved", rating: m.rating ?? null };
+  };
+
+  const photoFor = (idx: number) => metaFor(idx).imageUrl;
+
+  const updateMeta = (idx: number, p: Partial<RecipeMeta>) => {
+    const id = savedIds[idx];
+    if (id) setMetaById((prev) => ({ ...prev, [id]: { ...prev[id], ...p } }));
+  };
+
+  const openRecipe = (recipe: Recipe, idx: number) => {
+    setSelectedRecipe(recipe);
+    setSelectedIndex(idx);
+  };
+
+  const closeRecipe = () => {
+    setSelectedRecipe(null);
+    setSelectedIndex(null);
+  };
+
+  const settings = (
+    <div className="grid grid-cols-2 gap-3">
+      <Stepper
+        label="Porzioni"
+        value={String(servings)}
+        onMinus={() => setServings((n) => Math.max(1, n - 1))}
+        onPlus={() => setServings((n) => Math.min(8, n + 1))}
+        minusLabel="Meno porzioni"
+        plusLabel="Più porzioni"
+      />
+      <Stepper
+        label="Tempo massimo"
+        value={`${timeMinutes}′`}
+        onMinus={() => setTimeMinutes(TIMES[Math.max(0, timeIdx - 1)])}
+        onPlus={() => setTimeMinutes(TIMES[Math.min(TIMES.length - 1, timeIdx + 1)])}
+        minusLabel="Meno tempo"
+        plusLabel="Più tempo"
+      />
+    </div>
+  );
+
   return (
-    <div className="space-y-6 pb-24">
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 rounded-2xl text-white relative overflow-hidden">
-        <div className="absolute -right-6 -top-6 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl"></div>
-        <div className="relative z-10">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
-                <ChefHat className="text-emerald-200" /> EcoChef AI
-              </h2>
-              <p className="text-emerald-50 mb-4 text-sm opacity-90">
-                Il tuo assistente personale per cucinare senza sprechi.
-              </p>
-            </div>
-            <CreditsPill />
-          </div>
+    <div className="flex flex-col gap-3.5">
+      <ScreenHeader
+        title="EcoChef"
+        right={
+          isPremiumActive ? (
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-3 text-[13px] font-bold text-lemon">
+              <Sparkles size={15} /> Premium
+            </span>
+          ) : (
+            <CreditsBadge credits={ecoCredits} dark onClick={refreshCredits} />
+          )
+        }
+      />
 
-          {mode !== "mealPlan" && (
-            <div className="grid grid-cols-2 gap-3 mt-2">
-              <div className="bg-white/10 border border-white/15 rounded-xl p-3">
-                <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Porzioni</div>
-                <select
-                  value={servings}
-                  onChange={(e) => setServings(Number(e.target.value))}
-                  className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
-                >
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n} className="text-gray-900">
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-white/10 border border-white/15 rounded-xl p-3">
-                <div className="text-[10px] uppercase tracking-wider text-white/80 mb-1">Tempo max</div>
-                <select
-                  value={timeMinutes}
-                  onChange={(e) => setTimeMinutes(Number(e.target.value))}
-                  className="w-full bg-white/15 text-white rounded-lg px-3 py-2 text-sm outline-none"
-                >
-                  {[10, 15, 20, 25, 30, 40, 60].map((n) => (
-                    <option key={n} value={n} className="text-gray-900">
-                      {n} min
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {ecoCredits !== null && ecoCredits <= 0 && (
-            <div className="mt-4 bg-black/20 border border-white/20 rounded-xl p-3 text-xs">
-              <div className="font-bold">Crediti esauriti</div>
-              <div className="text-white/90">
-                Per usare EcoChef serve almeno 1 credito. (Lo shop lo aggiungiamo nel prossimo step.)
-              </div>
-            </div>
-          )}
-        </div>
+      <div role="tablist" aria-label="Modalità EcoChef" className="grid grid-cols-3 gap-1 rounded-2xl bg-[#E6E9E0] p-1">
+        {(
+          [
+            ["suggest", "Dalla dispensa"],
+            ["search", "Cerca ricetta"],
+            ["mealPlan", "Menu"],
+          ] as Array<[ChefMode, string]>
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={mode === id}
+            onClick={() => switchMode(id)}
+            className={`h-10 rounded-xl text-[13px] transition-all ${
+              mode === id ? "bg-white font-bold text-ink shadow-sm" : "font-semibold text-[#4A524C]"
+            }`}
+          >
+            {id === "mealPlan" ? (
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays size={14} /> {label}
+              </span>
+            ) : (
+              label
+            )}
+          </button>
+        ))}
       </div>
 
-      <div className="flex p-1 bg-gray-100 rounded-xl">
-        <button
-          onClick={() => {
-            setMode("suggest");
-            setRecipes([]);
-            setError(null);
-            setMealPlanError(null);
-            setSelectedRecipe(null);
-          }}
-          className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-            mode === "suggest" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Dispensa Anti-Spreco
-        </button>
-        <button
-          onClick={() => {
-            setMode("search");
-            setRecipes([]);
-            setError(null);
-            setMealPlanError(null);
-            setSelectedRecipe(null);
-          }}
-          className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-            mode === "search" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Cerca Ricetta
-        </button>
-        <button
-          onClick={() => {
-            setMode("mealPlan");
-            setRecipes([]);
-            setError(null);
-            setMealPlanError(null);
-            setSelectedRecipe(null);
-          }}
-          className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-            mode === "mealPlan" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <span className="inline-flex items-center justify-center gap-1">
-            <CalendarDays size={14} />
-            Piano Pasti
-          </span>
-        </button>
-      </div>
-
-      {mode === "suggest" && (
-        <div className="space-y-4 animate-fade-in">
-          {expiredItemsCount > 0 && (
-            <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-red-700">
-              <AlertTriangle size={16} />
-              Hai {expiredItemsCount} prodotti scaduti ⚠️
-            </div>
-          )}
-
-          {expiringItemsCount > 0 && (
-            <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-yellow-700">
-              <AlertTriangle size={16} />
-              Hai {expiringItemsCount} prodotti in scadenza da usare!
-            </div>
-          )}
-
-          {recipes.length === 0 && !loading && (
-            <div className="text-center py-8">
-              <button
-                onClick={handleGenerateSuggestions}
-                disabled={items.length === 0 || loading || inCooldown || noCredits}
-                className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2 mx-auto"
-              >
-                <Sparkles size={18} />
-                Genera Ricette dalla Dispensa
-              </button>
-              {items.length === 0 && (
-                <p className="text-xs text-gray-400 mt-2">Aggiungi prodotti in dispensa per iniziare.</p>
-              )}
-              {noCredits && items.length > 0 && (
-                <p className="text-xs text-gray-400 mt-2">Crediti esauriti: ricarica per continuare.</p>
-              )}
-            </div>
-          )}
+      {noCredits && !premiumStatusLoading && ecoCredits !== null && (
+        <div className="rounded-3xl bg-peach p-4 text-sm text-[#8A3B0C]">
+          <p className="font-bold">Crediti esauriti</p>
+          <p>Per generare nuove ricette serve almeno 1 credito. Le ricette salvate restano sempre disponibili nel Ricettario.</p>
         </div>
       )}
 
+      {mode === "suggest" && (
+        <>
+          <section className="flex flex-col gap-3.5 rounded-4xl bg-lemon p-5 text-ink">
+            <h2 className="font-display text-[26px] font-extrabold leading-[1.1]">Cosa cucino con quello che ho?</h2>
+            {items.length === 0 ? (
+              <p className="text-sm">Aggiungi qualche prodotto in dispensa e ti propongo le ricette.</p>
+            ) : (
+              <>
+                <p className="text-sm text-[#3D3A1F]">
+                  {expiringItemsCount > 0
+                    ? `Parto da quello che scade prima (${expiringItemsCount} in scadenza):`
+                    : "Parto da quello che scade prima:"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {priorityItems.map((i) => (
+                    <span key={i.id} className="rounded-full bg-ink px-3 py-2 text-[13px] font-bold text-white">
+                      {i.name}
+                    </span>
+                  ))}
+                  {getValidPantryItems(items).length > priorityItems.length && (
+                    <span className="rounded-full border-2 border-dashed border-ink/30 px-3 py-1.5 text-[13px] font-bold">
+                      +{getValidPantryItems(items).length - priorityItems.length} altri
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+            {expiredItemsCount > 0 && (
+              <p className="flex items-center gap-1.5 text-xs font-bold text-[#9B2335]">
+                <AlertTriangle size={14} /> {expiredItemsCount} {expiredItemsCount === 1 ? "prodotto scaduto non verrà usato" : "prodotti scaduti non verranno usati"}
+              </p>
+            )}
+          </section>
+
+          {settings}
+
+          <button
+            type="button"
+            onClick={handleGenerateSuggestions}
+            disabled={items.length === 0 || loading || inCooldown || noCredits}
+            className="flex h-14 items-center justify-center gap-2.5 rounded-[18px] bg-ink text-base font-bold text-white transition-transform active:scale-[0.99] disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={20} className="animate-spin text-lemon" /> : <Sparkles size={20} className="text-lemon" />}
+            {recipes.length > 0 ? "Altre idee" : "Trova ricette"}
+          </button>
+          {!isPremiumActive && <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 ricette generate usi 1 credito</p>}
+        </>
+      )}
+
       {mode === "search" && (
-        <div className="space-y-4 animate-fade-in">
+        <>
           <form onSubmit={handleSearchRecipe} className="flex gap-2">
             <input
               type="text"
-              placeholder="Cerca una ricetta, es. Spaghetti alle Vongole"
-              className="flex-1 p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors"
+              placeholder="Es. carbonara, torta di mele…"
+              aria-label="Cerca una ricetta"
+              className="h-[52px] min-w-0 flex-1 rounded-2xl bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <button
               type="submit"
               disabled={!searchQuery.trim() || loading || inCooldown || noCredits}
-              className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              aria-label="Cerca"
               title={noCredits ? "Crediti esauriti" : inCooldown ? "Aspetta qualche secondo e riprova" : "Cerca"}
+              className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-ink text-lemon disabled:opacity-50"
             >
-              <Search size={20} />
+              {loading ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
             </button>
           </form>
-
-          {recipes.length > 0 && !loading && (
-            <div className="space-y-4">
-              {recipes.map((recipe, idx) => (
-                <RecipeInlineView
-                  key={`${recipe.title}-${idx}`}
-                  recipe={recipe}
-                  isCooked={cookedRecipeTitle === recipe.title}
-                  onCook={() => handleCookRecipe(recipe)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+          {settings}
+          <p className="text-center text-xs text-muted">Adatto la ricetta a quello che hai già in dispensa</p>
+        </>
       )}
 
       {mode === "mealPlan" && (
-        <div className="space-y-4 animate-fade-in">
+        <div className="flex flex-col gap-4">
           <MealPlanForm
             onSubmit={handleGenerateMealPlan}
             loading={mealPlanLoading}
@@ -963,24 +966,11 @@ if (typeof recipesResp?.remainingCredits === "number") {
             premiumStatusLoading={premiumStatusLoading}
           />
 
-          {loadingSavedMealPlan && (
-            <div className="text-center py-6">
-              <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
-              <p className="text-gray-500 text-sm font-medium">Sto recuperando il tuo piano attivo...</p>
-            </div>
-          )}
-
-          {mealPlanLoading && (
-            <div className="text-center py-10">
-              <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={32} />
-              <p className="text-gray-500 text-sm font-medium">Sto organizzando il tuo piano pasti...</p>
-            </div>
-          )}
+          {loadingSavedMealPlan && <Spinner label="Recupero il tuo piano attivo…" />}
+          {mealPlanLoading && <Spinner label="Organizzo il tuo menu…" />}
 
           {mealPlanError && (
-            <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm text-center border border-red-100">
-              {mealPlanError}
-            </div>
+            <div className="rounded-2xl bg-[#FBE0E3] p-4 text-center text-sm font-semibold text-[#9B2335]">{mealPlanError}</div>
           )}
 
           {mealPlanResult && !mealPlanLoading && (
@@ -995,268 +985,142 @@ if (typeof recipesResp?.remainingCredits === "number") {
       )}
 
       {loading && (
-        <div className="text-center py-10">
-          <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={32} />
-          <p className="text-gray-500 text-sm font-medium">
-            {mode === "suggest" ? "Lo Chef sta analizzando la dispensa..." : "Sto cercando la ricetta perfetta..."}
-          </p>
-        </div>
+        <Spinner label={mode === "suggest" ? "Lo chef sta guardando in dispensa…" : "Cerco la ricetta perfetta…"} />
       )}
 
       {error && mode !== "mealPlan" && (
-        <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm text-center border border-red-100">
-          {error}
-        </div>
+        <div className="rounded-2xl bg-[#FBE0E3] p-4 text-center text-sm font-semibold text-[#9B2335]">{error}</div>
       )}
 
-      {mode === "suggest" && (
-        <div className="space-y-4">
+      {mode !== "mealPlan" && recipes.length > 0 && !loading && (
+        <div className="flex flex-col gap-3">
+          <h3 className="mt-1 font-display text-xl font-bold text-ink">
+            {mode === "suggest" ? "Le mie proposte" : "Ecco cosa ho trovato"}
+          </h3>
           {recipes.map((recipe, idx) => (
-            <div
-              key={idx}
-              onClick={() => setSelectedRecipe(recipe)}
-              className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-emerald-300 transition-all cursor-pointer group active:scale-[0.99]"
-            >
-              <div className="p-5">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-xl font-bold text-gray-800 leading-tight group-hover:text-emerald-700 transition-colors">
-                    {recipe.title}
-                  </h3>
-                  <DifficultyPill difficulty={recipe.difficulty} />
-                </div>
-
-                <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
-                  <span className="flex items-center gap-1">
-                    <Clock size={14} /> {recipe.time}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <BarChart size={14} /> {recipe.ingredientsUsed.length} ingr. usati
-                  </span>
-                </div>
-
-                <p className="text-gray-600 text-sm mb-4 leading-relaxed line-clamp-2">{recipe.description}</p>
-
-                <div className="flex gap-2 mb-2">
-                  <div className="flex-1">
-                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="bg-emerald-500 h-full"
-                        style={{
-                          width: `${
-                            (recipe.ingredientsUsed.length /
-                              (recipe.ingredientsUsed.length + recipe.missingIngredients.length || 1)) *
-                            100
-                          }%`,
-                        }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1 text-right">
-                      Hai {recipe.ingredientsUsed.length} su{" "}
-                      {recipe.ingredientsUsed.length + recipe.missingIngredients.length} ingredienti
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end text-emerald-600 text-sm font-medium mt-2 group-hover:gap-2 transition-all">
-                  Vedi Ricetta <ChevronRight size={16} />
-                </div>
-              </div>
-            </div>
+            <RecipeCard
+              key={`${recipe.title}-${idx}`}
+              recipe={recipe}
+              photo={photoFor(idx)}
+              status={metaFor(idx).status}
+              onOpen={() => openRecipe(recipe, idx)}
+            />
           ))}
+          <p className="text-center text-xs text-muted">Le ricette sono già salvate nel Ricettario</p>
         </div>
       )}
 
-      {selectedRecipe && mode === "suggest" && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
-          <div className="bg-white w-full max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col shadow-2xl">
-            <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex justify-between items-center z-10 rounded-t-2xl">
-              <h3 className="font-bold text-lg text-gray-800 truncate pr-4">{selectedRecipe.title}</h3>
-              <button
-                onClick={() => setSelectedRecipe(null)}
-                className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                type="button"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-              <RecipeContent recipe={selectedRecipe} />
-            </div>
-
-            <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-              {cookedRecipeTitle === selectedRecipe.title ? (
-                <CookedConfirmation />
-              ) : (
-                <button
-                  onClick={() => handleCookRecipe(selectedRecipe)}
-                  className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200"
-                  type="button"
-                >
-                  <Utensils size={20} />
-                  Ho cucinato questo piatto! 🍳
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <RecipeDetailSheet
+        open={!!selectedRecipe}
+        onClose={closeRecipe}
+        recipe={selectedRecipe}
+        recipeId={selectedIndex !== null ? savedIds[selectedIndex] ?? null : null}
+        meta={selectedIndex !== null ? metaFor(selectedIndex) : { imageUrl: null, status: "saved", rating: null }}
+        onMetaChange={(p) => selectedIndex !== null && updateMeta(selectedIndex, p)}
+        onCook={onCook}
+        onAddShoppingItems={onAddShoppingItems}
+      />
     </div>
   );
 };
 
-const DifficultyPill = ({ difficulty }: { difficulty: string }) => (
-  <span
-    className={`text-[10px] px-2 py-1 rounded-full uppercase font-bold tracking-wide border
-      ${
-        difficulty === "Facile"
-          ? "bg-green-50 text-green-700 border-green-100"
-          : difficulty === "Media"
-          ? "bg-yellow-50 text-yellow-700 border-yellow-100"
-          : "bg-red-50 text-red-700 border-red-100"
-      }`}
-  >
-    {difficulty}
-  </span>
-);
-
-const CookedConfirmation = () => (
-  <div className="bg-emerald-600 text-white p-3 rounded-xl flex items-center justify-center gap-2 animate-bounce">
-    <CheckCircle2 size={24} />
-    <span className="font-bold">Ottimo! Dispensa aggiornata.</span>
+const Stepper = ({
+  label,
+  value,
+  onMinus,
+  onPlus,
+  minusLabel,
+  plusLabel,
+}: {
+  label: string;
+  value: string;
+  onMinus: () => void;
+  onPlus: () => void;
+  minusLabel: string;
+  plusLabel: string;
+}) => (
+  <div className="flex flex-col gap-1.5 rounded-[20px] bg-white px-3.5 py-3">
+    <span className="text-xs font-bold text-muted">{label}</span>
+    <div className="flex items-center justify-between">
+      <button
+        type="button"
+        onClick={onMinus}
+        aria-label={minusLabel}
+        className="flex h-9 w-9 items-center justify-center rounded-xl bg-stone text-lg font-bold text-ink active:scale-95"
+      >
+        −
+      </button>
+      <span className="font-display text-2xl font-extrabold text-ink">{value}</span>
+      <button
+        type="button"
+        onClick={onPlus}
+        aria-label={plusLabel}
+        className="flex h-9 w-9 items-center justify-center rounded-xl bg-stone text-lg font-bold text-ink active:scale-95"
+      >
+        +
+      </button>
+    </div>
   </div>
 );
 
-const RecipeInlineView = ({
+const RecipeCard = ({
   recipe,
-  isCooked,
-  onCook,
+  photo,
+  status,
+  onOpen,
 }: {
   recipe: Recipe;
-  isCooked: boolean;
-  onCook: () => void;
-}) => (
-  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-    <div className="p-5 space-y-5">
-      <div className="flex justify-between items-start gap-4">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-emerald-700 font-bold mb-1">Ricetta trovata</div>
-          <h3 className="text-2xl font-bold text-gray-800 leading-tight">{recipe.title}</h3>
-        </div>
-        <DifficultyPill difficulty={recipe.difficulty} />
-      </div>
-
-      <RecipeContent recipe={recipe} />
-    </div>
-
-    <div className="p-4 border-t border-gray-100 bg-gray-50">
-      {isCooked ? (
-        <CookedConfirmation />
+  photo: string | null;
+  status?: string;
+  onOpen: () => void;
+}) => {
+  const used = recipe.ingredientsUsed?.length ?? 0;
+  const missing = recipe.missingIngredients?.length ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex flex-col overflow-hidden rounded-3xl bg-white text-left transition-transform active:scale-[0.99]"
+    >
+      {photo ? (
+        <img src={photo} alt="" className="h-36 w-full object-cover" />
       ) : (
-        <button
-          onClick={onCook}
-          className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
-          type="button"
-        >
-          <Utensils size={20} />
-          Ho cucinato questo piatto! 🍳
-        </button>
+        <span className={`flex h-24 items-end justify-between px-4 pb-3 ${tintFor(recipe.title)}`}>
+          <span className="font-display text-5xl font-extrabold leading-none text-ink/20">
+            {(recipe.title.trim()[0] ?? "?").toUpperCase()}
+          </span>
+          {status === "planned" && (
+            <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-ink">In programma</span>
+          )}
+          {status === "cooked" && (
+            <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold text-lemon">Cucinata</span>
+          )}
+        </span>
       )}
-    </div>
-  </div>
-);
-
-const RecipeContent = ({ recipe }: { recipe: Recipe }) => (
-  <div className="space-y-6">
-    <div className="flex gap-4 text-sm text-gray-500 border-b border-gray-50 pb-4">
-      <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-        <Clock size={16} /> {recipe.time}
-      </span>
-      <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-lg">
-        <BarChart size={16} /> {recipe.difficulty}
-      </span>
-    </div>
-
-    {recipe.description && <p className="text-gray-600 text-sm leading-relaxed">{recipe.description}</p>}
-
-    <div className="grid grid-cols-1 gap-6">
-      <div>
-        <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <CheckCircle2 size={14} /> In Dispensa
-        </h4>
-        <div className="flex flex-wrap gap-2">
-          {recipe.ingredientsUsed.map((ing, i) => (
-            <span
-              key={`${ing.name}-${i}`}
-              className="text-sm bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-100"
-            >
-              <span className="font-bold">
-                {ing.quantity} {ing.unit}
-              </span>{" "}
-              {ing.name}
+      <span className="flex flex-col gap-2 p-4">
+        <span className="flex flex-wrap gap-1.5 text-xs font-bold">
+          <span className="rounded-full bg-mint px-2.5 py-1 text-[#1E5A35]">
+            Usa {used} {used === 1 ? "tuo prodotto" : "tuoi prodotti"}
+          </span>
+          {missing > 0 ? (
+            <span className="rounded-full bg-peach px-2.5 py-1 text-[#9A3412]">
+              {missing === 1 ? "Manca 1" : `Mancano ${missing}`}
             </span>
-          ))}
-          {recipe.ingredientsUsed.length === 0 && (
-            <span className="text-sm text-gray-400 italic">Nessun ingrediente in dispensa.</span>
+          ) : (
+            <span className="rounded-full bg-lemon px-2.5 py-1 text-ink">Hai tutto</span>
           )}
-        </div>
-      </div>
+        </span>
+        <span className="font-display text-xl font-bold leading-tight text-ink">{recipe.title}</span>
+        <span className="flex items-center gap-3 text-[13px] text-muted">
+          <span className="flex items-center gap-1">
+            <Clock size={14} /> {recipe.time}
+          </span>
+          <span>{recipe.difficulty}</span>
+          <ChevronRight size={16} className="ml-auto text-ink" />
+        </span>
+      </span>
+    </button>
+  );
+};
 
-      <div>
-        <h4 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <ShoppingBagIcon /> Da Comprare
-        </h4>
-        <div className="flex flex-wrap gap-2">
-          {recipe.missingIngredients.map((ing, i) => (
-            <span
-              key={`${ing}-${i}`}
-              className="text-sm bg-orange-50 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-100"
-            >
-              {ing}
-            </span>
-          ))}
-          {recipe.missingIngredients.length === 0 && (
-            <span className="text-sm text-gray-400 italic">Hai tutto il necessario!</span>
-          )}
-        </div>
-      </div>
-    </div>
-
-    <div>
-      <h4 className="text-lg font-bold text-gray-800 mb-4">Preparazione</h4>
-      <div className="space-y-4">
-        {recipe.steps && recipe.steps.length > 0 ? (
-          recipe.steps.map((step, idx) => (
-            <div key={idx} className="flex gap-4">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs mt-0.5">
-                {idx + 1}
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">{step}</p>
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-500 text-sm italic">{recipe.description}</p>
-        )}
-      </div>
-    </div>
-  </div>
-);
-
-const ShoppingBagIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-    <path d="M3 6h18" />
-    <path d="M16 10a4 4 0 0 1-8 0" />
-  </svg>
-);
 

@@ -3263,7 +3263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: pantryRows, error: pantryErr } = await supabase
       .from("pantry_items")
       .select("id, name, quantity, unit, expiry_date, category, added_at")
-      .eq("user_id", user_id)
+      // la dispensa può essere condivisa in famiglia: le regole del database filtrano già i prodotti visibili
       .order("added_at", { ascending: false });
 
     if (pantryErr) return res.status(500).json({ error: pantryErr.message });

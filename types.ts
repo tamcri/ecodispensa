@@ -16,12 +16,14 @@ export interface PantryItem {
   expiryDate?: string; // ISO string YYYY-MM-DD
   category: Category;
   addedAt: number;
+  barcode?: string | null;
 }
 
 export interface ShoppingItem {
   id: string;
   name: string;
   isChecked: boolean;
+  barcode?: string | null;
   category: Category;
   quantity?: number | null;
   unit?: string | null;
@@ -43,7 +45,7 @@ export interface Recipe {
   steps: string[];
 }
 
-export type ViewState = 'pantry' | 'shopping' | 'chef' | 'recipeBook';
+export type ViewState = 'home' | 'pantry' | 'shopping' | 'chef' | 'recipeBook';
 
 export type MealPlanComplexity = "easy" | "medium" | "hard" | "mixed";
 
@@ -133,4 +135,10 @@ export interface MealPlanResponse {
   status?: "active" | "archived";
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+/** Risultato di "L'ho cucinato!": prodotti della dispensa usati e quanti stavano per scadere. */
+export interface CookResult {
+  used: number;
+  expiring: number;
 }

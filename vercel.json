@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/product.ts": { "maxDuration": 30 },
+    "api/cron-expiry.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron-expiry", "schedule": "0 7 * * *" }
+  ]
+}
