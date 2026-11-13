@@ -24,13 +24,28 @@ export const PlansPanel = ({
   checkoutEnabled,
   isSubscribed,
   onCheckout,
+  currentPlanCode = null,
+  cancelAtPeriodEnd = false,
+  activeUntilLabel = null,
+  onSwitchToYearly,
 }: {
   products: PlanProduct[];
   loading: boolean;
   checkoutEnabled: boolean;
   isSubscribed: boolean;
   onCheckout: (code: string, quantity?: number) => Promise<void>;
+  currentPlanCode?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  activeUntilLabel?: string | null;
+  onSwitchToYearly?: () => Promise<void>;
 }) => {
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
+  const isCurrentYearly = isSubscribed && currentPlanCode === "premium_yearly";
+  const isCurrentMonthly = isSubscribed && !isCurrentYearly;
+  const untilText = activeUntilLabel ?? "la fine del periodo pagato";
+  const currentStatus = cancelAtPeriodEnd
+    ? `Disdetto: resta attivo fino al ${untilText}. Per continuare premi «Riattiva il rinnovo» nel tuo piano qui sopra.`
+    : `Rinnovo automatico il ${untilText}.`;
   const monthly = products.find((p) => p.code === "premium_monthly");
   const yearly = products.find((p) => p.code === "premium_yearly");
   const topup = products.find((p) => p.type === "credits_topup");
@@ -102,17 +117,29 @@ export const PlansPanel = ({
             <p className="text-right text-xs text-gray-500">≈ {euro(Math.round(monthly.price_cents / monthly.credits_amount))} a credito</p>
           </div>
           <p className="mt-2 text-xs text-gray-500">Per esempio 4 menu settimanali e 36 richieste di ricette.</p>
-          <button
-            type="button"
-            disabled={!checkoutEnabled || !waiver || !!busy || isSubscribed}
-            onClick={() => buy(monthly.code)}
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {isSubscribed ? "Hai già un abbonamento attivo" : buyLabel(monthly.code, `Abbonati a ${euro(monthly.price_cents)}/mese`)}
-          </button>
-          <p className="mt-2 text-center text-xs text-gray-600">
-            <b>Si rinnova in automatico ogni mese</b> ({euro(monthly.price_cents)}) · disdici quando vuoi dal Profilo
-          </p>
+          {isCurrentMonthly ? (
+            <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+              È il tuo piano attuale. {currentStatus}
+            </p>
+          ) : isCurrentYearly ? (
+            <p className="mt-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-700">
+              Hai l’Annuale. Per passare al Mensile: disdici l’Annuale e, alla scadenza del {untilText}, scegli il Mensile.
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={!checkoutEnabled || !waiver || !!busy}
+                onClick={() => buy(monthly.code)}
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {buyLabel(monthly.code, `Abbonati a ${euro(monthly.price_cents)}/mese`)}
+              </button>
+              <p className="mt-2 text-center text-xs text-gray-600">
+                <b>Si rinnova in automatico ogni mese</b> ({euro(monthly.price_cents)}) · disdici quando vuoi dal Profilo
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -130,17 +157,72 @@ export const PlansPanel = ({
             )}
           </div>
           <p className="mt-2 text-xs text-gray-500">{yearly.credits_amount} crediti ogni mese per 12 mesi, con un unico pagamento all’anno.</p>
-          <button
-            type="button"
-            disabled={!checkoutEnabled || !waiver || !!busy || isSubscribed}
-            onClick={() => buy(yearly.code)}
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {isSubscribed ? "Hai già un abbonamento attivo" : buyLabel(yearly.code, `Abbonati a ${euro(yearly.price_cents)}/anno`)}
-          </button>
-          <p className="mt-2 text-center text-xs text-gray-600">
-            <b>Si rinnova in automatico ogni anno</b> ({euro(yearly.price_cents)}) · disdici quando vuoi dal Profilo
-          </p>
+          {isCurrentYearly ? (
+            <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+              È il tuo piano attuale. {currentStatus}
+            </p>
+          ) : isCurrentMonthly ? (
+            !confirmSwitch ? (
+              <button
+                type="button"
+                disabled={!checkoutEnabled || !onSwitchToYearly || !!busy}
+                onClick={() => setConfirmSwitch(true)}
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {checkoutEnabled ? "Passa all’Annuale" : "Disponibile a breve"}
+              </button>
+            ) : (
+              <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <p className="font-bold text-gray-900">Passare all’Annuale?</p>
+                <p className="mt-1">
+                  Paghi subito {euro(yearly.price_cents)} <b>meno i giorni del mese in corso che non hai ancora usato</b>: la
+                  differenza la calcola Stripe sulla carta che hai già usato. L’anno parte da oggi, i crediti del mese restano e il
+                  rinnovo diventa annuale ({euro(yearly.price_cents)} ogni anno, disdici quando vuoi).
+                </p>
+                {!waiver && <p className="mt-2 text-xs font-semibold text-amber-700">Spunta prima la casella in alto.</p>}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmSwitch(false)}
+                    className="h-10 rounded-xl bg-white font-bold text-gray-700 ring-1 ring-gray-200"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!waiver || !!busy || !onSwitchToYearly}
+                    onClick={async () => {
+                      if (!onSwitchToYearly) return;
+                      setBusy("switch");
+                      try {
+                        await onSwitchToYearly();
+                        setConfirmSwitch(false);
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    className="flex h-10 items-center justify-center rounded-xl bg-gray-900 font-bold text-white disabled:opacity-50"
+                  >
+                    {busy === "switch" ? <Loader2 size={16} className="animate-spin" /> : "Sì, passa"}
+                  </button>
+                </div>
+              </div>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={!checkoutEnabled || !waiver || !!busy}
+                onClick={() => buy(yearly.code)}
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {buyLabel(yearly.code, `Abbonati a ${euro(yearly.price_cents)}/anno`)}
+              </button>
+              <p className="mt-2 text-center text-xs text-gray-600">
+                <b>Si rinnova in automatico ogni anno</b> ({euro(yearly.price_cents)}) · disdici quando vuoi dal Profilo
+              </p>
+            </>
+          )}
         </div>
       )}
 
