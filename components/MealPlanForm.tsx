@@ -325,7 +325,7 @@ export const MealPlanForm = ({
               Obiettivo calorie giornaliere
             </label>
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-              Premium
+              Abbonamento
             </span>
           </div>
 
@@ -347,7 +347,7 @@ export const MealPlanForm = ({
               ? "Sto verificando il tuo piano."
               : isPremiumActive
                 ? "Opzionale. EcoDispensa userà il valore come riferimento e mostrerà una stima kcal per pasto e per giorno."
-                : "Disponibile con il piano Premium."}
+                : "Disponibile con l'abbonamento."}
           </p>
           <p className="text-[11px] text-gray-400 mt-1">
             Valori indicativi, non costituiscono indicazione medica o nutrizionale. Il totale considera solo i pasti pianificati in EcoDispensa.

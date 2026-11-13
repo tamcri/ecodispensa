@@ -37,19 +37,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const user_id = userData.user.id;
 
-    const { data, error } = await supabase
-      .from("user_credits")
-      .select("eco_credits, updated_at")
-      .eq("user_id", user_id)
-      .maybeSingle();
+    // saldo = crediti comprati/regalati + crediti mensili dell'abbonamento (ricaricati se è iniziato un nuovo mese)
+    const { data, error } = await supabase.rpc("get_my_credits");
+    if (error) return res.status(500).json({ error: error.message });
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
+    const d = (data ?? {}) as Record<string, unknown>;
     return res.status(200).json({
-      eco_credits: data?.eco_credits ?? 0,
-      updated_at: data?.updated_at ?? null,
+      eco_credits: Number(d.eco_credits ?? 0),
+      purchased_credits: Number(d.purchased_credits ?? 0),
+      monthly_credits: Number(d.monthly_credits ?? 0),
+      monthly_reset_at: d.monthly_reset_at ?? null,
+      updated_at: d.updated_at ?? null,
     });
   } catch (e: any) {
     console.error("credits api error:", e);

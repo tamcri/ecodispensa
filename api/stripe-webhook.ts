@@ -12,6 +12,12 @@ async function readRawBody(req: VercelRequest): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+function addMonths(d: Date, months: number): Date {
+  const r = new Date(d);
+  r.setMonth(r.getMonth() + months);
+  return r;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -46,6 +52,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Rinnovo automatico dell'abbonamento (ogni mese o ogni anno)
+    if (event.type === "invoice.paid") {
+      const invoice = event.data.object as any;
+      if (invoice.billing_reason !== "subscription_cycle") {
+        return res.status(200).json({ received: true, ignored: true });
+      }
+      const meta =
+        invoice.parent?.subscription_details?.metadata ?? invoice.subscription_details?.metadata ?? {};
+      const userId = meta.user_id;
+      const productCode = meta.product_code;
+      if (!userId || !productCode) {
+        return res.status(200).json({ received: true, ignored: true, reason: "missing metadata" });
+      }
+
+      const { data: seen } = await supabase.from("purchases").select("id").eq("stripe_session_id", invoice.id).maybeSingle();
+      if (seen) return res.status(200).json({ received: true, duplicate: true });
+
+      const { data: product } = await supabase
+        .from("billing_products")
+        .select("code,price_cents,currency,interval_months")
+        .eq("code", productCode)
+        .maybeSingle();
+      if (!product) return res.status(404).json({ error: "Billing product not found" });
+
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+      const until = periodEnd ? new Date(periodEnd * 1000) : addMonths(new Date(), Number(product.interval_months ?? 1));
+      // un giorno di margine per i ritardi di pagamento
+      until.setDate(until.getDate() + 1);
+
+      const { error: subErr } = await supabase.rpc("admin_activate_subscription", {
+        p_user_id: userId,
+        p_product_code: product.code,
+        p_until: until.toISOString(),
+        p_new_period: false,
+      });
+      if (subErr) throw subErr;
+
+      const { error: purchaseErr } = await supabase.from("purchases").insert({
+        user_id: userId,
+        purchase_type: "subscription_renewal",
+        product_code: product.code,
+        amount: Number(invoice.amount_paid ?? product.price_cents ?? 0) / 100,
+        currency: String(invoice.currency ?? product.currency ?? "EUR").toUpperCase(),
+        credits_added: 0,
+        stripe_session_id: invoice.id,
+        stripe_payment_intent: null,
+      });
+      if (purchaseErr) throw purchaseErr;
+      return res.status(200).json({ received: true });
+    }
+
     if (event.type !== "checkout.session.completed") {
       return res.status(200).json({ received: true, ignored: true });
     }
@@ -76,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: product, error: productErr } = await supabase
       .from("billing_products")
-      .select("code,type,name,price_cents,currency,credits_amount")
+      .select("code,type,name,price_cents,currency,credits_amount,interval_months")
       .eq("code", productCode)
       .eq("is_active", true)
       .maybeSingle();
@@ -106,23 +163,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (purchaseType === "subscription") {
-      const premiumUntil = new Date();
-      premiumUntil.setMonth(premiumUntil.getMonth() + 1);
+      // 25 crediti subito, poi ogni mese si azzerano e tornano a 25 finché l'abbonamento è attivo
+      const until = addMonths(new Date(), Number(product.interval_months ?? 1));
+      until.setDate(until.getDate() + 1);
+      const { error: subErr } = await supabase.rpc("admin_activate_subscription", {
+        p_user_id: userId,
+        p_product_code: product.code,
+        p_until: until.toISOString(),
+        p_new_period: true,
+      });
 
-      const { error: profileErr } = await supabase
-        .from("user_profiles")
-        .upsert(
-          {
-            user_id: userId,
-            plan_type: "premium",
-            premium_until: premiumUntil.toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
-
-      if (profileErr) {
-        throw profileErr;
+      if (subErr) {
+        throw subErr;
       }
     }
 

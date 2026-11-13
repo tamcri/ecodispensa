@@ -314,7 +314,7 @@ export const ChefView: React.FC<ChefViewProps> = ({ items, onCook, onAddShopping
   }, [ecoCredits]);
 
   const inCooldown = cooldownUntil !== null && Date.now() < cooldownUntil;
-  const noCredits = !isPremiumActive && (ecoCredits ?? 0) <= 0;
+  const noCredits = (ecoCredits ?? 0) <= 0;
 
   const { expiringItemsCount, expiredItemsCount } = useMemo(() => {
     let expiring = 0;
@@ -835,13 +835,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       <ScreenHeader
         title="EcoChef"
         right={
-          isPremiumActive ? (
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-3 text-[13px] font-bold text-lemon">
-              <Sparkles size={15} /> Premium
-            </span>
-          ) : (
-            <CreditsBadge credits={ecoCredits} dark onClick={refreshCredits} />
-          )
+          <CreditsBadge credits={ecoCredits} dark onClick={refreshCredits} />
         }
       />
 
@@ -877,7 +871,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       {noCredits && !premiumStatusLoading && ecoCredits !== null && (
         <div className="rounded-3xl bg-peach p-4 text-sm text-[#8A3B0C]">
           <p className="font-bold">Crediti esauriti</p>
-          <p>Hai usato tutti i crediti di prova. Per generare nuove ricette serve almeno 1 credito: a breve potrai acquistarne altri dal Profilo. Le ricette salvate restano sempre disponibili nel Ricettario.</p>
+          <p>{isPremiumActive ? "Hai usato tutti i crediti di questo mese: tornano a 25 al rinnovo. Intanto puoi aggiungere una ricarica dal Profilo." : "Hai usato tutti i crediti. Per generare nuove ricette serve almeno 1 credito: a breve potrai abbonarti dal Profilo."} Le ricette salvate restano sempre disponibili nel Ricettario.</p>
         </div>
       )}
 
@@ -926,7 +920,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
             {loading ? <Loader2 size={20} className="animate-spin text-lemon" /> : <Sparkles size={20} className="text-lemon" />}
             {recipes.length > 0 ? "Altre idee" : "Trova ricette"}
           </button>
-          {!isPremiumActive && <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 ricette generate usi 1 credito</p>}
+          <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 ricette generate usi 1 credito</p>
         </>
       )}
 

@@ -3345,13 +3345,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let creditUsage: any = null;
     let remainingAfterConsume: number | null = null;
 
-    if (!isPremiumActive) {
+    // Tutti consumano crediti: chi è abbonato usa prima i 25 crediti del mese
+    {
       const { data: consumeData, error: creditErr } = await supabase.rpc("consume_eco_generation");
       if (creditErr) {
         if (String(creditErr.message || "").includes("NO_CREDITS")) {
           return res.status(402).json({
             error: "NO_CREDITS",
-            message: "Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.",
+            message: "Crediti EcoChef esauriti. Abbonati o acquista una ricarica per continuare.",
           });
         }
         return res.status(500).json({ error: creditErr.message });
@@ -3812,12 +3813,10 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
         console.error("OpenAI meal-plan error:", data);
 
         const refundReason = `openai_meal_plan_error_${r.status}`;
-        const { data: refunded, error: refundErr } = !isPremiumActive
-          ? await supabase.rpc("refund_eco_generation", {
+        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_generation", {
               p_consumed_credit: Boolean(creditUsage?.consumedCredit),
               p_reason: refundReason,
-            })
-          : { data: null, error: null };
+            });
 
         const errType = data?.error?.type;
         const status = r.status;
@@ -4093,12 +4092,10 @@ OUTPUT OBBLIGATORIO:
           );
 
           const { data: qualityRefund, error: qualityRefundErr } =
-            !isPremiumActive
-              ? await supabase.rpc("refund_eco_generation", {
+            await supabase.rpc("refund_eco_generation", {
                   p_consumed_credit: Boolean(creditUsage?.consumedCredit),
                   p_reason: "meal_plan_quality_repair_failed",
-                })
-              : { data: null, error: null };
+                });
 
           return {
             error: "MEAL_PLAN_QUALITY_REPAIR_FAILED",
@@ -4115,7 +4112,7 @@ OUTPUT OBBLIGATORIO:
                 : typeof remainingAfterConsume === "number"
                   ? remainingAfterConsume
                   : null,
-            refunded: isPremiumActive ? false : !qualityRefundErr,
+            refunded: !qualityRefundErr,
           };
         }
 

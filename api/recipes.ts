@@ -234,13 +234,14 @@ if (!pantryText && idea) {
     let creditUsage: any = null;
     let remainingAfterConsume: number | null = null;
 
-    if (!isPremiumActive) {
+    // Tutti consumano crediti: chi è abbonato usa prima i 25 crediti del mese
+    {
       const { data: consumeData, error: creditErr } = await supabase.rpc("consume_eco_generation");
       if (creditErr) {
         if (String(creditErr.message || "").includes("NO_CREDITS")) {
           return res.status(402).json({
             error: "NO_CREDITS",
-            message: "Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.",
+            message: "Crediti EcoChef esauriti. Abbonati o acquista una ricarica per continuare.",
           });
         }
         return res.status(500).json({ error: creditErr.message });
@@ -408,12 +409,10 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
         console.error("OpenAI error:", data);
 
         const refundReason = `openai_error_${r.status}`;
-        const { data: refunded, error: refundErr } = !isPremiumActive
-          ? await supabase.rpc("refund_eco_generation", {
+        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_generation", {
               p_consumed_credit: Boolean(creditUsage?.consumedCredit),
               p_reason: refundReason,
-            })
-          : { data: null, error: null };
+            });
 
         const errType = data?.error?.type;
         const status = r.status;

@@ -39,6 +39,9 @@ const DEFAULT_PREFS: UserChefPreferences = {
 
 type CreditsResponse = {
   eco_credits: number;
+  purchased_credits?: number;
+  monthly_credits?: number;
+  monthly_reset_at?: string | null;
   updated_at: string | null;
 };
 
@@ -55,7 +58,7 @@ type BillingProduct = {
 
 type Purchase = {
   id: string;
-  purchase_type: "credits_pack" | "subscription";
+  purchase_type: "credits_pack" | "subscription" | "subscription_renewal";
   product_code: string;
   product_name: string | null;
   amount: number;
@@ -190,6 +193,9 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [allergiesText, setAllergiesText] = useState("");
 
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
+  const [monthlyCredits, setMonthlyCredits] = useState(0);
+  const [purchasedCredits, setPurchasedCredits] = useState(0);
+  const [monthlyResetAt, setMonthlyResetAt] = useState<string | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [planType, setPlanType] = useState<"free" | "premium">("free");
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
@@ -293,6 +299,9 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setCreditsLoading(true);
       const c = await fetchCredits();
       setEcoCredits(c.eco_credits ?? 0);
+      setMonthlyCredits(c.monthly_credits ?? 0);
+      setPurchasedCredits(c.purchased_credits ?? c.eco_credits ?? 0);
+      setMonthlyResetAt(c.monthly_reset_at ?? null);
     } catch (e) {
       console.error("credits load error:", e);
       setEcoCredits(null);
@@ -532,7 +541,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
       : baseName;
   }
 
-  return purchase.product_name || "Premium Mensile";
+  return purchase.product_name || "Abbonamento EcoChef";
 };
 
   if (!open) return null;
@@ -712,10 +721,10 @@ const getPurchaseTitle = (purchase: Purchase) => {
                           </span>
                           <div>
                             <div className="text-xs font-extrabold tracking-wider text-amber-700">
-                              PREMIUM ATTIVO
+                              ABBONAMENTO ATTIVO
                             </div>
                             <div className="text-xs text-gray-500 mt-0.5">
-                              {premiumUntilLabel ? `Scade il ${premiumUntilLabel}` : "Piano Premium attivo"}
+                              {premiumUntilLabel ? `Si rinnova il ${premiumUntilLabel}` : "Abbonamento attivo"}
                             </div>
                           </div>
                         </div>
@@ -734,13 +743,18 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       <div className="bg-white/90 border border-amber-100 rounded-xl p-3">
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="text-base" aria-hidden="true">
-                            ♾
+                            📅
                           </span>
-                          Generazioni EcoChef
+                          Crediti del mese
                         </div>
                         <div className="mt-1 text-lg font-extrabold text-gray-900">
-                          Illimitate
+                          {creditsLoading ? "…" : monthlyCredits}
                         </div>
+                        {monthlyResetAt && (
+                          <div className="text-[11px] text-gray-500">
+                            Tornano a 25 il {new Date(monthlyResetAt).toLocaleDateString("it-IT")}
+                          </div>
+                        )}
                       </div>
 
                       <div className="bg-white/90 border border-emerald-100 rounded-xl p-3">
@@ -748,16 +762,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
                           <span className="text-base" aria-hidden="true">
                             💳
                           </span>
-                          Crediti extra conservati
+                          Crediti extra (non scadono)
                         </div>
                         <div className="mt-1 text-lg font-extrabold text-gray-900">
-                          {creditsLoading ? "…" : ecoCredits ?? 0}
+                          {creditsLoading ? "…" : purchasedCredits}
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
-                      I crediti acquistati verranno utilizzati solo dopo la scadenza del Premium.
+                      Usiamo prima i crediti del mese: quelli non usati si azzerano al rinnovo. I crediti extra restano tuoi.
                     </div>
 
                     <button
@@ -777,11 +791,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                             isPremiumExpired ? "text-amber-700" : "text-gray-500"
                           }`}
                         >
-                          {isPremiumExpired ? "PREMIUM NON ATTIVO" : "PIANO FREE"}
+                          {isPremiumExpired ? "ABBONAMENTO SCADUTO" : "PIANO GRATUITO"}
                         </div>
                         <div className="text-sm text-gray-500 mt-1">
                           {isPremiumExpired && premiumUntilLabel
-                            ? `Scaduto il ${premiumUntilLabel}. I crediti sono di nuovo disponibili.`
+                            ? `Scaduto il ${premiumUntilLabel}. Puoi usare i crediti extra rimasti.`
                             : "Usa i tuoi crediti per le generazioni EcoChef."}
                         </div>
                       </div>
@@ -803,14 +817,14 @@ const getPurchaseTitle = (purchase: Purchase) => {
                         {creditsLoading ? "…" : ecoCredits ?? 0}
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
-                        1 credito = 4 generazioni AI
+                        1 credito = 4 ricette generate
                       </div>
                     </div>
 
                     <div className="mt-3 text-sm text-gray-600 leading-relaxed">
                       {isPremiumExpired
-                        ? "Riattiva Premium per tornare alle generazioni EcoChef illimitate oppure continua usando i crediti disponibili."
-                        : "Passa a Premium per generazioni EcoChef illimitate oppure acquista nuovi pacchetti di crediti."}
+                        ? "Riattiva l'abbonamento per avere di nuovo 25 crediti ogni mese."
+                        : "Con l'abbonamento hai 25 crediti ogni mese (100 ricette). Se finiscono, puoi aggiungere una ricarica."}
                     </div>
 
                     <button
@@ -821,8 +835,8 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       {showBillingPanel
                         ? "Chiudi"
                         : isPremiumExpired
-                        ? "Riattiva Premium o acquista crediti"
-                        : "Scopri Premium e pacchetti"}
+                        ? "Riattiva l'abbonamento"
+                        : "Scopri l'abbonamento"}
                     </button>
                   </div>
                 )}
@@ -831,16 +845,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   <div className="mt-4 space-y-4">
                     <div className="bg-white border border-gray-100 rounded-xl p-4">
                       <div className="text-sm font-bold text-gray-800 mb-1">
-                        Pacchetti crediti
+                        Ricarica crediti
                       </div>
                       <div className="text-xs text-gray-500 mb-3">
-                        Acquista crediti da usare per EcoChef e le funzioni AI.
+                        Crediti extra che non scadono, da usare quando finiscono quelli del mese.
                       </div>
 
                       {billingLoading ? (
                         <div className="text-sm text-gray-500">Caricamento prodotti...</div>
                       ) : creditProducts.length === 0 ? (
-                        <div className="text-sm text-gray-500">Nessun pacchetto disponibile.</div>
+                        <div className="text-sm text-gray-500">Le ricariche saranno disponibili a breve.</div>
                       ) : (
                         <div className="space-y-2">
                           {creditProducts.map((product) => (
@@ -875,16 +889,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
                     <div className="bg-white border border-amber-100 rounded-xl p-4">
                       <div className="text-sm font-bold text-gray-800 mb-1">
-                        Premium
+                        Abbonamento EcoChef
                       </div>
                       <div className="text-xs text-gray-500 mb-3">
-                        Piano mensile per usare EcoDispensa in modo avanzato.
+                        25 crediti ogni mese (100 ricette), menu settimanali con obiettivo calorie.
                       </div>
 
                       {billingLoading ? (
                         <div className="text-sm text-gray-500">Caricamento piano...</div>
                       ) : subscriptionProducts.length === 0 ? (
-                        <div className="text-sm text-gray-500">Nessun piano Premium disponibile.</div>
+                        <div className="text-sm text-gray-500">L'abbonamento sarà disponibile a breve.</div>
                       ) : (
                         <div className="space-y-2">
                           {subscriptionProducts.map((product) => (
@@ -986,8 +1000,8 @@ const getPurchaseTitle = (purchase: Purchase) => {
                                 : "text-emerald-700"
                             }`}
                           >
-                            {purchase.purchase_type === "subscription"
-                              ? "Premium"
+                            {purchase.purchase_type === "subscription" || purchase.purchase_type === "subscription_renewal"
+                              ? "Abbonamento"
                               : "Crediti EcoChef"}
                           </div>
                         </div>
