@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Bell, ChefHat, Eye, EyeOff, ShoppingCart } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
+import { resetPasswordWithCode } from "../services/account";
 
 type Mode = "login" | "signup";
 
@@ -18,6 +19,11 @@ export default function AuthView() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const canSubmit = username.trim().length >= 3 && password.length >= 6;
 
@@ -61,6 +67,28 @@ export default function AuthView() {
 
   const inputClass =
     "mt-1.5 h-12 w-full rounded-2xl bg-ground px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500";
+
+  const canReset =
+    username.trim().length >= 3 && resetCode.replace(/[^a-z0-9]/gi, "").length === 16 && resetPassword.length >= 6;
+
+  async function onReset(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setResetMsg(null);
+    setResetLoading(true);
+    const err = await resetPasswordWithCode(username, resetCode, resetPassword);
+    setResetLoading(false);
+    if (err) {
+      setResetMsg({ ok: false, text: err });
+      return;
+    }
+    // accesso diretto con la nuova password
+    const { error } = await supabase.auth.signInWithPassword({ email: toFakeEmail(username), password: resetPassword });
+    if (error) {
+      setPassword(resetPassword);
+      setResetOpen(false);
+      setMsg("Password cambiata. Ora puoi accedere.");
+    }
+  }
 
   const switchMode = (next: Mode) => {
     setMsg(null);
@@ -177,9 +205,76 @@ export default function AuthView() {
             {loading ? "Attendi…" : mode === "login" ? "Entra" : "Crea il mio account"}
           </button>
           {mode === "signup" && (
-            <p className="text-center text-xs text-muted">Gratis. Ti servono solo un username e una password.</p>
+            <p className="text-center text-xs text-muted">
+              Gratis durante il periodo di prova: 20 crediti EcoChef in regalo. Ti servono solo un username e una password.
+            </p>
+          )}
+          {mode === "login" && !resetOpen && (
+            <button
+              type="button"
+              onClick={() => {
+                setMsg(null);
+                setResetMsg(null);
+                setResetOpen(true);
+              }}
+              className="text-center text-sm font-semibold text-emerald-700"
+            >
+              Password dimenticata?
+            </button>
           )}
         </form>
+
+        {mode === "login" && resetOpen && (
+          <form onSubmit={onReset} className="mt-4 flex flex-col gap-3 border-t border-black/5 pt-4">
+            <p className="text-sm font-bold text-ink">Nuova password</p>
+            <p className="text-sm text-muted">
+              Scrivi il tuo username qui sopra, poi il <b className="text-ink">codice di recupero</b> che hai salvato dal Profilo.
+            </p>
+            <div>
+              <label htmlFor="reset-code" className="text-xs font-bold text-muted">Codice di recupero</label>
+              <input
+                id="reset-code"
+                value={resetCode}
+                onChange={(e) => setResetCode(e.target.value.toUpperCase())}
+                className={`${inputClass} font-mono tracking-wider`}
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="one-time-code"
+              />
+            </div>
+            <div>
+              <label htmlFor="reset-password" className="text-xs font-bold text-muted">Nuova password</label>
+              <input
+                id="reset-password"
+                type={showPassword ? "text" : "password"}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                className={inputClass}
+                placeholder="almeno 6 caratteri"
+                autoComplete="new-password"
+              />
+            </div>
+            {resetMsg && (
+              <div className={`rounded-2xl p-3 text-sm font-semibold ${resetMsg.ok ? "bg-mint text-emerald-800" : "bg-peach text-[#8A3B0C]"}`}>
+                {resetMsg.text}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={!canReset || resetLoading}
+              className="h-12 w-full rounded-2xl bg-ink text-[15px] font-bold text-white disabled:opacity-50"
+            >
+              {resetLoading ? "Attendi…" : "Cambia password ed entra"}
+            </button>
+            <p className="text-xs text-muted">
+              Non hai il codice? Purtroppo senza codice non è possibile recuperare l'account, perché l'app non chiede l'email.
+            </p>
+            <button type="button" onClick={() => setResetOpen(false)} className="text-sm font-semibold text-muted">
+              Annulla
+            </button>
+          </form>
+        )}
       </section>
 
       {/* perché usarla */}

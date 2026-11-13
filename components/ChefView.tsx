@@ -877,7 +877,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       {noCredits && !premiumStatusLoading && ecoCredits !== null && (
         <div className="rounded-3xl bg-peach p-4 text-sm text-[#8A3B0C]">
           <p className="font-bold">Crediti esauriti</p>
-          <p>Per generare nuove ricette serve almeno 1 credito. Le ricette salvate restano sempre disponibili nel Ricettario.</p>
+          <p>Hai usato tutti i crediti di prova. Per generare nuove ricette serve almeno 1 credito: a breve potrai acquistarne altri dal Profilo. Le ricette salvate restano sempre disponibili nel Ricettario.</p>
         </div>
       )}
 

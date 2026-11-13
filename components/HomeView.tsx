@@ -7,6 +7,7 @@ import { fetchSavedRecipes, SavedRecipe } from "../services/api";
 import { tintFor } from "./RecipePhoto";
 import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
 import { findFoodGuide } from "../foodGuide";
+import { RecoveryCodeCard } from "./RecoveryCodeCard";
 
 interface HomeViewProps {
   pantryItems: PantryItem[];
@@ -127,6 +128,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <div>
         <CreditsBadge credits={credits} onClick={() => onNavigate("chef")} />
       </div>
+
+      <RecoveryCodeCard compact />
 
       {/* Prodotti da salvare */}
       <section className="flex flex-col gap-3.5 rounded-4xl bg-forest p-5 text-white">

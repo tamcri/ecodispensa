@@ -36,9 +36,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const user_id = userData.user.id;
-    const user_email = userData.user.email ?? null;
-
-    console.log("USER FROM TOKEN:", user_id, user_email);
 
     const { data, error } = await supabase
       .from("user_credits")
@@ -47,21 +44,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .maybeSingle();
 
     if (error) {
-      return res.status(500).json({
-        error: error.message,
-        debug_user_id: user_id,
-        debug_email: user_email,
-      });
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(200).json({
       eco_credits: data?.eco_credits ?? 0,
       updated_at: data?.updated_at ?? null,
-
-      // DEBUG temporaneo: rimuoveremo dopo aver verificato
-      debug_user_id: user_id,
-      debug_email: user_email,
-      debug_has_row: Boolean(data),
     });
   } catch (e: any) {
     console.error("credits api error:", e);

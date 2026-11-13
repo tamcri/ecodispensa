@@ -18,6 +18,8 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import { RecoveryCodeCard } from "./RecoveryCodeCard";
+import { PrivacySection } from "./PrivacySection";
 
 type Diet = "omnivore" | "veg" | "vegan";
 
@@ -1061,10 +1063,10 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   <div className="text-sm font-bold text-gray-800">Privacy</div>
                 </div>
 
-                <div className="text-sm text-gray-600">
-                  Qui potrai gestire consenso e dati personali. (Lo completiamo in uno step successivo.)
-                </div>
+                <PrivacySection />
               </div>
+
+              <RecoveryCodeCard />
 
               <button
                 onClick={onLogout}
