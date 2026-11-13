@@ -757,7 +757,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                               {premiumUntilLabel
                                 ? cancelAtPeriodEnd
                                   ? `Disdetto: attivo fino al ${premiumUntilLabel}`
-                                  : `Si rinnova il ${premiumUntilLabel}`
+                                  : `Rinnovo automatico il ${premiumUntilLabel}`
                                 : "Abbonamento attivo"}
                             </div>
                           </div>

@@ -83,8 +83,8 @@ export const PlansPanel = ({
             className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600"
           />
           <span>
-            Voglio iniziare subito: so che, usando i crediti, rinuncio al diritto di recesso di 14 giorni. L'abbonamento si può
-            disdire quando vuoi e resta attivo fino alla fine del periodo pagato.
+            Voglio iniziare subito: so che, usando i crediti, rinuncio al diritto di recesso di 14 giorni. So che l'abbonamento
+            si rinnova in automatico finché non lo disdico, e che dopo la disdetta resta attivo fino alla fine del periodo pagato.
           </span>
         </label>
       )}
@@ -110,6 +110,9 @@ export const PlansPanel = ({
           >
             {isSubscribed ? "Hai già un abbonamento attivo" : buyLabel(monthly.code, `Abbonati a ${euro(monthly.price_cents)}/mese`)}
           </button>
+          <p className="mt-2 text-center text-xs text-gray-600">
+            <b>Si rinnova in automatico ogni mese</b> ({euro(monthly.price_cents)}) · disdici quando vuoi dal Profilo
+          </p>
         </div>
       )}
 
@@ -126,7 +129,7 @@ export const PlansPanel = ({
               <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Risparmi il {savingPct}%</span>
             )}
           </div>
-          <p className="mt-2 text-xs text-gray-500">{yearly.credits_amount} crediti ogni mese per 12 mesi, pagati una volta sola.</p>
+          <p className="mt-2 text-xs text-gray-500">{yearly.credits_amount} crediti ogni mese per 12 mesi, con un unico pagamento all’anno.</p>
           <button
             type="button"
             disabled={!checkoutEnabled || !waiver || !!busy || isSubscribed}
@@ -135,6 +138,9 @@ export const PlansPanel = ({
           >
             {isSubscribed ? "Hai già un abbonamento attivo" : buyLabel(yearly.code, `Abbonati a ${euro(yearly.price_cents)}/anno`)}
           </button>
+          <p className="mt-2 text-center text-xs text-gray-600">
+            <b>Si rinnova in automatico ogni anno</b> ({euro(yearly.price_cents)}) · disdici quando vuoi dal Profilo
+          </p>
         </div>
       )}
 
@@ -183,6 +189,7 @@ export const PlansPanel = ({
           >
             {buyLabel(topup.code, `Carica ${qtySafe} crediti · ${euro(topupCents)}`)}
           </button>
+          <p className="mt-2 text-center text-xs text-gray-600">Pagamento unico, nessun rinnovo.</p>
         </div>
       )}
     </div>
