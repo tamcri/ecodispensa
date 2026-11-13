@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import { canUserCheckout } from "./_lib/billing";
 
 function getBearerToken(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -35,91 +36,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Missing Authorization Bearer token" });
     }
 
-    const { productCode } = req.body ?? {};
+    const { productCode, quantity } = req.body ?? {};
 
     if (!productCode || typeof productCode !== "string") {
       return res.status(400).json({ error: "Missing productCode" });
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
+      global: { headers: { Authorization: `Bearer ${token}` } },
     });
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
-
     if (userErr || !userData?.user) {
-      return res.status(401).json({
-        error: "Invalid session",
-        details: userErr?.message,
+      return res.status(401).json({ error: "Invalid session" });
+    }
+    const user = userData.user;
+
+    if (!canUserCheckout(user.id)) {
+      return res.status(403).json({
+        error: "CHECKOUT_NOT_AVAILABLE",
+        message: "Gli acquisti saranno disponibili a breve.",
       });
     }
 
-    const user = userData.user;
-
     const { data: product, error: productErr } = await supabase
       .from("billing_products")
-      .select("code,type,name,stripe_price_id")
+      .select("code,type,name,price_cents,stripe_price_id,min_quantity,max_quantity,quantity_step")
       .eq("code", productCode)
       .eq("is_active", true)
       .maybeSingle();
 
-    if (productErr) {
-      return res.status(500).json({ error: productErr.message });
-    }
+    if (productErr) return res.status(500).json({ error: "Errore nel leggere i prodotti." });
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    if (!product.stripe_price_id) return res.status(400).json({ error: "Product missing stripe_price_id" });
 
-    if (!product) {
-      return res.status(404).json({ error: "Product not found" });
-    }
-
-    if (!product.stripe_price_id) {
-      return res.status(400).json({ error: "Product missing stripe_price_id" });
+    // Ricarica libera: numero di crediti scelto dall'utente, controllato qui sul server
+    let units = 1;
+    if (product.type === "credits_topup") {
+      const min = Number(product.min_quantity ?? 10);
+      const max = Number(product.max_quantity ?? 200);
+      const step = Number(product.quantity_step ?? 1);
+      units = Math.round(Number(quantity));
+      if (!Number.isFinite(units) || units < min || units > max || (units - min) % step !== 0) {
+        return res.status(400).json({
+          error: "INVALID_QUANTITY",
+          message: `Puoi caricare da ${min} a ${max} crediti, a scatti di ${step}.`,
+        });
+      }
     }
 
     const stripe = new Stripe(stripeSecretKey);
-
     const mode = product.type === "subscription" ? "subscription" : "payment";
+
+    const metadata = {
+      app: "ecodispensa",
+      user_id: user.id,
+      product_code: product.code,
+      product_type: product.type,
+      credits: product.type === "credits_topup" ? String(units) : "0",
+    };
 
     const session = await stripe.checkout.sessions.create({
       mode,
-      line_items: [
-        {
-          price: product.stripe_price_id,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: product.stripe_price_id, quantity: units }],
       success_url: `${appUrl}/?checkout=success`,
       cancel_url: `${appUrl}/?checkout=cancelled`,
       client_reference_id: user.id,
       // niente customer_email: l'email dell'account è fittizia, Stripe la chiede al momento del pagamento
-      metadata: {
-        user_id: user.id,
-        product_code: product.code,
-        product_type: product.type,
-      },
-      subscription_data:
-        mode === "subscription"
-          ? {
-              metadata: {
-                user_id: user.id,
-                product_code: product.code,
-                product_type: product.type,
-              },
-            }
-          : undefined,
-      payment_intent_data:
-        mode === "payment"
-          ? {
-              metadata: {
-                user_id: user.id,
-                product_code: product.code,
-                product_type: product.type,
-              },
-            }
-          : undefined,
+      metadata,
+      subscription_data: mode === "subscription" ? { metadata } : undefined,
+      payment_intent_data: mode === "payment" ? { metadata } : undefined,
     });
 
     return res.status(200).json({

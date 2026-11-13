@@ -62,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         invoice.parent?.subscription_details?.metadata ?? invoice.subscription_details?.metadata ?? {};
       const userId = meta.user_id;
       const productCode = meta.product_code;
-      if (!userId || !productCode) {
+      if (!userId || !productCode || (meta.app && meta.app !== "ecodispensa")) {
         return res.status(200).json({ received: true, ignored: true, reason: "missing metadata" });
       }
 
@@ -74,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select("code,price_cents,currency,interval_months")
         .eq("code", productCode)
         .maybeSingle();
-      if (!product) return res.status(404).json({ error: "Billing product not found" });
+      if (!product) return res.status(200).json({ received: true, ignored: true, reason: "unknown product" });
 
       const periodEnd = invoice.lines?.data?.[0]?.period?.end;
       const until = periodEnd ? new Date(periodEnd * 1000) : addMonths(new Date(), Number(product.interval_months ?? 1));
@@ -113,8 +113,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = session.metadata?.user_id || session.client_reference_id;
     const productCode = session.metadata?.product_code;
 
+    // Nello stesso account Stripe ci sono anche altri progetti: i loro pagamenti si ignorano
     if (!userId || !productCode) {
-      return res.status(400).json({ error: "Missing user_id or product_code in session metadata" });
+      return res.status(200).json({ received: true, ignored: true, reason: "not an EcoDispensa checkout" });
+    }
+
+    if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+      return res.status(200).json({ received: true, ignored: true, reason: "not paid" });
     }
 
     const { data: alreadyProcessed, error: existingErr } = await supabase
@@ -143,14 +148,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!product) {
-      return res.status(404).json({ error: "Billing product not found" });
+      return res.status(200).json({ received: true, ignored: true, reason: "unknown product" });
     }
 
     const purchaseType = product.type;
-    const creditsToAdd = purchaseType === "credits_pack" ? Number(product.credits_amount ?? 0) : 0;
-    const amount = Number(product.price_cents ?? 0) / 100;
+    let creditsToAdd = purchaseType === "credits_pack" ? Number(product.credits_amount ?? 0) : 0;
+    let amount = Number(product.price_cents ?? 0) / 100;
 
-    if (purchaseType === "credits_pack" && creditsToAdd > 0) {
+    if (purchaseType === "credits_topup") {
+      // crediti scelti dall'utente: controlla che l'importo pagato corrisponda davvero
+      const units = Math.round(Number(session.metadata?.credits ?? 0));
+      const expectedCents = units * Number(product.price_cents ?? 0);
+      if (!Number.isFinite(units) || units <= 0 || session.amount_total !== expectedCents) {
+        console.error("Top-up amount mismatch", { units, amount_total: session.amount_total, expectedCents });
+        return res.status(200).json({ received: true, ignored: true, reason: "amount mismatch" });
+      }
+      creditsToAdd = units * Number(product.credits_amount ?? 1);
+      amount = expectedCents / 100;
+    }
+
+    if ((purchaseType === "credits_pack" || purchaseType === "credits_topup") && creditsToAdd > 0) {
       const { error: creditErr } = await supabase.rpc("admin_add_eco_credits", {
         p_user_id: userId,
         p_amount: creditsToAdd,
