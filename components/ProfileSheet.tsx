@@ -21,6 +21,7 @@ import {
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { PrivacySection } from "./PrivacySection";
 import { PlansPanel, type PlanProduct } from "./PlansPanel";
+import { displayNameFromEmail } from "../services/household";
 
 type Diet = "omnivore" | "veg" | "vegan";
 
@@ -187,6 +188,8 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [avoidText, setAvoidText] = useState("");
   const [allergiesText, setAllergiesText] = useState("");
 
+  // l'account usa un indirizzo interno "username@example.com": mostriamo solo lo username
+  const username = displayNameFromEmail(userEmail);
   const [ecoCredits, setEcoCredits] = useState<number | null>(null);
   const [monthlyCredits, setMonthlyCredits] = useState(0);
   const [purchasedCredits, setPurchasedCredits] = useState(0);
@@ -612,7 +615,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-lg text-gray-800 truncate">Profilo</h3>
-              <p className="text-xs text-gray-500 truncate">{userEmail ?? "—"}</p>
+              <p className="text-xs text-gray-500 truncate">{username ?? "—"}</p>
             </div>
           </div>
 
@@ -654,13 +657,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
             <>
               <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <Mail size={16} className="text-emerald-600" />
+                  <User size={16} className="text-emerald-600" />
                   <div className="text-sm font-bold text-gray-800">Account</div>
                 </div>
 
                 <div className="text-sm text-gray-600">
-                  <div className="text-xs text-gray-400 mb-1">Email</div>
-                  <div className="font-semibold text-gray-800">{userEmail ?? "—"}</div>
+                  <div className="text-xs text-gray-400 mb-1">Username</div>
+                  <div className="font-semibold text-gray-800">{username ?? "—"}</div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    È il nome con cui accedi. EcoDispensa non ti chiede l’email: per recuperare l’accesso usa il codice di recupero qui sotto.
+                  </p>
                 </div>
               </div>
 
