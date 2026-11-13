@@ -71,8 +71,14 @@ export const Sheet = ({
       <div
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-4xl bg-ground animate-slide-up"
+        className="flex max-h-[92vh] max-h-[92dvh] w-full max-w-md flex-col rounded-t-4xl bg-ground animate-slide-up"
         onClick={(e) => e.stopPropagation()}
+        onFocusCapture={(e) => {
+          // quando si apre la tastiera porta il campo toccato al centro, così non resta coperto
+          const el = e.target as HTMLElement;
+          if (!el.matches?.("input, select, textarea")) return;
+          window.setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
+        }}
       >
         <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
           <div className="min-w-0 font-display text-xl font-bold text-ink">{title}</div>
@@ -474,7 +480,11 @@ export const QuantityInput = ({
           inputMode="decimal"
           autoComplete="off"
           value={text}
-          onFocus={(e) => e.currentTarget.select()}
+          onFocus={(e) => {
+            // su Android la selezione fatta subito viene annullata dal tocco: la rifaccio un attimo dopo
+            const el = e.currentTarget;
+            window.setTimeout(() => el.select(), 60);
+          }}
           onChange={(e) => commit(e.target.value.replace(/[^\d.,]/g, ""))}
           onBlur={() => setText(fmtQty(value))}
           className={`min-w-0 flex-1 rounded-2xl border-0 bg-white px-3 text-center font-display font-extrabold text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500 ${
