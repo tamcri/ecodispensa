@@ -40,6 +40,7 @@ export const PlansPanel = ({
   const step = Number(topup?.quantity_step ?? 5);
   const [qty, setQty] = useState(20);
   const [busy, setBusy] = useState<string | null>(null);
+  const [waiver, setWaiver] = useState(false);
 
   const clamp = (n: number) => Math.min(max, Math.max(min, Math.round((n - min) / step) * step + min));
   const qtySafe = clamp(qty);
@@ -47,7 +48,7 @@ export const PlansPanel = ({
   const menus = Math.floor(qtySafe / 4);
 
   const buy = async (code: string, quantity?: number) => {
-    if (!checkoutEnabled || busy) return;
+    if (!checkoutEnabled || busy || !waiver) return;
     setBusy(code);
     try {
       await onCheckout(code, quantity);
@@ -73,6 +74,21 @@ export const PlansPanel = ({
         </p>
       )}
 
+      {checkoutEnabled && (
+        <label className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={waiver}
+            onChange={(e) => setWaiver(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600"
+          />
+          <span>
+            Voglio iniziare subito: so che, usando i crediti, rinuncio al diritto di recesso di 14 giorni. L'abbonamento si può
+            disdire quando vuoi e resta attivo fino alla fine del periodo pagato.
+          </span>
+        </label>
+      )}
+
       {monthly && (
         <div className="rounded-2xl border-2 border-emerald-500 bg-white p-4">
           <div className="flex items-start justify-between gap-3">
@@ -88,7 +104,7 @@ export const PlansPanel = ({
           <p className="mt-2 text-xs text-gray-500">Per esempio 4 menu settimanali e 36 richieste di ricette.</p>
           <button
             type="button"
-            disabled={!checkoutEnabled || !!busy || isSubscribed}
+            disabled={!checkoutEnabled || !waiver || !!busy || isSubscribed}
             onClick={() => buy(monthly.code)}
             className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white disabled:opacity-50"
           >
@@ -113,7 +129,7 @@ export const PlansPanel = ({
           <p className="mt-2 text-xs text-gray-500">{yearly.credits_amount} crediti ogni mese per 12 mesi, pagati una volta sola.</p>
           <button
             type="button"
-            disabled={!checkoutEnabled || !!busy || isSubscribed}
+            disabled={!checkoutEnabled || !waiver || !!busy || isSubscribed}
             onClick={() => buy(yearly.code)}
             className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
           >
@@ -161,7 +177,7 @@ export const PlansPanel = ({
           )}
           <button
             type="button"
-            disabled={!checkoutEnabled || !!busy}
+            disabled={!checkoutEnabled || !waiver || !!busy}
             onClick={() => buy(topup.code, qtySafe)}
             className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-emerald-600 text-sm font-bold text-emerald-700 disabled:opacity-50"
           >

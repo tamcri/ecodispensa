@@ -36,11 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Missing Authorization Bearer token" });
     }
 
-    const { productCode, quantity } = req.body ?? {};
-
-    if (!productCode || typeof productCode !== "string") {
-      return res.status(400).json({ error: "Missing productCode" });
-    }
+    const { productCode, quantity, action, withdrawalWaiver } = req.body ?? {};
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -51,6 +47,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Invalid session" });
     }
     const user = userData.user;
+
+    // --- Disdetta / riattivazione del rinnovo (stessa funzione, per restare nel limite di Vercel) ---
+    if (action === "cancel_subscription" || action === "resume_subscription") {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("stripe_subscription_id, plan_type, premium_until")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const stripe = new Stripe(stripeSecretKey);
+      let subscriptionId: string | null = profile?.stripe_subscription_id ?? null;
+
+      // abbonamenti nati prima che salvassimo l'id: lo cerchiamo su Stripe
+      if (!subscriptionId) {
+        const found = await stripe.subscriptions
+          .search({ query: `metadata['user_id']:'${user.id}' AND status:'active'`, limit: 1 })
+          .catch(() => null);
+        subscriptionId = found?.data?.[0]?.id ?? null;
+      }
+      if (!subscriptionId) {
+        return res.status(404).json({ error: "NO_SUBSCRIPTION", message: "Non trovo un abbonamento attivo da disdire." });
+      }
+
+      const current = await stripe.subscriptions.retrieve(subscriptionId);
+      if (current.metadata?.user_id && current.metadata.user_id !== user.id) {
+        return res.status(403).json({ error: "FORBIDDEN", message: "Abbonamento non tuo." });
+      }
+
+      const cancel = action === "cancel_subscription";
+      const updated = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: cancel });
+
+      // stato salvato dal server (l'utente non può scriverlo da solo)
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (serviceKey) {
+        const admin = createClient(supabaseUrl, serviceKey);
+        await admin.rpc("admin_set_subscription_state", {
+          p_subscription_id: subscriptionId,
+          p_cancel_at_period_end: Boolean((updated as any).cancel_at_period_end),
+          p_ended: false,
+        });
+        await admin
+          .from("user_profiles")
+          .update({ stripe_subscription_id: subscriptionId })
+          .eq("user_id", user.id)
+          .is("stripe_subscription_id", null);
+      }
+
+      return res.status(200).json({
+        ok: true,
+        cancelAtPeriodEnd: Boolean((updated as any).cancel_at_period_end),
+        activeUntil: profile?.premium_until ?? null,
+      });
+    }
+
+    if (!productCode || typeof productCode !== "string") {
+      return res.status(400).json({ error: "Missing productCode" });
+    }
+
+    // Servizio digitale usato subito: serve la rinuncia esplicita ai 14 giorni di recesso
+    if (withdrawalWaiver !== true) {
+      return res.status(400).json({
+        error: "WITHDRAWAL_WAIVER_REQUIRED",
+        message: "Per continuare conferma di voler iniziare subito.",
+      });
+    }
 
     if (!canUserCheckout(user.id)) {
       return res.status(403).json({
@@ -94,6 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       product_code: product.code,
       product_type: product.type,
       credits: product.type === "credits_topup" ? String(units) : "0",
+      withdrawal_waiver_at: new Date().toISOString(),
     };
 
     const session = await stripe.checkout.sessions.create({
@@ -106,6 +168,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata,
       subscription_data: mode === "subscription" ? { metadata } : undefined,
       payment_intent_data: mode === "payment" ? { metadata } : undefined,
+      custom_text: {
+        submit: {
+          message:
+            "Hai chiesto di iniziare subito: usando i crediti rinunci al diritto di recesso di 14 giorni. " +
+            (mode === "subscription"
+              ? "Puoi disdire quando vuoi dal Profilo: l'abbonamento resta attivo fino alla fine del periodo pagato."
+              : "I crediti caricati non scadono."),
+        },
+      },
     });
 
     return res.status(200).json({

@@ -52,6 +52,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Disdetta programmata, riattivazione o fine dell'abbonamento
+    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+      const sub = event.data.object as any;
+      if (sub?.metadata?.app && sub.metadata.app !== "ecodispensa") {
+        return res.status(200).json({ received: true, ignored: true });
+      }
+      const ended = event.type === "customer.subscription.deleted" || sub.status === "canceled" || sub.status === "unpaid";
+      const { error: stateErr } = await supabase.rpc("admin_set_subscription_state", {
+        p_subscription_id: sub.id,
+        p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+        p_ended: ended,
+      });
+      if (stateErr) throw stateErr;
+      return res.status(200).json({ received: true });
+    }
+
     // Rinnovo automatico dell'abbonamento (ogni mese o ogni anno)
     if (event.type === "invoice.paid") {
       const invoice = event.data.object as any;
@@ -81,11 +97,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // un giorno di margine per i ritardi di pagamento
       until.setDate(until.getDate() + 1);
 
+      const subscriptionId =
+        invoice.parent?.subscription_details?.subscription ?? invoice.subscription ?? null;
       const { error: subErr } = await supabase.rpc("admin_activate_subscription", {
         p_user_id: userId,
         p_product_code: product.code,
         p_until: until.toISOString(),
         p_new_period: false,
+        p_customer_id: typeof invoice.customer === "string" ? invoice.customer : null,
+        p_subscription_id: typeof subscriptionId === "string" ? subscriptionId : null,
       });
       if (subErr) throw subErr;
 
@@ -188,6 +208,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         p_product_code: product.code,
         p_until: until.toISOString(),
         p_new_period: true,
+        p_customer_id: typeof session.customer === "string" ? session.customer : null,
+        p_subscription_id: typeof session.subscription === "string" ? session.subscription : null,
       });
 
       if (subErr) {

@@ -194,6 +194,10 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [planType, setPlanType] = useState<"free" | "premium">("free");
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [subBusy, setSubBusy] = useState(false);
+  const [subMsg, setSubMsg] = useState<string | null>(null);
   const [billingProducts, setBillingProducts] = useState<BillingProduct[]>([]);
   const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -234,7 +238,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
       const { data, error: selErr } = await supabase
         .from("user_profiles")
-        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until")
+        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -247,7 +251,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
         const { data: data2, error: selErr2 } = await supabase
           .from("user_profiles")
-          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until")
+          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end")
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -265,6 +269,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         setAllergiesText(toCommaString(loaded2.allergies));
         setPlanType((data2?.plan_type as "free" | "premium") ?? "free");
         setPremiumUntil(data2?.premium_until ?? null);
+        setCancelAtPeriodEnd(Boolean((data2 as any)?.subscription_cancel_at_period_end));
         return;
       }
 
@@ -280,6 +285,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setAllergiesText(toCommaString(loaded.allergies));
       setPlanType((data?.plan_type as "free" | "premium") ?? "free");
       setPremiumUntil(data?.premium_until ?? null);
+      setCancelAtPeriodEnd(Boolean((data as any)?.subscription_cancel_at_period_end));
     } catch (e) {
       console.error("prefs load error:", e);
       setPrefs(DEFAULT_PREFS);
@@ -335,6 +341,33 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     }
   };
 
+const changeSubscription = async (action: "cancel_subscription" | "resume_subscription") => {
+  setSubBusy(true);
+  setSubMsg(null);
+  try {
+    const token = await getAccessToken();
+    if (!token) throw new Error("Sessione scaduta: accedi di nuovo.");
+    const r = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body?.ok) throw new Error(body?.message ?? "Operazione non riuscita. Riprova.");
+    setCancelAtPeriodEnd(Boolean(body.cancelAtPeriodEnd));
+    setConfirmCancel(false);
+    setSubMsg(
+      body.cancelAtPeriodEnd
+        ? "Disdetta registrata: l'abbonamento resta attivo fino alla fine del periodo già pagato."
+        : "Rinnovo riattivato."
+    );
+  } catch (e: any) {
+    setSubMsg(e?.message ?? "Operazione non riuscita. Riprova.");
+  } finally {
+    setSubBusy(false);
+  }
+};
+
 const startCheckout = async (productCode: string, quantity?: number) => {
   try {
     const token = await getAccessToken();
@@ -350,7 +383,7 @@ const startCheckout = async (productCode: string, quantity?: number) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ productCode, quantity }),
+      body: JSON.stringify({ productCode, quantity, withdrawalWaiver: true }),
     });
 
     const body = await r.json();
@@ -721,7 +754,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                               ABBONAMENTO ATTIVO
                             </div>
                             <div className="text-xs text-gray-500 mt-0.5">
-                              {premiumUntilLabel ? `Si rinnova il ${premiumUntilLabel}` : "Abbonamento attivo"}
+                              {premiumUntilLabel
+                                ? cancelAtPeriodEnd
+                                  ? `Disdetto: attivo fino al ${premiumUntilLabel}`
+                                  : `Si rinnova il ${premiumUntilLabel}`
+                                : "Abbonamento attivo"}
                             </div>
                           </div>
                         </div>
@@ -776,8 +813,54 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       className="w-full mt-3 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-colors"
                       onClick={() => setShowBillingPanel((value) => !value)}
                     >
-                      {showBillingPanel ? "Chiudi" : "Gestisci piano"}
+                      {showBillingPanel ? "Chiudi" : "Ricarica crediti"}
                     </button>
+
+                    {cancelAtPeriodEnd ? (
+                      <button
+                        type="button"
+                        disabled={subBusy}
+                        onClick={() => changeSubscription("resume_subscription")}
+                        className="w-full mt-2 py-3 rounded-xl border border-emerald-200 bg-white text-emerald-700 font-bold text-sm disabled:opacity-50"
+                      >
+                        {subBusy ? "Attendi…" : "Riattiva il rinnovo"}
+                      </button>
+                    ) : !confirmCancel ? (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmCancel(true)}
+                        className="w-full mt-2 py-2.5 text-sm font-semibold text-gray-500 underline"
+                      >
+                        Disdici l'abbonamento
+                      </button>
+                    ) : (
+                      <div className="mt-2 rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-700">
+                        <p className="font-bold text-gray-900">Vuoi disdire?</p>
+                        <p className="mt-1">
+                          Resta tutto attivo fino al {premiumUntilLabel ?? "termine del periodo pagato"}, poi non paghi più nulla.
+                          I crediti del mese si azzerano alla scadenza; quelli ricaricati o regalati restano tuoi. Non sono previsti rimborsi
+                          per il periodo già pagato.
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmCancel(false)}
+                            className="h-10 rounded-xl bg-gray-100 font-bold text-gray-700"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            disabled={subBusy}
+                            onClick={() => changeSubscription("cancel_subscription")}
+                            className="h-10 rounded-xl bg-gray-900 font-bold text-white disabled:opacity-50"
+                          >
+                            {subBusy ? "Attendi…" : "Sì, disdici"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {subMsg && <p className="mt-2 text-xs font-semibold text-gray-600">{subMsg}</p>}
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
