@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { canUserCheckout } from "./_lib/billing";
+import { canUserCheckout } from "./_lib/billing.js";
 
 function getBearerToken(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
