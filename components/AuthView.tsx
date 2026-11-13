@@ -206,7 +206,7 @@ export default function AuthView() {
           </button>
           {mode === "signup" && (
             <p className="text-center text-xs text-muted">
-              Gratis durante il periodo di prova: 20 crediti EcoChef in regalo. Ti servono solo un username e una password.
+              Gratis durante il periodo di prova: 5 crediti EcoChef in regalo (20 ricette). Ti servono solo un username e una password.
             </p>
           )}
           {mode === "login" && !resetOpen && (
