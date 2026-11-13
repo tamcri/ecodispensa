@@ -537,7 +537,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end justify-center animate-fade-in">
-      <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
+      <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] max-h-[92dvh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
         <div className="sticky top-0 bg-ground px-5 pt-5 pb-3 flex justify-between items-center z-10 rounded-t-4xl">
           <div className="min-w-0 flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
