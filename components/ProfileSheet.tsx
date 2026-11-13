@@ -195,6 +195,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [planType, setPlanType] = useState<"free" | "premium">("free");
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
+  const [planCode, setPlanCode] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [subBusy, setSubBusy] = useState(false);
   const [subMsg, setSubMsg] = useState<string | null>(null);
@@ -238,7 +239,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
       const { data, error: selErr } = await supabase
         .from("user_profiles")
-        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end")
+        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -251,7 +252,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
         const { data: data2, error: selErr2 } = await supabase
           .from("user_profiles")
-          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end")
+          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code")
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -270,6 +271,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         setPlanType((data2?.plan_type as "free" | "premium") ?? "free");
         setPremiumUntil(data2?.premium_until ?? null);
         setCancelAtPeriodEnd(Boolean((data2 as any)?.subscription_cancel_at_period_end));
+        setPlanCode((data2 as any)?.premium_plan_code ?? null);
         return;
       }
 
@@ -286,6 +288,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setPlanType((data?.plan_type as "free" | "premium") ?? "free");
       setPremiumUntil(data?.premium_until ?? null);
       setCancelAtPeriodEnd(Boolean((data as any)?.subscription_cancel_at_period_end));
+      setPlanCode((data as any)?.premium_plan_code ?? null);
     } catch (e) {
       console.error("prefs load error:", e);
       setPrefs(DEFAULT_PREFS);
@@ -340,6 +343,28 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setPurchasesLoading(false);
     }
   };
+
+const switchToYearly = async () => {
+  setSubMsg(null);
+  try {
+    const token = await getAccessToken();
+    if (!token) throw new Error("Sessione scaduta: accedi di nuovo.");
+    const r = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: "switch_to_yearly", withdrawalWaiver: true }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body?.ok) throw new Error(body?.message ?? "Cambio piano non riuscito. Riprova.");
+    setPlanCode("premium_yearly");
+    setCancelAtPeriodEnd(false);
+    if (body.activeUntil) setPremiumUntil(body.activeUntil);
+    setSubMsg("Fatto: ora hai l'abbonamento Annuale.");
+    await refreshCredits();
+  } catch (e: any) {
+    alert(e?.message ?? "Cambio piano non riuscito. Riprova.");
+  }
+};
 
 const changeSubscription = async (action: "cancel_subscription" | "resume_subscription") => {
   setSubBusy(true);
@@ -516,8 +541,9 @@ const startCheckout = async (productCode: string, quantity?: number) => {
   }, [open]);
 
   const premiumUntilDate = premiumUntil ? new Date(premiumUntil) : null;
+  // il server tiene 1 giorno di margine per i ritardi di pagamento: la data reale di rinnovo/scadenza è il giorno prima
   const premiumUntilLabel = premiumUntilDate
-    ? premiumUntilDate.toLocaleDateString("it-IT")
+    ? new Date(premiumUntilDate.getTime() - 86_400_000).toLocaleDateString("it-IT")
     : null;
 
   const isPremiumActive =
@@ -929,6 +955,10 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       checkoutEnabled={checkoutEnabled}
                       isSubscribed={isPremiumActive}
                       onCheckout={startCheckout}
+                      currentPlanCode={planCode}
+                      cancelAtPeriodEnd={cancelAtPeriodEnd}
+                      activeUntilLabel={premiumUntilLabel}
+                      onSwitchToYearly={switchToYearly}
                     />
                   </div>
                 )}

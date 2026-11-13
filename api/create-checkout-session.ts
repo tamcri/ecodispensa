@@ -49,6 +49,102 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = userData.user;
 
     // --- Disdetta / riattivazione del rinnovo (stessa funzione, per restare nel limite di Vercel) ---
+    // --- Cambio piano: solo Mensile -> Annuale, subito, con la differenza calcolata da Stripe ---
+    if (action === "switch_to_yearly") {
+      if (!canUserCheckout(user.id)) {
+        return res.status(403).json({ error: "CHECKOUT_NOT_AVAILABLE", message: "Gli acquisti saranno disponibili a breve." });
+      }
+      if (withdrawalWaiver !== true) {
+        return res.status(400).json({ error: "WITHDRAWAL_WAIVER_REQUIRED", message: "Per continuare conferma di voler iniziare subito." });
+      }
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("stripe_subscription_id, premium_plan_code")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const { data: yearly } = await supabase
+        .from("billing_products")
+        .select("code, stripe_price_id, interval_months")
+        .eq("code", "premium_yearly")
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!yearly?.stripe_price_id) {
+        return res.status(400).json({ error: "NO_YEARLY", message: "L'abbonamento annuale non è disponibile." });
+      }
+
+      const stripe = new Stripe(stripeSecretKey);
+      let subscriptionId: string | null = profile?.stripe_subscription_id ?? null;
+      if (!subscriptionId) {
+        const found = await stripe.subscriptions
+          .search({ query: `metadata['user_id']:'${user.id}' AND status:'active'`, limit: 1 })
+          .catch(() => null);
+        subscriptionId = found?.data?.[0]?.id ?? null;
+      }
+      if (!subscriptionId) {
+        return res.status(404).json({ error: "NO_SUBSCRIPTION", message: "Non trovo un abbonamento attivo." });
+      }
+
+      const current: any = await stripe.subscriptions.retrieve(subscriptionId);
+      if (current.metadata?.user_id && current.metadata.user_id !== user.id) {
+        return res.status(403).json({ error: "FORBIDDEN", message: "Abbonamento non tuo." });
+      }
+      const item = current.items?.data?.[0];
+      if (!item) return res.status(400).json({ error: "NO_ITEM", message: "Abbonamento non valido." });
+      if (item.price?.id === yearly.stripe_price_id) {
+        return res.status(400).json({ error: "ALREADY_YEARLY", message: "Hai già l'abbonamento annuale." });
+      }
+
+      let updated: any;
+      try {
+        updated = await stripe.subscriptions.update(subscriptionId, {
+          items: [{ id: item.id, price: yearly.stripe_price_id }],
+          proration_behavior: "always_invoice",
+          payment_behavior: "error_if_incomplete",
+          cancel_at_period_end: false,
+          metadata: { ...(current.metadata ?? {}), app: "ecodispensa", user_id: user.id, product_code: "premium_yearly" },
+          expand: ["latest_invoice"],
+        });
+      } catch (e: any) {
+        console.error("switch_to_yearly failed:", e?.message ?? e);
+        return res.status(402).json({
+          error: "PAYMENT_FAILED",
+          message: "Il pagamento della differenza non è andato a buon fine: il tuo piano non è cambiato.",
+        });
+      }
+
+      const periodEnd: number | undefined =
+        updated.items?.data?.[0]?.current_period_end ?? updated.current_period_end;
+      const until = periodEnd ? new Date(periodEnd * 1000) : new Date(Date.now() + 365 * 86_400_000);
+      until.setDate(until.getDate() + 1);
+
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (serviceKey) {
+        const admin = createClient(supabaseUrl, serviceKey);
+        const { error: actErr } = await admin.rpc("admin_activate_subscription", {
+          p_user_id: user.id,
+          p_product_code: "premium_yearly",
+          p_until: until.toISOString(),
+          p_new_period: false,
+          p_customer_id: typeof updated.customer === "string" ? updated.customer : null,
+          p_subscription_id: subscriptionId,
+        });
+        if (actErr) console.error("switch_to_yearly db update failed:", actErr.message);
+        const paid = Number(updated.latest_invoice?.amount_paid ?? 0);
+        await admin.from("purchases").insert({
+          user_id: user.id,
+          purchase_type: "subscription_switch",
+          product_code: "premium_yearly",
+          amount: paid / 100,
+          currency: String(updated.latest_invoice?.currency ?? "eur").toUpperCase(),
+          credits_added: 0,
+          stripe_session_id: updated.latest_invoice?.id ?? `switch_${subscriptionId}_${Date.now()}`,
+          stripe_payment_intent: null,
+        });
+      }
+
+      return res.status(200).json({ ok: true, activeUntil: until.toISOString() });
+    }
+
     if (action === "cancel_subscription" || action === "resume_subscription") {
       const { data: profile } = await supabase
         .from("user_profiles")
