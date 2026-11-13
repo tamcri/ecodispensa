@@ -817,14 +817,14 @@ const getPurchaseTitle = (purchase: Purchase) => {
                         {creditsLoading ? "…" : ecoCredits ?? 0}
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
-                        1 credito = 4 ricette generate
+                        1 credito = 4 richieste di ricette · menu settimanale = 4 crediti
                       </div>
                     </div>
 
                     <div className="mt-3 text-sm text-gray-600 leading-relaxed">
                       {isPremiumExpired
                         ? "Riattiva l'abbonamento per avere di nuovo 25 crediti ogni mese."
-                        : "Con l'abbonamento hai 25 crediti ogni mese (100 ricette). Se finiscono, puoi aggiungere una ricarica."}
+                        : "Con l'abbonamento hai 25 crediti ogni mese: per esempio 4 menu settimanali e altre 36 richieste di ricette. Se finiscono, puoi aggiungere una ricarica."}
                     </div>
 
                     <button
@@ -892,7 +892,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                         Abbonamento EcoChef
                       </div>
                       <div className="text-xs text-gray-500 mb-3">
-                        25 crediti ogni mese (100 ricette), menu settimanali con obiettivo calorie.
+                        25 crediti ogni mese: bastano per 4 menu settimanali con lista della spesa e calorie, più altre 36 richieste di ricette.
                       </div>
 
                       {billingLoading ? (

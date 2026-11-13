@@ -5,8 +5,10 @@ interface MealPlanFormProps {
   onSubmit: (payload: MealPlanRequest) => Promise<void> | void;
   loading: boolean;
   initialValues?: Partial<MealPlanRequest>;
-  isPremiumActive?: boolean;
-  premiumStatusLoading?: boolean;
+  /** crediti consumati da un menu */
+  creditCost?: number;
+  /** crediti disponibili (null = non ancora caricati) */
+  credits?: number | null;
 }
 
 function formatTodayISO() {
@@ -49,9 +51,10 @@ export const MealPlanForm = ({
   onSubmit,
   loading,
   initialValues,
-  isPremiumActive = false,
-  premiumStatusLoading = false,
+  creditCost = 4,
+  credits = null,
 }: MealPlanFormProps) => {
+  const notEnoughCredits = credits !== null && credits < creditCost;
   const resolvedInitialValues = useMemo(() => {
     const initialStartDateIso =
       initialValues?.startDate && displayToISO(initialValues.startDate)
@@ -127,7 +130,7 @@ export const MealPlanForm = ({
     }
 
     const parsedDailyCalorieTarget =
-      isPremiumActive && dailyCalorieTarget.trim() !== ""
+      dailyCalorieTarget.trim() !== ""
         ? Math.round(Number(dailyCalorieTarget))
         : null;
 
@@ -148,7 +151,7 @@ export const MealPlanForm = ({
         lunch,
         dinner,
       },
-      people: Math.max(1, Math.round(people)),
+      people: Math.min(12, Math.max(1, Math.round(people))),
       budget: parsedBudget,
       complexity,
       style: planStyle,
@@ -238,9 +241,10 @@ export const MealPlanForm = ({
               id="meal-plan-people"
               type="number"
               min={1}
+              max={12}
               step={1}
               value={people}
-              onChange={(e) => setPeople(Number(e.target.value))}
+              onChange={(e) => setPeople(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}
               className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400"
             />
           </div>
@@ -312,21 +316,14 @@ export const MealPlanForm = ({
   </p>
 </div>
 
-        <div className={`rounded-xl border p-4 ${
-          isPremiumActive
-            ? "border-amber-200 bg-amber-50/60"
-            : "border-gray-200 bg-gray-50"
-        }`}>
-          <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="mb-2">
             <label
               htmlFor="meal-plan-daily-calories"
               className="block text-sm font-medium text-gray-700"
             >
               Obiettivo calorie giornaliere
             </label>
-            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-              Abbonamento
-            </span>
           </div>
 
           <input
@@ -337,17 +334,13 @@ export const MealPlanForm = ({
             step={50}
             value={dailyCalorieTarget}
             onChange={(e) => setDailyCalorieTarget(e.target.value)}
-            disabled={!isPremiumActive || premiumStatusLoading}
-            placeholder={premiumStatusLoading ? "Verifica piano..." : "Es. 1800"}
+            inputMode="numeric"
+            placeholder="Es. 1800"
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
           />
 
           <p className="text-xs text-gray-500 mt-2">
-            {premiumStatusLoading
-              ? "Sto verificando il tuo piano."
-              : isPremiumActive
-                ? "Opzionale. EcoDispensa userà il valore come riferimento e mostrerà una stima kcal per pasto e per giorno."
-                : "Disponibile con l'abbonamento."}
+            Opzionale. EcoDispensa userà il valore come riferimento e mostrerà una stima kcal per pasto e per giorno.
           </p>
           <p className="text-[11px] text-gray-400 mt-1">
             Valori indicativi, non costituiscono indicazione medica o nutrizionale. Il totale considera solo i pasti pianificati in EcoDispensa.
@@ -361,7 +354,8 @@ export const MealPlanForm = ({
           <textarea
             id="meal-plan-notes"
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => setNotes(e.target.value.slice(0, 400))}
+            maxLength={400}
             rows={4}
             placeholder="Es. preferisco piatti mediterranei, pochi utensili, ricette rapide..."
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 resize-none"
@@ -374,8 +368,13 @@ export const MealPlanForm = ({
         disabled={loading}
         className="w-full rounded-2xl bg-emerald-600 text-white py-3.5 font-semibold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
-        {loading ? "Generazione piano..." : "Genera Piano Pasti"}
+        {loading ? "Preparo il menu..." : `Genera il menu · ${creditCost} crediti`}
       </button>
+      <p className={`-mt-2 text-center text-xs ${notEnoughCredits ? "font-semibold text-[#9B2335]" : "text-gray-500"}`}>
+        {notEnoughCredits
+          ? `Ti servono ${creditCost} crediti: ne hai ${credits}.`
+          : `Il menu usa ${creditCost} crediti. Se qualcosa va storto te li restituiamo.`}
+      </p>
     </form>
   );
 };

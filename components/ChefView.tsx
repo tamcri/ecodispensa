@@ -11,6 +11,9 @@ import {
 import { RecipeMeta } from "../services/api";
 import { supabase } from "../services/supabaseClient";
 import { MealPlanForm } from "./MealPlanForm";
+
+/** Il menu settimanale costa 4 crediti (le ricette 1 credito ogni 4 richieste). */
+const MEAL_PLAN_CREDIT_COST = 4;
 import { MealPlanResult } from "./MealPlanResult";
 import {
   Clock,
@@ -603,8 +606,10 @@ if (typeof recipesResp?.remainingCredits === "number") {
       return;
     }
 
-    if (noCredits) {
-      setMealPlanError("Crediti EcoChef esauriti. Ricarica per generare un piano pasti.");
+    if (ecoCredits !== null && ecoCredits < MEAL_PLAN_CREDIT_COST) {
+      setMealPlanError(
+        `Il menu settimanale usa ${MEAL_PLAN_CREDIT_COST} crediti e te ne ${ecoCredits === 1 ? "resta" : "restano"} ${ecoCredits}. Puoi abbonarti o aggiungere una ricarica dal Profilo.`
+      );
       return;
     }
 
@@ -620,7 +625,9 @@ if (typeof recipesResp?.remainingCredits === "number") {
       const { status, body } = await postMealPlan(payload);
 
       if (status === 402) {
-        setMealPlanError("Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.");
+        setMealPlanError(
+          body?.message || `Il menu settimanale usa ${MEAL_PLAN_CREDIT_COST} crediti e non ne hai abbastanza.`
+        );
         await refreshCredits();
         return;
       }
@@ -633,7 +640,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       }
 
       if (status >= 400) {
-        const msg = body?.message || body?.hint || body?.error || "Errore durante la generazione del piano pasti.";
+        const msg = body?.message || "Non sono riuscito a generare il menu. Riprova.";
         setMealPlanError(String(msg));
         await refreshCredits();
         return;
@@ -920,7 +927,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
             {loading ? <Loader2 size={20} className="animate-spin text-lemon" /> : <Sparkles size={20} className="text-lemon" />}
             {recipes.length > 0 ? "Altre idee" : "Trova ricette"}
           </button>
-          <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 ricette generate usi 1 credito</p>
+          <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 richieste di ricette usi 1 credito · il menu settimanale ne usa 4</p>
         </>
       )}
 
@@ -956,8 +963,8 @@ if (typeof recipesResp?.remainingCredits === "number") {
             onSubmit={handleGenerateMealPlan}
             loading={mealPlanLoading}
             initialValues={initialMealPlanValues}
-            isPremiumActive={isPremiumActive}
-            premiumStatusLoading={premiumStatusLoading}
+            creditCost={MEAL_PLAN_CREDIT_COST}
+            credits={ecoCredits}
           />
 
           {loadingSavedMealPlan && <Spinner label="Recupero il tuo piano attivo…" />}
