@@ -173,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           message:
             "Hai chiesto di iniziare subito: usando i crediti rinunci al diritto di recesso di 14 giorni. " +
             (mode === "subscription"
-              ? "Puoi disdire quando vuoi dal Profilo: l'abbonamento resta attivo fino alla fine del periodo pagato."
+              ? "L'abbonamento si rinnova in automatico allo stesso prezzo finché non lo disdici. Puoi disdire quando vuoi dal Profilo: resta attivo fino alla fine del periodo pagato."
               : "I crediti caricati non scadono."),
         },
       },
