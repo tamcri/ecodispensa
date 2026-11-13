@@ -94,7 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success_url: `${appUrl}/?checkout=success`,
       cancel_url: `${appUrl}/?checkout=cancelled`,
       client_reference_id: user.id,
-      customer_email: user.email ?? undefined,
+      // niente customer_email: l'email dell'account è fittizia, Stripe la chiede al momento del pagamento
       metadata: {
         user_id: user.id,
         product_code: product.code,

@@ -36,32 +36,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const user_id = userData.user.id;
-    const user_email = userData.user.email ?? null;
 
-    console.log("USER FROM TOKEN:", user_id, user_email);
+    // saldo = crediti comprati/regalati + crediti mensili dell'abbonamento (ricaricati se è iniziato un nuovo mese)
+    const { data, error } = await supabase.rpc("get_my_credits");
+    if (error) return res.status(500).json({ error: error.message });
 
-    const { data, error } = await supabase
-      .from("user_credits")
-      .select("eco_credits, updated_at")
-      .eq("user_id", user_id)
-      .maybeSingle();
-
-    if (error) {
-      return res.status(500).json({
-        error: error.message,
-        debug_user_id: user_id,
-        debug_email: user_email,
-      });
-    }
-
+    const d = (data ?? {}) as Record<string, unknown>;
     return res.status(200).json({
-      eco_credits: data?.eco_credits ?? 0,
-      updated_at: data?.updated_at ?? null,
-
-      // DEBUG temporaneo: rimuoveremo dopo aver verificato
-      debug_user_id: user_id,
-      debug_email: user_email,
-      debug_has_row: Boolean(data),
+      eco_credits: Number(d.eco_credits ?? 0),
+      purchased_credits: Number(d.purchased_credits ?? 0),
+      monthly_credits: Number(d.monthly_credits ?? 0),
+      monthly_reset_at: d.monthly_reset_at ?? null,
+      updated_at: d.updated_at ?? null,
     });
   } catch (e: any) {
     console.error("credits api error:", e);

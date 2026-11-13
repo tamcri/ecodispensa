@@ -90,12 +90,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const timeMinutes: number = Number(constraints.timeMinutes ?? body.timeMinutes ?? 30);
 
     const inventoryList: string | undefined = typeof body.inventoryList === "string" ? body.inventoryList : undefined;
-    const idea: string | undefined =
+    const rawIdea: string | undefined =
       typeof constraints.idea === "string"
         ? constraints.idea.trim()
         : typeof body.idea === "string"
           ? body.idea.trim()
           : undefined;
+    // ricerca breve: evita costi eccessivi e istruzioni estranee alla ricetta
+    const idea: string | undefined = rawIdea ? rawIdea.replace(/\s+/g, " ").slice(0, 200) || undefined : undefined;
 
     if ((!pantryItems || pantryItems.length === 0) && !inventoryList) {
   if (idea) {
@@ -207,6 +209,7 @@ if (!pantryText && idea) {
 }
 
     const keyObj = {
+      user_id,
       model,
       pantryItems: pantryItems ?? inventoryList ?? "",
       finalServings,
@@ -234,13 +237,14 @@ if (!pantryText && idea) {
     let creditUsage: any = null;
     let remainingAfterConsume: number | null = null;
 
-    if (!isPremiumActive) {
+    // Tutti consumano crediti: chi è abbonato usa prima i 25 crediti del mese
+    {
       const { data: consumeData, error: creditErr } = await supabase.rpc("consume_eco_generation");
       if (creditErr) {
         if (String(creditErr.message || "").includes("NO_CREDITS")) {
           return res.status(402).json({
             error: "NO_CREDITS",
-            message: "Crediti EcoChef esauriti. Acquista un pacchetto crediti per continuare.",
+            message: "Crediti EcoChef esauriti. Abbonati o acquista una ricarica per continuare.",
           });
         }
         return res.status(500).json({ error: creditErr.message });
@@ -408,23 +412,15 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
         console.error("OpenAI error:", data);
 
         const refundReason = `openai_error_${r.status}`;
-        const { data: refunded, error: refundErr } = !isPremiumActive
-          ? await supabase.rpc("refund_eco_generation", {
+        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_generation", {
               p_consumed_credit: Boolean(creditUsage?.consumedCredit),
               p_reason: refundReason,
-            })
-          : { data: null, error: null };
-
-        const errType = data?.error?.type;
-        const status = r.status;
+            });
 
         return {
-          error: data?.error ?? data,
-          status,
-          hint:
-            status === 429 && errType === "insufficient_quota"
-              ? "Quota/billing API non attivo o crediti esauriti su OpenAI Platform."
-              : undefined,
+          error: "AI_UNAVAILABLE",
+          status: 502,
+          message: "EcoChef non è disponibile in questo momento. Il credito ti è stato restituito: riprova tra poco.",
           remainingCredits:
             typeof refunded?.remainingCredits === "number" ? refunded.remainingCredits : remainingAfterConsume ?? null,
           refunded: refundErr ? false : true,
@@ -444,12 +440,21 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
         text = parts.join("");
       }
 
+      const refundGeneration = async (reason: string) => {
+        const { data: refunded } = await supabase.rpc("refund_eco_generation", {
+          p_consumed_credit: Boolean(creditUsage?.consumedCredit),
+          p_reason: reason,
+        });
+        return typeof (refunded as any)?.remainingCredits === "number" ? (refunded as any).remainingCredits : remainingAfterConsume ?? null;
+      };
+
       if (!text) {
-        console.error("OpenAI returned empty text:", data);
+        console.error("OpenAI returned empty text");
         return {
-          recipes: [],
-          raw: data,
-          remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
+          error: "RECIPES_EMPTY",
+          status: 502,
+          message: "Non sono arrivate ricette. Il credito ti è stato restituito: riprova.",
+          remainingCredits: await refundGeneration("recipes_empty_output"),
         };
       }
 
@@ -463,17 +468,18 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
         if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
 
         const recipes = JSON.parse(cleaned);
+        if (!Array.isArray(recipes) || recipes.length === 0) throw new Error("NO_RECIPES");
         return {
           recipes,
           remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
         };
       } catch (e) {
-        console.error("JSON parse failed. Raw text:", text);
+        console.error("Recipes JSON parse failed");
         return {
-          recipes: [],
-          parse_error: true,
-          text,
-          remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,
+          error: "RECIPES_FAILED",
+          status: 502,
+          message: "Le ricette non sono venute bene. Il credito ti è stato restituito: riprova.",
+          remainingCredits: await refundGeneration("recipes_parse_failed"),
         };
       }
     })();
@@ -481,16 +487,17 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
     inflight.set(cacheKey, work);
     const value = await work.finally(() => inflight.delete(cacheKey));
 
-    cache.set(cacheKey, { ts: Date.now(), value });
-    pruneCache();
-
     if (value?.error && typeof value?.status === "number") {
+      // gli errori non si memorizzano: "riprova" deve rigenerare davvero
       return res.status(value.status).json(value);
     }
+
+    cache.set(cacheKey, { ts: Date.now(), value });
+    pruneCache();
 
     return res.status(200).json({ ...value, cached: false });
   } catch (e: any) {
     console.error("recipes api error:", e);
-    return res.status(500).json({ error: e?.message ?? "Server error" });
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Errore del server. Riprova." });
   }
 }

@@ -15,8 +15,8 @@ export const supabase = createClient(
   supabaseAnonKey || "public-anon-key"
 );
 
-// DEBUG SOLO LOCALE
-if (typeof window !== "undefined") {
+// DEBUG SOLO IN SVILUPPO (mai nell'app pubblicata)
+if (import.meta.env.DEV && typeof window !== "undefined") {
   (window as any).supabase = supabase;
 }
 

@@ -177,7 +177,7 @@ export const MealPlanResult = ({
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-wide font-bold text-amber-700 mb-1">
-                Calorie V2 · Premium
+                Calorie · Abbonamento
               </div>
               <div className="text-sm text-amber-900">
                 {typeof result.dailyCalorieTarget === "number"
