@@ -7,7 +7,7 @@
  *   dati personali e crediti passano sempre dalla rete.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `ecodispensa-shell-${VERSION}`;
 const ASSET_CACHE = `ecodispensa-assets-${VERSION}`;
 const FONT_CACHE = `ecodispensa-fonts-${VERSION}`;
