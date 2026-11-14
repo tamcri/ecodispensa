@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Bell, ChefHat, Eye, EyeOff, ShoppingCart } from "lucide-react";
+import { Bell, ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { resetPasswordWithCode } from "../services/account";
 
@@ -13,6 +13,7 @@ function toFakeEmail(username: string) {
 }
 
 export default function AuthView() {
+  const [step, setStep] = useState<"welcome" | "form">("welcome");
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -95,43 +96,113 @@ export default function AuthView() {
     setMode(next);
   };
 
-  const benefits = [
-    { icon: <Bell size={20} />, title: "Avvisi prima che scada", text: "Ti ricordo cosa usare, anche ad app chiusa." },
-    { icon: <ChefHat size={20} />, title: "Ricette con quello che hai", text: "EcoChef parte dai prodotti in scadenza." },
-    { icon: <ShoppingCart size={20} />, title: "Spesa senza doppioni", text: "Scansioni e ti dico se ce l'hai già." },
-  ];
+  const openForm = (next: Mode) => {
+    setMsg(null);
+    setResetOpen(false);
+    setMode(next);
+    setStep("form");
+  };
 
-  return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col gap-5 bg-ground px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
-      {/* marchio */}
-      <div className="flex items-center gap-2.5">
-        <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
-        <span className="font-display text-xl font-extrabold tracking-tight text-ink">EcoDispensa</span>
-      </div>
+  const benefits = ["Avvisi prima che scada", "Ricette con ciò che hai", "Spesa senza doppioni"];
 
-      {/* hero con anteprima di cosa fa l'app */}
-      <section className="relative overflow-hidden rounded-4xl bg-forest px-5 pb-5 pt-6 text-white">
-        <h1 className="font-display text-[34px] font-extrabold leading-[1.02] tracking-tight">
-          Meno sprechi,
-          <br />
-          più idee in cucina.
-        </h1>
-        <p className="mt-2 max-w-[17rem] text-sm text-[#BFE3CB]">
-          Sai sempre cosa hai in casa, cosa scade e cosa cucinarci.
-        </p>
+  const shell =
+    "mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]";
 
-        <div className="mt-4 flex flex-col gap-2" aria-hidden="true">
-          <div className="flex items-center gap-2.5 self-start rounded-2xl bg-white px-3 py-2 text-ink shadow-sm">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#DCEBFA] font-display font-extrabold text-[#1D4E89]">L</span>
-            <span className="text-sm font-bold">Latte</span>
-            <span className="rounded-full bg-peach px-2 py-0.5 text-[11px] font-bold text-[#9A3412]">Scade domani</span>
-          </div>
-          <div className="ml-6 flex items-center gap-2 self-start rounded-2xl bg-lemon px-3 py-2 text-ink shadow-sm">
-            <ChefHat size={18} />
-            <span className="text-sm font-bold">Frittata · usa 3 tuoi prodotti</span>
+  const brand = (
+    <div className="flex items-center gap-2.5">
+      <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
+      <span className="font-display text-xl font-extrabold tracking-tight text-ink">EcoDispensa</span>
+    </div>
+  );
+
+  // ---------- Benvenuto: cosa fa l'app, poi due pulsanti ----------
+  if (step === "welcome") {
+    return (
+      <div className={`${shell} bg-[#F7EBD3]`}>
+        {brand}
+
+        <div className="relative">
+          <img
+            src="/brand/benvenuto.jpg"
+            alt="Un barattolo di pasta con una fascia verde e un cuore: il cibo di casa, conservato con cura"
+            className="aspect-square max-h-[42vh] w-full rounded-4xl object-cover"
+          />
+          <div
+            className="absolute bottom-3 left-3 flex items-center gap-2.5 rounded-2xl bg-white/95 px-3 py-2 text-ink shadow-[0_8px_20px_rgba(23,32,26,0.12)]"
+            aria-hidden="true"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-peach text-[#9A3412]">
+              <Bell size={16} />
+            </span>
+            <span className="text-[13px] leading-tight">
+              <span className="block font-bold">Il latte scade domani</span>
+              <span className="text-muted">Idea: una frittata morbida</span>
+            </span>
           </div>
         </div>
-      </section>
+
+        <div className="flex flex-col gap-2">
+          <h1 className="font-display text-[32px] font-extrabold leading-[1.04] tracking-tight text-ink">
+            Il cibo che compri, finalmente tutto usato.
+          </h1>
+          <p className="text-[15px] leading-relaxed text-[#4A524C]">
+            Ti avviso prima che scada, ti propongo cosa cucinarci e al supermercato ti dico se ce l'hai già.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {benefits.map((b) => (
+            <span key={b} className="rounded-full bg-white/80 px-3 py-1.5 text-[13px] font-bold text-ink">
+              {b}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-auto flex flex-col gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={() => openForm("signup")}
+            className="h-[54px] w-full rounded-2xl bg-[#4F6B4A] text-[16px] font-bold text-white active:scale-[0.99]"
+          >
+            Inizia gratis
+          </button>
+          <button
+            type="button"
+            onClick={() => openForm("login")}
+            className="h-[54px] w-full rounded-2xl bg-white text-[16px] font-bold text-ink ring-1 ring-black/10 active:scale-[0.99]"
+          >
+            Ho già un account
+          </button>
+          <p className="text-center text-xs text-[#4A524C]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Accesso / registrazione ----------
+  return (
+    <div className={`${shell} bg-ground`}>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setStep("welcome")}
+          className="flex h-11 items-center gap-1 rounded-2xl pr-3 text-sm font-bold text-ink"
+        >
+          <ChevronLeft size={20} /> Indietro
+        </button>
+        <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight text-ink">
+          {mode === "login" ? "Bentornato" : "Crea il tuo account"}
+        </h1>
+        <p className="text-sm text-muted">
+          {mode === "login"
+            ? "Entra con il tuo username e la tua password."
+            : "Ti servono solo un username e una password: niente email."}
+        </p>
+      </div>
 
       {/* accesso */}
       <section className="rounded-4xl bg-white p-5 shadow-[0_8px_24px_rgba(23,32,26,0.06)]">
@@ -277,21 +348,9 @@ export default function AuthView() {
         )}
       </section>
 
-      {/* perché usarla */}
-      <section className="flex flex-col gap-2.5">
-        {benefits.map((b) => (
-          <div key={b.title} className="flex items-center gap-3 rounded-3xl bg-white/70 p-3.5">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-lemon text-ink">{b.icon}</span>
-            <span className="text-sm text-muted">
-              <span className="block font-bold text-ink">{b.title}</span>
-              {b.text}
-            </span>
-          </div>
-        ))}
-        <p className="px-1 pt-1 text-center text-xs text-muted">
-          In Italia ogni persona butta in media 554 g di cibo a settimana (Waste Watcher 2026).
-        </p>
-      </section>
+      <p className="px-1 pt-1 text-center text-xs text-muted">
+        In Italia ogni persona butta in media 554 g di cibo a settimana (Waste Watcher 2026).
+      </p>
     </div>
   );
 }
