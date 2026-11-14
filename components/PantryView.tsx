@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
-import { Camera, Check, Lightbulb, Plus, Search, Trash2 } from 'lucide-react';
-import { identifyItemFromImage, lookupBarcode } from '../services/api';
+import { Archive, CalendarClock, Camera, Check, Lightbulb, Plus, ScanText, Search, Trash2 } from 'lucide-react';
+import { identifyItemFromImage, lookupBarcode, readExpiryFromImage } from '../services/api';
 import { AnalyzingOverlay, CameraCapture, Monogram, QuantityInput, ScreenHeader, Sheet } from './ui';
 import { findFoodGuide, guideSummary, suggestedExpiry } from '../foodGuide';
 import { Outcome } from '../services/household';
@@ -21,6 +21,7 @@ type FormState = {
   category: Category;
   expiryDate: string;
   barcode?: string | null;
+  longLife: boolean;
 };
 
 const emptyForm = (): FormState => ({
@@ -30,6 +31,7 @@ const emptyForm = (): FormState => ({
   category: Category.FRUIT_VEG,
   expiryDate: '',
   barcode: null,
+  longLife: false,
 });
 
 const UNITS = ['pz', 'kg', 'g', 'l'];
@@ -56,37 +58,68 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Salvataggio senza scadenza: chiedo conferma una volta (null = nessuna domanda aperta)
+  const [missingDateAsk, setMissingDateAsk] = useState<{ keepOpen: boolean } | null>(null);
+  // Fotocamera per leggere la data stampata: per il nuovo prodotto o per quello in modifica
+  const [dateCameraFor, setDateCameraFor] = useState<'add' | 'edit' | null>(null);
+  const [dateNotice, setDateNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [onlyMissing, setOnlyMissing] = useState(false);
 
   const guide = useMemo(() => findFoodGuide(form.name), [form.name]);
-  const expiryIsEstimate = !!form.expiryDate && !touched.expiry && form.expiryDate === suggestedExpiry(form.name);
+  const expiryIsEstimate =
+    !!form.expiryDate && !touched.expiry && form.expiryDate === suggestedExpiry(form.name, form.category);
 
   /** Aggiorna il nome e propone categoria e scadenza se l'utente non le ha già scelte. */
   const setName = (name: string) => {
     const g = findFoodGuide(name);
-    setForm((prev) => ({
-      ...prev,
-      name,
-      category: !touched.category && g ? g.category : prev.category,
-      expiryDate: !touched.expiry ? suggestedExpiry(name) ?? '' : prev.expiryDate,
-    }));
+    setForm((prev) => {
+      const category = !touched.category && g ? g.category : prev.category;
+      return {
+        ...prev,
+        name,
+        category,
+        expiryDate: !touched.expiry && !prev.longLife && !prev.barcode ? suggestedExpiry(name, category) ?? '' : prev.expiryDate,
+      };
+    });
   };
 
   const openAdd = () => {
     setForm(emptyForm());
     setTouched({ category: false, expiry: false });
     setNotice(null);
+    setDateNotice(null);
+    setMissingDateAsk(null);
     setAddedCount(0);
     setAddOpen(true);
   };
 
-  const save = (keepOpen: boolean) => {
-    if (!form.name.trim()) return;
-    onAdd({ ...form, name: form.name.trim(), expiryDate: form.expiryDate || undefined, barcode: form.barcode ?? null });
+  /**
+   * Salva il prodotto. Se manca la scadenza (e non è a lunga conservazione) chiedo prima:
+   * senza data l'app non può avvisare. `force` = l'utente ha scelto "Salva senza data".
+   */
+  const save = (keepOpen: boolean, force = false, override?: Partial<FormState>) => {
+    const f = { ...form, ...override };
+    if (!f.name.trim()) return;
+    if (!f.expiryDate && !f.longLife && !force) {
+      setMissingDateAsk({ keepOpen });
+      return;
+    }
+    setMissingDateAsk(null);
+    onAdd({
+      name: f.name.trim(),
+      quantity: f.quantity,
+      unit: f.unit,
+      category: f.category,
+      expiryDate: f.longLife ? undefined : f.expiryDate || undefined,
+      barcode: f.barcode ?? null,
+      longLife: f.longLife,
+    });
     if (keepOpen) {
       setAddedCount((n) => n + 1);
       setForm(emptyForm());
       setTouched({ category: false, expiry: false });
       setNotice(null);
+      setDateNotice(null);
       window.setTimeout(() => nameRef.current?.focus(), 50);
     } else {
       setAddOpen(false);
@@ -107,7 +140,9 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       unit: item.unit,
       category: item.category,
       expiryDate: item.expiryDate ?? '',
+      longLife: !!item.longLife,
     });
+    setDateNotice(null);
   };
 
   const saveEdit = (e: React.FormEvent) => {
@@ -118,7 +153,8 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       unit: editForm.unit,
       category: editForm.category,
       // null (non undefined) così una scadenza cancellata viene salvata davvero
-      expiryDate: (editForm.expiryDate || null) as any,
+      expiryDate: (editForm.longLife ? null : editForm.expiryDate || null) as any,
+      longLife: editForm.longLife,
     });
     setEditing(null);
   };
@@ -140,10 +176,15 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       name,
       category: (next.category as Category) || g?.category || base.category,
       // i prodotti confezionati hanno la data stampata: niente stima
-      expiryDate: next.expiryDate || (next.barcode ? '' : suggestedExpiry(name)) || '',
+      expiryDate:
+        next.expiryDate ||
+        (next.barcode ? '' : suggestedExpiry(name, (next.category as Category) || g?.category || base.category)) ||
+        '',
     });
     setTouched({ category: !!next.category, expiry: !!next.expiryDate });
     setNotice(message);
+    setDateNotice(null);
+    setMissingDateAsk(null);
     setAddOpen(true);
   };
 
@@ -159,7 +200,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       if (same) {
         prefill(
           { name: same.name, quantity: same.quantity, unit: same.unit, category: same.category, barcode: code },
-          `${already}Controlla la data di scadenza sulla confezione.`
+          `${already}Inserisci la data di scadenza, oppure fotografala con il tasto qui sotto.`
         );
         return;
       }
@@ -167,7 +208,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       if (p) {
         prefill(
           { name: p.name, quantity: p.quantity, unit: p.unit, category: p.category as Category, barcode: code },
-          'Controlla la data di scadenza sulla confezione e inseriscila qui sotto.'
+          'Inserisci la data di scadenza, oppure fotografala con il tasto qui sotto.'
         );
       } else {
         prefill(
@@ -193,7 +234,9 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
             quantity: result.quantity || 1,
             unit: result.unit || 'pz',
             // per i freschi preferisco la stima della guida, più prudente
-            expiryDate: suggestedExpiry(result.name) ?? result.expiryDate ?? '',
+            expiryDate: findFoodGuide(result.name)?.fresh
+              ? suggestedExpiry(result.name) ?? ''
+              : result.expiryDate || suggestedExpiry(result.name, result.category as Category) || '',
           },
           null
         );
@@ -204,6 +247,46 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       setIsAnalyzing(null);
     }
   };
+
+  /** Legge la data stampata dalla foto e la mette nel campo scadenza. */
+  const handleDateCapture = async (dataUrl: string) => {
+    const target = dateCameraFor;
+    setDateCameraFor(null);
+    if (!target) return;
+    if (target === 'add') setAddOpen(true);
+    setIsAnalyzing('Leggo la data…');
+    try {
+      const read = await readExpiryFromImage(dataUrl);
+      if (!read) {
+        setDateNotice({ ok: false, text: 'Non riesco a leggere la data: riprova più vicino, con più luce, oppure scrivila a mano.' });
+        return;
+      }
+      const kindText =
+        read.kind === 'preferibilmente'
+          ? ' È un "preferibilmente entro": dopo quella data il prodotto spesso è ancora buono, controlla aspetto e odore.'
+          : '';
+      const shown = new Date(read.expiryDate + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+      setDateNotice({ ok: true, text: `Ho letto: ${shown}. Controlla che sia giusta.${kindText}` });
+      if (target === 'add') {
+        setTouched((t) => ({ ...t, expiry: true }));
+        setForm((f) => ({ ...f, expiryDate: read.expiryDate, longLife: false }));
+        setMissingDateAsk(null);
+      } else {
+        setEditForm((f) => ({ ...f, expiryDate: read.expiryDate, longLife: false }));
+      }
+    } finally {
+      setIsAnalyzing(null);
+    }
+  };
+
+  const openDateCamera = (target: 'add' | 'edit') => {
+    setDateNotice(null);
+    if (target === 'add') setAddOpen(false);
+    setDateCameraFor(target);
+  };
+
+  /** Prodotti senza scadenza e non segnati come lunga conservazione: l'app non può avvisare. */
+  const missingDateCount = items.filter((i) => !i.expiryDate && !i.longLife).length;
 
   const enriched = useMemo(
     () =>
@@ -226,9 +309,12 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   );
 
   const q = query.trim().toLowerCase();
+  const showOnlyMissing = onlyMissing && missingDateCount > 0;
   const visible = enriched.filter(
     ({ item }) =>
-      (filterCategory === 'ALL' || item.category === filterCategory) && (!q || item.name.toLowerCase().includes(q))
+      (filterCategory === 'ALL' || item.category === filterCategory) &&
+      (!q || item.name.toLowerCase().includes(q)) &&
+      (!showOnlyMissing || (!item.expiryDate && !item.longLife))
   );
 
   const subtitle =
@@ -272,6 +358,44 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       onUnitChange={(u) => set({ ...state, unit: u })}
     />
   );
+
+  const readDateButton = (target: 'add' | 'edit') => (
+    <button
+      type="button"
+      onClick={() => openDateCamera(target)}
+      aria-label="Fotografa la data di scadenza"
+      className="flex h-12 shrink-0 items-center gap-1.5 rounded-2xl bg-ink px-3.5 text-[13px] font-bold text-white"
+    >
+      <ScanText size={18} className="text-lemon" /> Leggi
+    </button>
+  );
+
+  const longLifeBox = (onUndo: () => void) => (
+    <div className="flex h-12 items-center justify-between rounded-2xl bg-white px-4 ring-1 ring-black/5">
+      <span className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+        <Archive size={18} className="text-muted" /> Lunga conservazione
+      </span>
+      <button type="button" onClick={onUndo} className="text-[13px] font-bold text-emerald-700">
+        Metti una data
+      </button>
+    </div>
+  );
+
+  const noExpiryLink = (onPick: () => void) => (
+    <button type="button" onClick={onPick} className="mt-2 text-[13px] font-semibold text-muted underline underline-offset-2">
+      Non ha una scadenza (sale, olio, spezie…)
+    </button>
+  );
+
+  const dateNoticeBox = dateNotice ? (
+    <p
+      className={`mt-2 rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
+        dateNotice.ok ? 'bg-mint text-[#1E5A35]' : 'bg-peach text-[#8A3B0C]'
+      }`}
+    >
+      {dateNotice.text}
+    </p>
+  ) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -327,6 +451,22 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               </button>
             ))}
           </div>
+
+          {missingDateCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyMissing((v) => !v)}
+              className="flex items-center gap-3 rounded-2xl bg-peach px-4 py-3 text-left"
+            >
+              <CalendarClock size={22} className="shrink-0 text-[#9A3412]" />
+              <span className="flex-1 text-[13px] leading-snug text-[#8A3B0C]">
+                <span className="font-bold">
+                  {missingDateCount === 1 ? '1 prodotto senza scadenza' : `${missingDateCount} prodotti senza scadenza`}
+                </span>
+                : senza data non posso avvisarti. {showOnlyMissing ? 'Tocca per vedere tutto.' : 'Tocca per vederli e aggiungerla.'}
+              </span>
+            </button>
+          )}
         </>
       )}
 
@@ -358,9 +498,19 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
                 </span>
               </span>
               <span className="line-clamp-2 text-base font-bold leading-tight text-ink">{item.name}</span>
-              <span className={`self-start rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
-                {expiryLabel(days)}
-              </span>
+              {item.longLife ? (
+                <span className={`self-start rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS.none}`}>
+                  Lunga conservazione
+                </span>
+              ) : days === null ? (
+                <span className="self-start rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#9A3412] ring-1 ring-[#F3C9A8]">
+                  Manca la scadenza
+                </span>
+              ) : (
+                <span className={`self-start rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
+                  {expiryLabel(days)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -382,6 +532,48 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         onClose={() => setAddOpen(false)}
         title={addedCount > 0 ? `Nuovo prodotto · ${addedCount} aggiunti` : 'Nuovo prodotto'}
         footer={
+          missingDateAsk ? (
+            <div className="flex flex-col gap-2.5">
+              <p className="text-center text-sm font-semibold text-ink">
+                Manca la scadenza: senza data non posso avvisarti prima che vada a male.
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMissingDateAsk(null);
+                    openDateCamera('add');
+                  }}
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-ink text-[15px] font-bold text-white"
+                >
+                  <ScanText size={18} className="text-lemon" /> Fotografa la data
+                </button>
+                <button
+                  type="button"
+                  onClick={() => save(missingDateAsk.keepOpen, false, { longLife: true, expiryDate: '' })}
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-bold text-ink ring-1 ring-black/10"
+                >
+                  <Archive size={18} /> Non scade
+                </button>
+              </div>
+              <div className="flex items-center justify-between px-1">
+                <button
+                  type="button"
+                  onClick={() => setMissingDateAsk(null)}
+                  className="h-10 text-[13px] font-bold text-emerald-700"
+                >
+                  La scrivo io
+                </button>
+                <button
+                  type="button"
+                  onClick={() => save(missingDateAsk.keepOpen, true)}
+                  className="h-10 text-[13px] font-semibold text-muted underline underline-offset-2"
+                >
+                  Salva senza data
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="flex gap-2.5">
             <button
               type="button"
@@ -400,6 +592,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               Salva
             </button>
           </div>
+          )
         }
       >
         <form id="pantry-add-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -440,16 +633,31 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               <label className={labelClass} htmlFor="pantry-exp">
                 Scadenza {expiryIsEstimate && <span className="font-semibold text-emerald-700">· stimata</span>}
               </label>
-              <input
-                id="pantry-exp"
-                type="date"
-                className={`${fieldClass} px-3 ${expiryIsEstimate ? 'ring-emerald-300' : ''}`}
-                value={form.expiryDate}
-                onChange={(e) => {
-                  setTouched((t) => ({ ...t, expiry: true }));
-                  setForm({ ...form, expiryDate: e.target.value });
-                }}
-              />
+              {form.longLife ? (
+                longLifeBox(() => setForm({ ...form, longLife: false }))
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    id="pantry-exp"
+                    type="date"
+                    className={`${fieldClass} min-w-0 flex-1 px-3 ${expiryIsEstimate ? 'ring-emerald-300' : ''}`}
+                    value={form.expiryDate}
+                    onChange={(e) => {
+                      setTouched((t) => ({ ...t, expiry: true }));
+                      setForm({ ...form, expiryDate: e.target.value });
+                      if (e.target.value) setMissingDateAsk(null);
+                    }}
+                  />
+                  {readDateButton('add')}
+                </div>
+              )}
+              {!form.longLife &&
+                noExpiryLink(() => {
+                  setForm({ ...form, longLife: true, expiryDate: '' });
+                  setMissingDateAsk(null);
+                  setDateNotice(null);
+                })}
+              {dateNoticeBox}
             </div>
           </div>
 
@@ -471,7 +679,13 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
 
           {categoryPicker(form, (c) => {
             setTouched((t) => ({ ...t, category: true }));
-            setForm({ ...form, category: c });
+            setForm({
+              ...form,
+              category: c,
+              // se la data era solo una stima, la ricalcolo per la nuova categoria
+              expiryDate:
+                !touched.expiry && !form.longLife && !form.barcode ? suggestedExpiry(form.name, c) ?? '' : form.expiryDate,
+            });
           })}
         </form>
       </Sheet>
@@ -541,13 +755,26 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
             {qtyFields(editForm, setEditForm, 'edit')}
             <div>
               <label className={labelClass} htmlFor="edit-exp">Scadenza</label>
-              <input
-                id="edit-exp"
-                type="date"
-                className={`${fieldClass} px-3`}
-                value={editForm.expiryDate}
-                onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
-              />
+              {editForm.longLife ? (
+                longLifeBox(() => setEditForm({ ...editForm, longLife: false }))
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    id="edit-exp"
+                    type="date"
+                    className={`${fieldClass} min-w-0 flex-1 px-3`}
+                    value={editForm.expiryDate}
+                    onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                  />
+                  {readDateButton('edit')}
+                </div>
+              )}
+              {!editForm.longLife &&
+                noExpiryLink(() => {
+                  setEditForm({ ...editForm, longLife: true, expiryDate: '' });
+                  setDateNotice(null);
+                })}
+              {dateNoticeBox}
             </div>
           </div>
           {editGuide && (
@@ -565,6 +792,15 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         onClose={() => setShowCamera(false)}
         onCapture={handleCapture}
         onBarcode={handleBarcode}
+      />
+      <CameraCapture
+        open={!!dateCameraFor}
+        onClose={() => {
+          const t = dateCameraFor;
+          setDateCameraFor(null);
+          if (t === 'add') setAddOpen(true);
+        }}
+        onCapture={handleDateCapture}
       />
       <AnalyzingOverlay open={!!isAnalyzing} label={isAnalyzing ?? ''} />
     </div>

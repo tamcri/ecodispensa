@@ -1,6 +1,7 @@
 /**
  * Prodotti:
  *  - POST /api/product            { image }  → riconosce il prodotto da una foto (OpenAI)
+ *  - POST /api/product            { image, mode: "date" } → legge la data di scadenza stampata
  *  - GET  /api/product?code=EAN              → cerca il codice a barre su Open Food Facts
  * Un'unica funzione per restare nel limite di funzioni del piano Vercel gratuito.
  */
@@ -171,7 +172,111 @@ async function barcodeHandler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+/** Ultimo giorno del mese (per date stampate solo come mese/anno, es. "12/2027"). */
+function lastDayOfMonth(year: number, month: number): string {
+  const d = new Date(Date.UTC(year, month, 0));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Controlla che la data letta sia valida e plausibile (non più di 2 anni fa, non oltre 10 anni). */
+function normalizeReadDate(raw: string): string | null {
+  const s = String(raw ?? "").trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  let iso: string | null = null;
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d) iso = s;
+  } else if ((m = s.match(/^(\d{4})-(\d{2})$/))) {
+    const [y, mo] = [Number(m[1]), Number(m[2])];
+    if (mo >= 1 && mo <= 12) iso = lastDayOfMonth(y, mo);
+  }
+  if (!iso) return null;
+  const t = new Date(iso + "T00:00:00Z").getTime();
+  const now = Date.now();
+  if (t < now - 2 * 365 * 86_400_000 || t > now + 10 * 365 * 86_400_000) return null;
+  return iso;
+}
+
+/** Legge la data di scadenza stampata sulla confezione. Non consuma crediti. */
+async function readDateHandler(req: VercelRequest, res: VercelResponse) {
+  try {
+    const auth = await getUserClient(req);
+    if ("error" in auth) return res.status(auth.status).json({ error: auth.error });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+
+    const image = String(req.body?.image ?? "");
+    if (!image.startsWith("data:image/")) return res.status(400).json({ error: "Missing image" });
+    if (image.length > MAX_IMAGE_CHARS) return res.status(413).json({ error: "Image too large" });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const prompt = `Nella foto c'è la data di scadenza stampata su una confezione di cibo (es. "da consumarsi entro 12/03/27", "da consumarsi preferibilmente entro fine 05.2027", "SCAD. 03 12 2026", "EXP 2027-01").
+Oggi è ${today}. Le date italiane sono nel formato giorno/mese/anno.
+Rispondi con:
+- found: true solo se leggi davvero una data di scadenza, false se non c'è o non è leggibile. Non inventare.
+- date: la data in formato YYYY-MM-DD; se sulla confezione ci sono solo mese e anno, usa YYYY-MM. Stringa vuota se found è false.
+- kind: "entro" per "da consumarsi entro", "preferibilmente" per "da consumarsi preferibilmente entro" o "TMC", "altro" se non è scritto.
+Ignora date di produzione, confezionamento e lotti (es. "PROD.", "CONF.", "L.").`;
+
+    const model = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: prompt },
+              { type: "input_image", image_url: image, detail: "high" },
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "expiry_date",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["found", "date", "kind"],
+              properties: {
+                found: { type: "boolean" },
+                date: { type: "string" },
+                kind: { type: "string", enum: ["entro", "preferibilmente", "altro"] },
+              },
+            },
+          },
+        },
+      }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) {
+      console.error("OpenAI read date error:", data?.error?.message ?? r.status);
+      return res.status(502).json({ error: "READ_FAILED" });
+    }
+
+    let out: any = null;
+    try {
+      out = JSON.parse(responseText(data));
+    } catch {
+      out = null;
+    }
+    const date = out?.found ? normalizeReadDate(out.date) : null;
+    return res.status(200).json({ expiryDate: date, kind: date ? out.kind : null });
+  } catch (e: any) {
+    console.error("read date error:", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === "POST" && req.body?.mode === "date") return readDateHandler(req, res);
   if (req.method === "POST") return identifyHandler(req, res);
   if (req.method === "GET") return barcodeHandler(req, res);
   return res.status(405).json({ error: "Method not allowed" });

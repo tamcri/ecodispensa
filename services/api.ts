@@ -139,6 +139,26 @@ export async function identifyItemFromImage(
   }
 }
 
+/**
+ * Legge la data di scadenza stampata sulla confezione da una foto.
+ * Restituisce la data (YYYY-MM-DD) oppure null se non è leggibile.
+ */
+export async function readExpiryFromImage(
+  base64Image: string
+): Promise<{ expiryDate: string; kind: string | null } | null> {
+  try {
+    const { ok, body } = await authFetch("/api/product", {
+      method: "POST",
+      body: JSON.stringify({ image: base64Image, mode: "date" }),
+    });
+    if (!ok || typeof body?.expiryDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.expiryDate)) return null;
+    return { expiryDate: body.expiryDate, kind: typeof body.kind === "string" ? body.kind : null };
+  } catch (e) {
+    console.error("read expiry error:", e);
+    return null;
+  }
+}
+
 /** Riduce la foto scattata dall'utente a max 1280px in jpeg, per caricarla velocemente. */
 async function resizeImage(file: File, maxSide = 1280): Promise<Blob> {
   const url = URL.createObjectURL(file);

@@ -238,6 +238,7 @@ const App = () => {
       expiry_date: item.expiryDate ?? null,
       category: item.category,
       barcode: item.barcode ?? null,
+      long_life: !!item.longLife,
     });
 
     if (error) {
@@ -258,6 +259,7 @@ const App = () => {
     if (updates.unit !== undefined) payload.unit = updates.unit;
     if (updates.category !== undefined) payload.category = updates.category;
     if (updates.expiryDate !== undefined) payload.expiry_date = updates.expiryDate ?? null;
+    if (updates.longLife !== undefined) payload.long_life = !!updates.longLife;
 
     if (Object.keys(payload).length === 0) return;
 
@@ -600,6 +602,7 @@ const App = () => {
       expiry_date: item.expiryDate ?? null,
       category: item.category,
       barcode: item.barcode ?? null,
+      long_life: !!item.longLife,
     }));
 
     const { error: insErr } = await supabase.from("pantry_items").insert(pantryRows);
@@ -635,7 +638,7 @@ const App = () => {
   const loadPantryFromSupabase = async () => {
     const { data, error } = await supabase
       .from("pantry_items")
-      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode")
+      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode, long_life")
       .order("added_at", { ascending: false });
 
     if (error) {
@@ -652,6 +655,7 @@ const App = () => {
       category: r.category,
       addedAt: r.added_at ? new Date(r.added_at).getTime() : Date.now(),
       barcode: r.barcode ?? null,
+      longLife: !!r.long_life,
     }));
 
     setPantryItems(items);

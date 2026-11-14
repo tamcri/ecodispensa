@@ -323,7 +323,24 @@ export const RecipeDetailSheet = ({
           <h2 className="font-display text-[26px] font-extrabold leading-tight text-ink">{recipe.title}</h2>
           {journeyCard}
           {feedback && !celebration && <p className="text-sm font-semibold text-emerald-700">{feedback}</p>}
-          <RecipeContent recipe={recipe} />
+          <RecipeContent
+            recipe={recipe}
+            missingAction={
+              missing.length > 0 && onAddShoppingItems ? (
+                <button
+                  type="button"
+                  onClick={addMissing}
+                  disabled={missingAdded}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-sm font-bold text-white disabled:opacity-70"
+                >
+                  {missingAdded ? <Check size={16} /> : <ShoppingCart size={16} className="text-lemon" />}
+                  {missingAdded
+                    ? "Aggiunti alla lista della spesa"
+                    : `Aggiungi ${missing.length === 1 ? "l'ingrediente mancante" : `i ${missing.length} mancanti`} alla spesa`}
+                </button>
+              ) : null
+            }
+          />
         </div>
         {photoInput}
       </Sheet>

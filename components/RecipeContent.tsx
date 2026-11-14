@@ -2,7 +2,14 @@ import React from "react";
 import { BarChart, CheckCircle2, Clock, ShoppingCart } from "lucide-react";
 import { Recipe } from "../types";
 
-export const RecipeContent = ({ recipe }: { recipe: Recipe }) => (
+export const RecipeContent = ({
+  recipe,
+  missingAction,
+}: {
+  recipe: Recipe;
+  /** Pulsante sotto "Da comprare", es. "Aggiungi alla lista della spesa" */
+  missingAction?: React.ReactNode;
+}) => (
   <div className="flex flex-col gap-6">
     <div className="flex flex-wrap gap-2 text-[13px] font-bold text-ink">
       {recipe.time && (
@@ -55,6 +62,7 @@ export const RecipeContent = ({ recipe }: { recipe: Recipe }) => (
             <span className="text-sm italic text-muted">Hai tutto il necessario!</span>
           )}
         </div>
+        {(recipe.missingIngredients ?? []).length > 0 && missingAction && <div className="mt-3">{missingAction}</div>}
       </div>
     </div>
 
