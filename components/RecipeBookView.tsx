@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Search, Star, Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { CakeSlice, Drumstick, Salad, Search, Soup, Star, Trash2, UtensilsCrossed } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { fetchSavedRecipes, RecipeMeta, SavedRecipe } from "../services/api";
 import { ScreenHeader, Spinner } from "./ui";
-import { tintFor } from "./RecipePhoto";
 import { RecipeDetailSheet } from "./RecipeDetailSheet";
 import { Category, CookResult, IngredientUsage, Recipe } from "../types";
 import { Course, normalizeCourse } from "../api/_lib/course";
@@ -18,6 +17,15 @@ const COURSE_ORDER: Array<[Course, string]> = [
   ["dolce", "Dolci"],
   ["altro", "Altro"],
 ];
+
+/** Icona della portata, al posto della foto finché l'utente non fotografa il suo piatto */
+const COURSE_ICON: Record<Course, { icon: React.ReactNode; tint: string }> = {
+  primo: { icon: <Soup size={22} />, tint: "bg-honey text-[#6E5208]" },
+  secondo: { icon: <Drumstick size={22} />, tint: "bg-peach text-[#8E3418]" },
+  contorno: { icon: <Salad size={22} />, tint: "bg-mint text-forest" },
+  dolce: { icon: <CakeSlice size={22} />, tint: "bg-[#EDE7F3] text-[#4F3B6B]" },
+  altro: { icon: <UtensilsCrossed size={20} />, tint: "bg-stone text-[#5A5246]" },
+};
 
 /** Portata salvata, oppure indovinata dal titolo per le ricette più vecchie */
 const courseOf = (r: SavedRecipe): Course => normalizeCourse(r.course ?? r.recipe_json?.course, r.title);
@@ -263,7 +271,12 @@ export function RecipeBookView({
                   {r.image_url ? (
                     <img src={r.image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" loading="lazy" />
                   ) : (
-                    <span className={`h-11 w-11 shrink-0 rounded-xl ${tintFor(r.title)}`} aria-hidden="true" />
+                    <span
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${COURSE_ICON[courseOf(r)].tint}`}
+                      aria-hidden="true"
+                    >
+                      {COURSE_ICON[courseOf(r)].icon}
+                    </span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold text-ink">{r.title}</span>
