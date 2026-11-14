@@ -1,7 +1,7 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import React, { useState, useEffect } from "react";
-import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home } from "lucide-react";
+import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
@@ -12,7 +12,8 @@ import { HomeView } from "./components/HomeView";
 import { acceptSharedRecipe, fetchCredits } from "./services/api";
 import { SharedRecipeView } from "./components/SharedRecipeView";
 import { ProfileButtonContext } from "./components/ui";
-import { redeemCode, redeemMessage, takePendingCode } from "./services/codes";
+import { isAdmin, redeemCode, redeemMessage, takePendingCode } from "./services/codes";
+import { AdminDashboard } from "./components/AdminDashboard";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
 import { dateInDays, nameMatchScore } from "./foodGuide";
@@ -93,16 +94,32 @@ const App = () => {
     }
   }, []);
 
+  // L'amministratore vede solo la dashboard, non l'app degli utenti
+  const [adminMode, setAdminMode] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!session) {
+      setAdminMode(null);
+      return;
+    }
+    let alive = true;
+    isAdmin().then((a) => {
+      if (alive) setAdminMode(a);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session?.user?.id]);
+
   // Famiglia: la crea al primo accesso; poi carica dispensa e spesa (condivise)
   useEffect(() => {
-    if (!session) return;
+    if (!session || adminMode !== false) return;
     const name = displayNameFromEmail(session.user?.email);
     ensureHousehold(name).finally(() => {
       loadPantryFromSupabase();
       loadShoppingFromSupabase();
     });
     refreshPushSubscription().then(setPushActive);
-  }, [session]);
+  }, [session, adminMode]);
 
   useEffect(() => {
     if (!session) return;
@@ -726,6 +743,15 @@ const App = () => {
   }
 
   if (!session) return <AuthView />;
+
+  if (adminMode === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ground">
+        <Loader2 size={28} className="animate-spin text-emerald-600" />
+      </div>
+    );
+  }
+  if (adminMode) return <AdminDashboard standalone onLogout={handleLogout} />;
 
   const userInitial = (session?.user?.email ?? "?").trim().charAt(0).toUpperCase();
 
