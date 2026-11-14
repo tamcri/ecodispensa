@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChefHat, ChevronRight, Lightbulb, Plus } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState } from "../types";
-import { daysUntil, expiryLabel, getCategoryTheme, getInitial } from "../constants";
-import { CreditsBadge } from "./ui";
+import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS } from "../constants";
+import { Monogram, ProfileButton } from "./ui";
 import { fetchSavedRecipes, SavedRecipe } from "../services/api";
 import { tintFor } from "./RecipePhoto";
 import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
@@ -96,10 +96,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const totalEvents = stats ? stats.consumed + stats.wasted : 0;
   const savedPct = stats && totalEvents ? Math.round((stats.consumed / totalEvents) * 100) : null;
 
-  const categoriesCount = useMemo(() => new Set(pantryItems.map((i) => i.category)).size, [pantryItems]);
   const toBuy = shoppingItems.filter((i) => !i.isChecked).length;
-  const inCart = shoppingItems.length - toBuy;
-  const cartPct = shoppingItems.length ? Math.round((inCart / shoppingItems.length) * 100) : 0;
 
   const shown = expiring.slice(0, 3);
   const extra = expiring.length - shown.length;
@@ -109,54 +106,43 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-muted">{todayLabel()}</p>
-          <h1 className="mt-0.5 font-display text-[32px] font-extrabold leading-[1.05] tracking-tight text-ink">
+          <h1 className="mt-0.5 font-display text-[30px] font-extrabold leading-[1.05] tracking-tight text-ink">
             {greeting()}
             <br />
             Cosa salviamo oggi?
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={onOpenProfile}
-          aria-label="Profilo e impostazioni"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink font-display text-lg font-extrabold text-lemon"
-        >
-          {userInitial}
-        </button>
-      </div>
-
-      <div>
-        <CreditsBadge credits={credits} onClick={() => onNavigate("chef")} />
+        <ProfileButton />
       </div>
 
       <RecoveryCodeCard compact />
 
-      {/* Prodotti da salvare */}
-      <section className="flex flex-col gap-3.5 rounded-4xl bg-forest p-5 text-white">
+      {/* Prodotti da salvare: un solo riquadro principale */}
+      <section className="flex flex-col gap-3 rounded-[26px] bg-white p-[18px] shadow-[0_6px_20px_rgba(47,74,44,0.06)]">
         {pantryItems.length === 0 ? (
           <>
-            <span className="self-start rounded-full bg-lemon px-2.5 py-1 text-xs font-bold text-ink">Primo passo</span>
-            <h2 className="font-display text-2xl font-bold leading-tight">Raccontami cosa hai in casa</h2>
-            <p className="text-sm text-[#BFE3CB]">
+            <span className="self-start rounded-full bg-honey px-2.5 py-1 text-xs font-bold text-[#6E5208]">Primo passo</span>
+            <h2 className="font-display text-[22px] font-extrabold leading-tight text-ink">Raccontami cosa hai in casa</h2>
+            <p className="text-sm text-muted">
               Aggiungi i prodotti della dispensa: ti avviso prima che scadano e EcoChef ti propone cosa cucinare.
             </p>
             <button
               type="button"
               onClick={() => onNavigate("pantry")}
-              className="flex h-[50px] items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-emerald-600 font-bold text-white"
             >
               <Plus size={20} /> Aggiungi prodotti
             </button>
           </>
         ) : expiring.length === 0 ? (
           <>
-            <span className="self-start rounded-full bg-[#BFE3CB] px-2.5 py-1 text-xs font-bold text-ink">Tutto sotto controllo</span>
-            <h2 className="font-display text-2xl font-bold leading-tight">Niente scade nei prossimi 3 giorni</h2>
-            <p className="text-sm text-[#BFE3CB]">Hai {pantryItems.length} prodotti in dispensa. Vuoi un'idea per cucinarli?</p>
+            <span className="self-start rounded-full bg-mint px-2.5 py-1 text-xs font-bold text-forest">Tutto sotto controllo</span>
+            <h2 className="font-display text-[22px] font-extrabold leading-tight text-ink">Niente scade nei prossimi 3 giorni</h2>
+            <p className="text-sm text-muted">Hai {pantryItems.length} prodotti in dispensa. Vuoi un'idea per cucinarli?</p>
             <button
               type="button"
               onClick={() => onNavigate("chef")}
-              className="flex h-[50px] items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-emerald-600 font-bold text-white"
             >
               <ChefHat size={20} /> Cosa ci cucino?
             </button>
@@ -164,36 +150,32 @@ export const HomeView: React.FC<HomeViewProps> = ({
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <span className="rounded-full bg-tangerine px-2.5 py-1 text-xs font-bold text-ink">Da salvare</span>
-              <button type="button" onClick={() => onNavigate("pantry")} className="text-[13px] font-semibold text-[#BFE3CB]">
-                Vedi dispensa
+              <span className="rounded-full bg-peach px-2.5 py-1 text-xs font-bold text-[#8E3418]">Da usare presto</span>
+              <button type="button" onClick={() => onNavigate("pantry")} className="text-[13px] font-bold text-emerald-600">
+                Vedi tutti
               </button>
             </div>
-            <h2 className="font-display text-2xl font-bold leading-tight">
+            <h2 className="font-display text-[22px] font-extrabold leading-tight text-ink">
               {expiring.length === 1
-                ? "1 prodotto scade a breve"
-                : `${expiring.length} prodotti scadono a breve`}
+                ? "1 prodotto scade entro 3 giorni"
+                : `${expiring.length} prodotti scadono entro 3 giorni`}
             </h2>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-2">
               {shown.map(({ item, days }) => (
-                <div key={item.id} className="flex min-w-0 flex-col items-start gap-2 rounded-[18px] bg-white/[0.08] px-2.5 py-3">
-                  <span
-                    className={`flex h-[38px] w-[38px] items-center justify-center rounded-xl font-display text-lg font-extrabold ${getCategoryTheme(item.category).tile}`}
-                  >
-                    {getInitial(item.name)}
-                  </span>
-                  <span className="w-full truncate text-sm font-bold">{item.name}</span>
-                  <span className={`text-xs font-bold ${(days as number) < 0 ? "text-[#FF9AA5]" : "text-[#FFB27F]"}`}>
-                    {(days as number) === 0 ? "oggi" : (days as number) === 1 ? "domani" : expiryLabel(days).replace("Tra", "tra").replace("Scaduto", "scaduto")}
+                <div key={item.id} className="flex items-center gap-3">
+                  <Monogram name={item.name} category={item.category} />
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">{item.name}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
+                    {expiryLabel(days)}
                   </span>
                 </div>
               ))}
             </div>
-            {extra > 0 && <p className="-mt-1 text-xs font-semibold text-[#BFE3CB]">e altri {extra}</p>}
+            {extra > 0 && <p className="-mt-1 text-xs font-semibold text-muted">e altri {extra}</p>}
             <button
               type="button"
               onClick={() => onNavigate("chef")}
-              className="flex h-[50px] items-center justify-center gap-2 rounded-2xl bg-lemon font-bold text-ink active:scale-[0.99]"
+              className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-emerald-600 font-bold text-white active:scale-[0.99]"
             >
               <ChefHat size={20} /> Cosa ci cucino?
             </button>
@@ -213,20 +195,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div key={item.id} className="flex flex-col gap-2 rounded-2xl bg-ground p-3">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="truncate font-bold text-ink">{item.name}</span>
-                <span className="shrink-0 text-xs font-bold text-[#9B2335]">{expiryLabel(days)}</span>
+                <span className="shrink-0 text-xs font-bold text-[#8A1F2B]">{expiryLabel(days)}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => onResolveExpired(item.id, "consumed")}
-                  className="h-10 rounded-xl bg-mint text-[13px] font-bold text-[#1E5A35]"
+                  className="h-10 rounded-xl bg-mint text-[13px] font-bold text-[#2F4A2C]"
                 >
                   Usato
                 </button>
                 <button
                   type="button"
                   onClick={() => onResolveExpired(item.id, "wasted")}
-                  className="h-10 rounded-xl bg-[#FBE0E3] text-[13px] font-bold text-[#9B2335]"
+                  className="h-10 rounded-xl bg-[#F3D3D3] text-[13px] font-bold text-[#8A1F2B]"
                 >
                   Buttato
                 </button>
@@ -251,50 +233,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       )}
 
-      {stats && totalEvents > 0 && (
-        <section className="flex items-center gap-4 rounded-3xl bg-white p-4">
-          <span className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-mint">
-            <span className="font-display text-2xl font-extrabold leading-none text-[#155A34]">{savedPct}%</span>
-            <span className="text-[10px] font-bold uppercase text-[#1E5A35]">salvato</span>
-          </span>
-          <span className="text-sm text-muted">
-            <span className="block font-display text-base font-bold text-ink">Questo mese</span>
-            {stats.consumed} {stats.consumed === 1 ? "prodotto usato" : "prodotti usati"}
-            {" · "}
-            {stats.wasted} {stats.wasted === 1 ? "buttato" : "buttati"}
-          </span>
-        </section>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
+      {/* I numeri in una riga */}
+      <div className="grid grid-cols-3 gap-2.5">
         <button
           type="button"
           onClick={() => onNavigate("pantry")}
-          className="flex flex-col items-start gap-1 rounded-3xl bg-mint p-4 text-left"
+          className="flex flex-col items-start gap-0.5 rounded-[20px] bg-white p-3 text-left"
         >
-          <span className="text-[13px] font-semibold text-[#1E5A35]">In dispensa</span>
-          <span className="font-display text-[34px] font-extrabold leading-none text-ink">{pantryItems.length}</span>
-          <span className="text-[13px] text-[#1E5A35]">
-            {categoriesCount === 1 ? "in 1 categoria" : `in ${categoriesCount} categorie`}
+          <span className="font-display text-[26px] font-extrabold leading-none text-forest">
+            {savedPct !== null ? `${savedPct}%` : "–"}
           </span>
+          <span className="text-xs text-muted">salvato questo mese</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onNavigate("pantry")}
+          className="flex flex-col items-start gap-0.5 rounded-[20px] bg-white p-3 text-left"
+        >
+          <span className="font-display text-[26px] font-extrabold leading-none text-ink">{pantryItems.length}</span>
+          <span className="text-xs text-muted">in dispensa</span>
         </button>
         <button
           type="button"
           onClick={() => onNavigate("shopping")}
-          className="flex flex-col items-start gap-1 rounded-3xl bg-peach p-4 text-left"
+          className="flex flex-col items-start gap-0.5 rounded-[20px] bg-white p-3 text-left"
         >
-          <span className="text-[13px] font-semibold text-[#8A3B0C]">Lista spesa</span>
-          <span className="font-display text-[34px] font-extrabold leading-none text-ink">{toBuy}</span>
-          <span className="text-[13px] text-[#8A3B0C]">{toBuy === 1 ? "da prendere" : "da prendere"}</span>
-          <span className="mt-1.5 block h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
-            <span className="block h-1.5 rounded-full bg-tangerine" style={{ width: `${cartPct}%` }} />
-          </span>
+          <span className="font-display text-[26px] font-extrabold leading-none text-ink">{toBuy}</span>
+          <span className="text-xs text-muted">da comprare</span>
         </button>
       </div>
 
       {tip && (
-        <section className="flex gap-3 rounded-3xl bg-lemon/40 p-4">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-lemon text-ink">
+        <section className="flex gap-3 rounded-3xl bg-honey p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 text-[#6E5208]">
             <Lightbulb size={20} />
           </span>
           <span className="text-sm text-[#3D3A1F]">
@@ -348,7 +319,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               )}
               <span className="flex flex-1 flex-col gap-1 p-3.5">
                 {r.status === "planned" && (
-                  <span className="mb-0.5 self-start rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-[#155A34]">In programma</span>
+                  <span className="mb-0.5 self-start rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-[#2F4A2C]">In programma</span>
                 )}
                 <span className="line-clamp-3 font-display text-[17px] font-bold leading-tight text-ink">{r.title}</span>
                 <span className="text-xs text-muted">{[r.time, r.difficulty].filter(Boolean).join(" · ")}</span>

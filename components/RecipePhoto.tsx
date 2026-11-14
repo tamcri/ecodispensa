@@ -83,12 +83,12 @@ export const RecipePhoto = ({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={busy}
-            className="flex h-11 items-center gap-2 rounded-2xl bg-ink px-4 text-sm font-bold text-white disabled:opacity-60"
+            className="flex h-11 items-center gap-2 rounded-2xl bg-forest px-4 text-sm font-bold text-white disabled:opacity-60"
           >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} className="text-lemon" />}
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} className="text-honey" />}
             Fotografa il tuo piatto
           </button>
-          {error && <p className="text-xs font-bold text-[#9B2335]">{error}</p>}
+          {error && <p className="text-xs font-bold text-[#8A1F2B]">{error}</p>}
         </>
       ) : (
         <span className="font-display text-6xl font-extrabold text-ink/20">{(title.trim()[0] ?? "?").toUpperCase()}</span>

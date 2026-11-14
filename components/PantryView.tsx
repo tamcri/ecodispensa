@@ -1,10 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
-import { Archive, CalendarClock, Camera, Check, Lightbulb, Plus, ScanText, Search, Trash2 } from 'lucide-react';
+import { Archive, CalendarClock, Camera, Check, Lightbulb, PenLine, Plus, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
 import { identifyItemFromImage, lookupBarcode, readExpiryFromImage } from '../services/api';
-import { AnalyzingOverlay, CameraCapture, Monogram, QuantityInput, ScreenHeader, Sheet } from './ui';
-import { findFoodGuide, guideSummary, suggestedExpiry } from '../foodGuide';
+import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet } from './ui';
+import { findFoodGuide, guideSummary, suggestedExpiry, WHERE_LABEL } from '../foodGuide';
 import { Outcome } from '../services/household';
 
 interface PantryViewProps {
@@ -36,6 +36,13 @@ const emptyForm = (): FormState => ({
 
 const UNITS = ['pz', 'kg', 'g', 'l'];
 
+/** Scadenza breve per le righe: "Oggi", "Domani", "Tra 4 giorni", "Scaduto da 2 giorni" */
+const shortExpiry = (days: number) => {
+  if (days === 0) return 'Oggi';
+  if (days === 1) return 'Domani';
+  return expiryLabel(days);
+};
+
 const fieldClass =
   'h-12 w-full rounded-2xl border-0 bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 const labelClass = 'mb-1.5 block text-xs font-bold text-muted';
@@ -56,6 +63,12 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const [showCamera, setShowCamera] = useState(false);
+  const [cameraMode, setCameraMode] = useState<CameraMode>('barcode');
+  const openCamera = (mode: CameraMode) => {
+    setCameraMode(mode);
+    setAddOpen(false);
+    setShowCamera(true);
+  };
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // Salvataggio senza scadenza: chiedo conferma una volta (null = nessuna domanda aperta)
@@ -317,6 +330,19 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       (!showOnlyMissing || (!item.expiryDate && !item.longLife))
   );
 
+  /** Elenco diviso per urgenza: si vede subito cosa usare per primo */
+  const groups = useMemo(() => {
+    const defs: Array<{ title: string; test: (x: { item: PantryItem; days: number | null }) => boolean }> = [
+      { title: 'Scaduti', test: (x) => !x.item.longLife && x.days !== null && x.days < 0 },
+      { title: 'Da usare subito', test: (x) => !x.item.longLife && x.days !== null && x.days >= 0 && x.days <= 3 },
+      { title: 'Questa settimana', test: (x) => !x.item.longLife && x.days !== null && x.days > 3 && x.days <= 7 },
+      { title: 'Più avanti', test: (x) => !x.item.longLife && x.days !== null && x.days > 7 },
+      { title: 'Senza scadenza', test: (x) => !x.item.longLife && x.days === null },
+      { title: 'Lunga conservazione', test: (x) => !!x.item.longLife },
+    ];
+    return defs.map((d) => ({ title: d.title, rows: visible.filter(d.test) })).filter((g) => g.rows.length > 0);
+  }, [visible]);
+
   const subtitle =
     items.length === 0
       ? 'Ancora vuota'
@@ -338,7 +364,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               type="button"
               onClick={() => onPick(c)}
               className={`h-10 rounded-full px-3.5 text-[13px] font-bold transition-colors ${
-                active ? 'bg-ink text-white' : getCategoryTheme(c).chip
+                active ? 'bg-forest text-white' : getCategoryTheme(c).chip
               }`}
             >
               {c}
@@ -364,9 +390,9 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       type="button"
       onClick={() => openDateCamera(target)}
       aria-label="Fotografa la data di scadenza"
-      className="flex h-12 shrink-0 items-center gap-1.5 rounded-2xl bg-ink px-3.5 text-[13px] font-bold text-white"
+      className="flex h-12 shrink-0 items-center gap-1.5 rounded-2xl bg-forest px-3.5 text-[13px] font-bold text-white"
     >
-      <ScanText size={18} className="text-lemon" /> Leggi
+      <ScanText size={18} className="text-honey" /> Leggi
     </button>
   );
 
@@ -390,7 +416,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   const dateNoticeBox = dateNotice ? (
     <p
       className={`mt-2 rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
-        dateNotice.ok ? 'bg-mint text-[#1E5A35]' : 'bg-peach text-[#8A3B0C]'
+        dateNotice.ok ? 'bg-mint text-[#2F4A2C]' : 'bg-peach text-[#8E3418]'
       }`}
     >
       {dateNotice.text}
@@ -399,24 +425,11 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
 
   return (
     <div className="flex flex-col gap-4">
-      <ScreenHeader
-        title="Dispensa"
-        subtitle={subtitle}
-        right={
-          <button
-            type="button"
-            onClick={() => setShowCamera(true)}
-            className="flex h-12 items-center gap-2 rounded-2xl bg-ink pl-3.5 pr-4 text-sm font-bold text-white"
-          >
-            <Camera size={20} className="text-lemon" />
-            Scansiona
-          </button>
-        }
-      />
+      <ScreenHeader title="Dispensa" subtitle={subtitle} />
 
-      {items.length > 0 && (
-        <>
-          <label className="flex h-12 items-center gap-2.5 rounded-2xl bg-white px-4 text-muted">
+      <div className="flex gap-2">
+        {items.length > 0 && (
+          <label className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-2xl bg-white px-4 text-muted">
             <Search size={20} />
             <input
               type="search"
@@ -424,16 +437,29 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Cerca in dispensa"
               aria-label="Cerca in dispensa"
-              className="flex-1 bg-transparent text-[15px] text-ink outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none"
             />
           </label>
+        )}
+        <button
+          type="button"
+          onClick={() => openCamera('barcode')}
+          className={`flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-forest px-4 text-sm font-bold text-white ${items.length > 0 ? '' : 'flex-1'}`}
+        >
+          <ScanBarcode size={20} />
+          Scansiona
+        </button>
+      </div>
+
+      {items.length > 0 && (
+        <>
 
           <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar">
             <button
               type="button"
               onClick={() => setFilterCategory('ALL')}
               className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${
-                filterCategory === 'ALL' ? 'bg-ink text-white' : 'bg-white text-ink'
+                filterCategory === 'ALL' ? 'bg-forest text-white' : 'bg-white text-ink'
               }`}
             >
               Tutti
@@ -444,7 +470,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
                 type="button"
                 onClick={() => setFilterCategory(c)}
                 className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${
-                  filterCategory === c ? 'bg-ink text-white' : getCategoryTheme(c).chip
+                  filterCategory === c ? 'bg-forest text-white' : 'bg-white text-ink'
                 }`}
               >
                 {c}
@@ -456,10 +482,10 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
             <button
               type="button"
               onClick={() => setOnlyMissing((v) => !v)}
-              className="flex items-center gap-3 rounded-2xl bg-peach px-4 py-3 text-left"
+              className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left ring-1 ring-[#EBC3B0]"
             >
-              <CalendarClock size={22} className="shrink-0 text-[#9A3412]" />
-              <span className="flex-1 text-[13px] leading-snug text-[#8A3B0C]">
+              <CalendarClock size={22} className="shrink-0 text-[#8E3418]" />
+              <span className="flex-1 text-[13px] leading-snug text-[#8E3418]">
                 <span className="font-bold">
                   {missingDateCount === 1 ? '1 prodotto senza scadenza' : `${missingDateCount} prodotti senza scadenza`}
                 </span>
@@ -483,35 +509,38 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       ) : visible.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted">Nessun prodotto trovato.</p>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
-          {visible.map(({ item, days }) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => openEdit(item)}
-              className="flex min-w-0 flex-col gap-2.5 rounded-[22px] bg-white p-3.5 text-left transition-transform active:scale-[0.98]"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <Monogram name={item.name} category={item.category} />
-                <span className="truncate text-[13px] font-bold text-[#3D4840]">
-                  {item.quantity} {item.unit}
-                </span>
-              </span>
-              <span className="line-clamp-2 text-base font-bold leading-tight text-ink">{item.name}</span>
-              {item.longLife ? (
-                <span className={`self-start rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS.none}`}>
-                  Lunga conservazione
-                </span>
-              ) : days === null ? (
-                <span className="self-start rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#9A3412] ring-1 ring-[#F3C9A8]">
-                  Manca la scadenza
-                </span>
-              ) : (
-                <span className={`self-start rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
-                  {expiryLabel(days)}
-                </span>
-              )}
-            </button>
+        <div className="flex flex-col gap-4">
+          {groups.map((g) => (
+            <section key={g.title} className="flex flex-col gap-2">
+              <h2 className="flex items-center justify-between px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
+                <span>{g.title}</span>
+                <span>{g.rows.length}</span>
+              </h2>
+              {g.rows.map(({ item, days }) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openEdit(item)}
+                  className="flex min-w-0 items-center gap-3 rounded-[18px] bg-white px-3 py-2.5 text-left transition-transform active:scale-[0.99]"
+                >
+                  <Monogram name={item.name} category={item.category} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold text-ink">{item.name}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {item.quantity} {item.unit}
+                      {findFoodGuide(item.name)?.where ? ` · ${WHERE_LABEL[findFoodGuide(item.name)!.where]}` : ''}
+                    </span>
+                  </span>
+                  {item.longLife ? (
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS.ok}`}>Non scade</span>
+                  ) : (
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
+                      {days === null ? 'Manca la data' : shortExpiry(days)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </section>
           ))}
         </div>
       )}
@@ -519,7 +548,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
       <button
         type="button"
         onClick={openAdd}
-        className="fixed z-40 flex h-[54px] items-center gap-2 rounded-full bg-emerald-600 pl-4 pr-5 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(30,138,78,0.35)] active:scale-95"
+        className="fixed z-40 flex h-[54px] items-center gap-2 rounded-full bg-emerald-600 pl-4 pr-5 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(79,107,74,0.35)] active:scale-95"
         style={{ bottom: 'calc(env(safe-area-inset-bottom) + 100px)', right: 'max(1.25rem, calc((100vw - 28rem) / 2 + 1.25rem))' }}
       >
         <Plus size={22} strokeWidth={2.4} />
@@ -544,9 +573,9 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
                     setMissingDateAsk(null);
                     openDateCamera('add');
                   }}
-                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-ink text-[15px] font-bold text-white"
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-forest text-[15px] font-bold text-white"
                 >
-                  <ScanText size={18} className="text-lemon" /> Fotografa la data
+                  <ScanText size={18} className="text-honey" /> Fotografa la data
                 </button>
                 <button
                   type="button"
@@ -596,7 +625,30 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         }
       >
         <form id="pantry-add-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {notice && <p className="rounded-2xl bg-peach px-4 py-3 text-sm font-semibold text-[#8A3B0C]">{notice}</p>}
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => openCamera('barcode')}
+              className="flex h-[78px] flex-col items-center justify-center gap-1.5 rounded-[18px] bg-white text-[13px] font-bold text-ink ring-1 ring-black/5"
+            >
+              <ScanBarcode size={22} /> Codice a barre
+            </button>
+            <button
+              type="button"
+              onClick={() => openCamera('photo')}
+              className="flex h-[78px] flex-col items-center justify-center gap-1.5 rounded-[18px] bg-white text-[13px] font-bold text-ink ring-1 ring-black/5"
+            >
+              <Camera size={22} /> Foto
+            </button>
+            <button
+              type="button"
+              onClick={() => nameRef.current?.focus()}
+              className="flex h-[78px] flex-col items-center justify-center gap-1.5 rounded-[18px] bg-mint text-[13px] font-bold text-forest ring-2 ring-emerald-600"
+            >
+              <PenLine size={22} /> Scrivo io
+            </button>
+          </div>
+          {notice && <p className="rounded-2xl bg-peach px-4 py-3 text-sm font-semibold text-[#8E3418]">{notice}</p>}
 
           <div>
             <label className={labelClass} htmlFor="pantry-name">Cosa hai comprato?</label>
@@ -620,7 +672,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
                   setShowCamera(true);
                 }}
                 aria-label="Scansiona con la fotocamera"
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-ink text-lemon"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-forest text-honey"
               >
                 <Camera size={20} />
               </button>
@@ -664,7 +716,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
           {guide && (
             <div className="flex gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-black/5">
               <Lightbulb size={18} className="mt-0.5 shrink-0 text-[#C9930A]" />
-              <p className="text-[13px] leading-snug text-[#3D4840]">
+              <p className="text-[13px] leading-snug text-[#3D4A3B]">
                 {guide.fresh ? (
                   <>
                     <span className="font-bold text-ink">Di solito dura {guideSummary(guide)}.</span>{' '}
@@ -710,14 +762,14 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
                 <button
                   type="button"
                   onClick={() => finishEditing('consumed')}
-                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-mint text-[15px] font-bold text-[#155A34]"
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-mint text-[15px] font-bold text-[#2F4A2C]"
                 >
                   <Check size={18} /> L'ho usato
                 </button>
                 <button
                   type="button"
                   onClick={() => finishEditing('wasted')}
-                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#FBE0E3] text-[15px] font-bold text-[#9B2335]"
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#F3D3D3] text-[15px] font-bold text-[#8A1F2B]"
                 >
                   <Trash2 size={18} /> L'ho buttato
                 </button>
@@ -780,7 +832,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
           {editGuide && (
             <div className="flex gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-black/5">
               <Lightbulb size={18} className="mt-0.5 shrink-0 text-[#C9930A]" />
-              <p className="text-[13px] leading-snug text-[#3D4840]">{editGuide.tip}</p>
+              <p className="text-[13px] leading-snug text-[#3D4A3B]">{editGuide.tip}</p>
             </div>
           )}
           {categoryPicker(editForm, (c) => setEditForm({ ...editForm, category: c }))}
@@ -792,6 +844,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         onClose={() => setShowCamera(false)}
         onCapture={handleCapture}
         onBarcode={handleBarcode}
+        initialMode={cameraMode}
       />
       <CameraCapture
         open={!!dateCameraFor}

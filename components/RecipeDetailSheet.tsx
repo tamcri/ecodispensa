@@ -27,7 +27,7 @@ export const Stars = ({
   <div className="flex gap-1" role={onChange ? "radiogroup" : undefined} aria-label="Voto">
     {[1, 2, 3, 4, 5].map((n) => {
       const on = (value ?? 0) >= n;
-      const cls = on ? "fill-lemon text-lemon" : dark ? "text-white/30" : "text-[#C5CCC7]";
+      const cls = on ? "fill-[#E9B949] text-[#E9B949]" : dark ? "text-white/30" : "text-[#C5CCC7]";
       return onChange ? (
         <button
           key={n}
@@ -195,7 +195,7 @@ export const RecipeDetailSheet = ({
         onClick={() => share(false)}
         disabled={!!sharing}
         className={`flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-bold disabled:opacity-60 ${
-          dark ? "bg-white text-ink" : "bg-ink text-white"
+          dark ? "bg-white text-ink" : "bg-forest text-white"
         }`}
       >
         {sharing === "share" ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
@@ -219,7 +219,7 @@ export const RecipeDetailSheet = ({
       return (
         <section className="flex flex-col gap-3 rounded-3xl bg-forest p-4 text-white">
           <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-sm font-bold text-[#BFE3CB]">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-[#CFDCC6]">
               <Check size={16} /> L'hai cucinata
             </span>
             {canPersist && <Stars value={rating} onChange={rate} size={22} dark />}
@@ -242,10 +242,10 @@ export const RecipeDetailSheet = ({
     if (status === "planned") {
       return (
         <section className="flex flex-col gap-3 rounded-3xl bg-mint p-4">
-          <p className="flex items-center gap-2 font-display text-lg font-bold text-[#155A34]">
+          <p className="flex items-center gap-2 font-display text-lg font-bold text-[#2F4A2C]">
             <CalendarCheck size={20} /> In programma
           </p>
-          <p className="text-sm text-[#1E5A35]">
+          <p className="text-sm text-[#2F4A2C]">
             Quando l'hai preparata tocca <span className="font-bold">"L'ho cucinato!"</span>: aggiorno la dispensa e
             vediamo quanto hai salvato.
           </p>
@@ -277,9 +277,9 @@ export const RecipeDetailSheet = ({
         <button
           type="button"
           onClick={plan}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-ink text-sm font-bold text-white"
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-forest text-sm font-bold text-white"
         >
-          <CalendarCheck size={18} className="text-lemon" /> Sì, la preparo
+          <CalendarCheck size={18} className="text-honey" /> Sì, la preparo
         </button>
       </section>
     );
@@ -331,9 +331,9 @@ export const RecipeDetailSheet = ({
                   type="button"
                   onClick={addMissing}
                   disabled={missingAdded}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-sm font-bold text-white disabled:opacity-70"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-forest text-sm font-bold text-white disabled:opacity-70"
                 >
-                  {missingAdded ? <Check size={16} /> : <ShoppingCart size={16} className="text-lemon" />}
+                  {missingAdded ? <Check size={16} /> : <ShoppingCart size={16} className="text-honey" />}
                   {missingAdded
                     ? "Aggiunti alla lista della spesa"
                     : `Aggiungi ${missing.length === 1 ? "l'ingrediente mancante" : `i ${missing.length} mancanti`} alla spesa`}
@@ -361,7 +361,7 @@ export const RecipeDetailSheet = ({
                   ? `Hai usato ${celebration.used === 1 ? "1 prodotto" : `${celebration.used} prodotti`} di casa`
                   : "Ricetta fatta!"}
               </h2>
-              <p className="text-[15px] text-[#BFE3CB]">
+              <p className="text-[15px] text-[#CFDCC6]">
                 {celebration.expiring > 0
                   ? `${celebration.expiring === 1 ? "Uno stava" : `${celebration.expiring} stavano`} per scadere: salvati dalla spazzatura. La dispensa è già aggiornata.`
                   : "La dispensa è già aggiornata."}
@@ -384,16 +384,16 @@ export const RecipeDetailSheet = ({
                     disabled={uploading}
                     className="flex h-28 flex-col items-center justify-center gap-1.5 rounded-3xl border-2 border-dashed border-white/30 text-sm font-bold"
                   >
-                    {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={26} className="text-lemon" />}
+                    {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={26} className="text-honey" />}
                     Fai vedere com'è venuta
-                    <span className="text-xs font-semibold text-[#BFE3CB]">La foto diventa la copertina nel tuo Ricettario</span>
+                    <span className="text-xs font-semibold text-[#CFDCC6]">La foto diventa la copertina nel tuo Ricettario</span>
                   </button>
                 )}
 
                 <div className="flex flex-col gap-2">
                   <p className="text-sm font-bold">Fallo sapere</p>
                   {shareButtons(true)}
-                  {feedback && <p className="text-sm font-semibold text-lemon">{feedback}</p>}
+                  {feedback && <p className="text-sm font-semibold text-honey">{feedback}</p>}
                 </div>
               </>
             )}

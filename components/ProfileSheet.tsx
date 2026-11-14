@@ -610,18 +610,18 @@ const getPurchaseTitle = (purchase: Purchase) => {
       <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] max-h-[92dvh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
         <div className="sticky top-0 bg-ground px-5 pt-5 pb-3 flex justify-between items-center z-10 rounded-t-4xl">
           <div className="min-w-0 flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <User size={18} />
-            </div>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-600 font-display text-xl font-extrabold text-white">
+              {(username ?? "?").charAt(0).toUpperCase()}
+            </span>
             <div className="min-w-0">
-              <h3 className="font-bold text-lg text-gray-800 truncate">Profilo</h3>
-              <p className="text-xs text-gray-500 truncate">{username ?? "—"}</p>
+              <h3 className="truncate font-display text-[22px] font-extrabold leading-tight text-ink">{username ?? "Profilo"}</h3>
+              <p className="truncate text-xs text-muted">Profilo e impostazioni</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            className="p-2 bg-stone rounded-full hover:bg-stone transition-colors"
             title="Chiudi"
             type="button"
           >
@@ -630,11 +630,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
         </div>
 
         <div className="p-4 pb-0">
-          <div className="flex p-1 bg-gray-100 rounded-xl">
+          <div className="flex p-1 bg-stone rounded-xl">
             <button
               onClick={() => setTab("profilo")}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                tab === "profilo" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                tab === "profilo" ? "bg-white text-emerald-700 shadow-sm" : "text-muted hover:text-ink"
               }`}
               type="button"
             >
@@ -643,7 +643,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
             <button
               onClick={() => setTab("preferenze")}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                tab === "preferenze" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                tab === "preferenze" ? "bg-white text-emerald-700 shadow-sm" : "text-muted hover:text-ink"
               }`}
               type="button"
             >
@@ -655,28 +655,28 @@ const getPurchaseTitle = (purchase: Purchase) => {
         <div className="p-6 space-y-6 flex-1 overflow-y-auto">
           {tab === "profilo" && (
             <>
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <User size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Account</div>
+                  <div className="text-sm font-bold text-ink">Account</div>
                 </div>
 
-                <div className="text-sm text-gray-600">
-                  <div className="text-xs text-gray-400 mb-1">Username</div>
-                  <div className="font-semibold text-gray-800">{username ?? "—"}</div>
-                  <p className="mt-2 text-xs text-gray-500">
+                <div className="text-sm text-muted">
+                  <div className="text-xs text-muted mb-1">Username</div>
+                  <div className="font-semibold text-ink">{username ?? "—"}</div>
+                  <p className="mt-2 text-xs text-muted">
                     È il nome con cui accedi. EcoDispensa non ti chiede l’email: per recuperare l’accesso usa il codice di recupero qui sotto.
                   </p>
                 </div>
               </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Lock size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Sicurezza</div>
+                  <div className="text-sm font-bold text-ink">Sicurezza</div>
                 </div>
 
-                <div className="text-sm text-gray-600 mb-4">
+                <div className="text-sm text-muted mb-4">
                   Puoi modificare la password dell'account attualmente connesso.
                 </div>
 
@@ -687,26 +687,26 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       resetPasswordForm();
                       setShowPasswordForm(true);
                     }}
-                    className="w-full bg-white border border-gray-200 text-gray-800 py-3 rounded-xl font-bold hover:border-emerald-300 hover:text-emerald-700 transition-all"
+                    className="w-full bg-white border border-black/10 text-ink py-3 rounded-xl font-bold hover:border-emerald-400 hover:text-emerald-700 transition-all"
                   >
                     Cambia password
                   </button>
                 ) : (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-500 font-bold mb-1 block">Nuova password</label>
+                      <label className="text-xs text-muted font-bold mb-1 block">Nuova password</label>
                       <div className="relative">
                         <input
                           type={showPassword ? "text" : "password"}
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
-                          className="w-full p-3 pr-11 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                          className="w-full p-3 pr-11 rounded-xl border border-black/10 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
                           placeholder="Almeno 8 caratteri"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword((v) => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-muted"
                           title={showPassword ? "Nascondi password" : "Mostra password"}
                         >
                           {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -715,12 +715,12 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     </div>
 
                     <div>
-                      <label className="text-xs text-gray-500 font-bold mb-1 block">Conferma password</label>
+                      <label className="text-xs text-muted font-bold mb-1 block">Conferma password</label>
                       <input
                         type={showPassword ? "text" : "password"}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                        className="w-full p-3 rounded-xl border border-black/10 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
                         placeholder="Ripeti la nuova password"
                       />
                     </div>
@@ -755,7 +755,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                           setShowPasswordForm(false);
                         }}
                         disabled={passwordSaving}
-                        className="px-4 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-300 transition-all disabled:opacity-50"
+                        className="px-4 bg-stone text-ink py-3 rounded-xl font-bold hover:bg-[#E2D9C5] transition-all disabled:opacity-50"
                       >
                         Annulla
                       </button>
@@ -764,10 +764,10 @@ const getPurchaseTitle = (purchase: Purchase) => {
                 )}
               </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CreditCard size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Piano</div>
+                  <div className="text-sm font-bold text-ink">Piano</div>
                 </div>
 
                 {isPremiumActive ? (
@@ -785,7 +785,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                             <div className="text-xs font-extrabold tracking-wider text-amber-700">
                               ABBONAMENTO ATTIVO
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
+                            <div className="text-xs text-muted mt-0.5">
                               {premiumUntilLabel
                                 ? cancelAtPeriodEnd
                                   ? `Disdetto: attivo fino al ${premiumUntilLabel}`
@@ -807,30 +807,30 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                       <div className="bg-white/90 border border-amber-100 rounded-xl p-3">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 text-xs text-muted">
                           <span className="text-base" aria-hidden="true">
                             📅
                           </span>
                           Crediti del mese
                         </div>
-                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                        <div className="mt-1 text-lg font-extrabold text-ink">
                           {creditsLoading ? "…" : monthlyCredits}
                         </div>
                         {monthlyResetAt && (
-                          <div className="text-[11px] text-gray-500">
+                          <div className="text-[11px] text-muted">
                             Tornano a 25 il {new Date(monthlyResetAt).toLocaleDateString("it-IT")}
                           </div>
                         )}
                       </div>
 
                       <div className="bg-white/90 border border-emerald-100 rounded-xl p-3">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 text-xs text-muted">
                           <span className="text-base" aria-hidden="true">
                             💳
                           </span>
                           Crediti extra (non scadono)
                         </div>
-                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                        <div className="mt-1 text-lg font-extrabold text-ink">
                           {creditsLoading ? "…" : purchasedCredits}
                         </div>
                       </div>
@@ -861,13 +861,13 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       <button
                         type="button"
                         onClick={() => setConfirmCancel(true)}
-                        className="w-full mt-2 py-2.5 text-sm font-semibold text-gray-500 underline"
+                        className="w-full mt-2 py-2.5 text-sm font-semibold text-muted underline"
                       >
                         Disdici l'abbonamento
                       </button>
                     ) : (
-                      <div className="mt-2 rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-700">
-                        <p className="font-bold text-gray-900">Vuoi disdire?</p>
+                      <div className="mt-2 rounded-xl border border-black/10 bg-white p-3 text-sm text-ink">
+                        <p className="font-bold text-ink">Vuoi disdire?</p>
                         <p className="mt-1">
                           Resta tutto attivo fino al {premiumUntilLabel ?? "termine del periodo pagato"}, poi non paghi più nulla.
                           I crediti del mese si azzerano alla scadenza; quelli ricaricati o regalati restano tuoi. Non sono previsti rimborsi
@@ -877,7 +877,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                           <button
                             type="button"
                             onClick={() => setConfirmCancel(false)}
-                            className="h-10 rounded-xl bg-gray-100 font-bold text-gray-700"
+                            className="h-10 rounded-xl bg-stone font-bold text-ink"
                           >
                             Annulla
                           </button>
@@ -885,27 +885,27 @@ const getPurchaseTitle = (purchase: Purchase) => {
                             type="button"
                             disabled={subBusy}
                             onClick={() => changeSubscription("cancel_subscription")}
-                            className="h-10 rounded-xl bg-gray-900 font-bold text-white disabled:opacity-50"
+                            className="h-10 rounded-xl bg-forest font-bold text-white disabled:opacity-50"
                           >
                             {subBusy ? "Attendi…" : "Sì, disdici"}
                           </button>
                         </div>
                       </div>
                     )}
-                    {subMsg && <p className="mt-2 text-xs font-semibold text-gray-600">{subMsg}</p>}
+                    {subMsg && <p className="mt-2 text-xs font-semibold text-muted">{subMsg}</p>}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div
                           className={`text-xs font-extrabold tracking-wider ${
-                            isPremiumExpired ? "text-amber-700" : "text-gray-500"
+                            isPremiumExpired ? "text-amber-700" : "text-muted"
                           }`}
                         >
                           {isPremiumExpired ? "ABBONAMENTO SCADUTO" : "PIANO GRATUITO"}
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="text-sm text-muted mt-1">
                           {isPremiumExpired && premiumUntilLabel
                             ? `Scaduto il ${premiumUntilLabel}. Puoi usare i crediti extra rimasti.`
                             : "Usa i tuoi crediti per le generazioni EcoChef."}
@@ -925,15 +925,15 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       <div className="text-xs font-medium text-emerald-800">
                         Crediti disponibili
                       </div>
-                      <div className="mt-1 text-3xl font-extrabold text-gray-900">
+                      <div className="mt-1 text-3xl font-extrabold text-ink">
                         {creditsLoading ? "…" : ecoCredits ?? 0}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
+                      <div className="mt-1 text-xs text-muted">
                         1 credito = 4 richieste di ricette · menu settimanale = 4 crediti
                       </div>
                     </div>
 
-                    <div className="mt-3 text-sm text-gray-600 leading-relaxed">
+                    <div className="mt-3 text-sm text-muted leading-relaxed">
                       {isPremiumExpired
                         ? "Riattiva l'abbonamento per avere di nuovo 25 crediti ogni mese."
                         : "Con l'abbonamento hai 25 crediti ogni mese: per esempio 4 menu settimanali e altre 36 richieste di ricette. Se finiscono, puoi aggiungere una ricarica."}
@@ -970,11 +970,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                 )}
               </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <CreditCard size={16} className="text-emerald-600" />
-                    <div className="text-sm font-bold text-gray-800">Storico acquisti</div>
+                    <div className="text-sm font-bold text-ink">Storico acquisti</div>
                   </div>
 
                   {!purchasesLoading && (
@@ -988,12 +988,12 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   )}
                 </div>
 
-                <div className="text-xs text-gray-500 mb-3">
+                <div className="text-xs text-muted mb-3">
                   Gli ultimi acquisti effettuati su EcoDispensa.
                 </div>
 
                 {purchasesLoading ? (
-                  <div className="py-5 flex items-center justify-center gap-2 text-sm text-gray-500">
+                  <div className="py-5 flex items-center justify-center gap-2 text-sm text-muted">
                     <Loader2 size={18} className="animate-spin text-emerald-600" />
                     Caricamento acquisti...
                   </div>
@@ -1009,7 +1009,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     </button>
                   </div>
                 ) : purchases.length === 0 ? (
-                  <div className="rounded-xl border border-gray-100 bg-white p-4 text-sm text-gray-500">
+                  <div className="rounded-xl border border-black/10 bg-white p-4 text-sm text-muted">
                     Nessun acquisto registrato.
                   </div>
                 ) : (
@@ -1017,19 +1017,19 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     {purchases.map((purchase) => (
                       <div
                         key={purchase.id}
-                        className="rounded-xl border border-gray-100 bg-white p-3 flex items-center justify-between gap-3"
+                        className="rounded-xl border border-black/10 bg-white p-3 flex items-center justify-between gap-3"
                       >
                         <div className="min-w-0">
-                          <div className="font-bold text-sm text-gray-800 truncate">
+                          <div className="font-bold text-sm text-ink truncate">
                             {getPurchaseTitle(purchase)}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-muted mt-1">
                             {formatPurchaseDate(purchase.created_at)}
                           </div>
                         </div>
 
                         <div className="shrink-0 text-right">
-                          <div className="font-bold text-sm text-gray-900">
+                          <div className="font-bold text-sm text-ink">
                             {formatPurchaseAmount(purchase.amount, purchase.currency)}
                           </div>
                           <div
@@ -1057,7 +1057,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     onClose();
                     window.setTimeout(requestInstall, 250);
                   }}
-                  className="flex items-center gap-3 rounded-2xl bg-ink p-4 text-left text-white"
+                  className="flex items-center gap-3 rounded-2xl bg-forest p-4 text-left text-white"
                 >
                   <img src="/icons/icon-192.png" alt="" className="h-11 w-11 shrink-0 rounded-xl" />
                   <span className="flex-1 text-sm text-white/80">
@@ -1069,20 +1069,20 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
               <HouseholdCard userEmail={userEmail} onChanged={onHouseholdChanged} />
 
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   {pushActive ? (
                     <Bell size={16} className="text-emerald-600" />
                   ) : (
-                    <BellOff size={16} className="text-gray-400" />
+                    <BellOff size={16} className="text-muted" />
                   )}
-                  <div className="text-sm font-bold text-gray-800">Notifiche scadenza</div>
+                  <div className="text-sm font-bold text-ink">Notifiche scadenza</div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-xs text-gray-400 mb-1">Stato</div>
-                    <div className="font-semibold text-gray-800">{notifLabel}</div>
+                    <div className="text-xs text-muted mb-1">Stato</div>
+                    <div className="font-semibold text-ink">{notifLabel}</div>
                   </div>
 
                   <button
@@ -1091,7 +1091,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${
                       pushActive
                         ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        : "bg-stone text-ink hover:bg-[#E2D9C5]"
                     }`}
                     title={notificationPermission === "denied" ? "Sbloccala dalle impostazioni del browser" : "Attiva notifiche"}
                   >
@@ -1099,21 +1099,21 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   </button>
                 </div>
 
-                <div className="mt-3 text-xs text-gray-500">
+                <div className="mt-3 text-xs text-muted">
                   Ogni mattina ti avviso se qualcosa scade entro 2 giorni, anche ad app chiusa.
                 </div>
 
                 {notificationPermission === "denied" && (
-                  <div className="mt-3 text-xs text-gray-500">
+                  <div className="mt-3 text-xs text-muted">
                     Le notifiche sono bloccate dal browser. Per riattivarle, sbloccale nelle impostazioni del sito.
                   </div>
                 )}
               </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+              <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Shield size={16} className="text-emerald-600" />
-                  <div className="text-sm font-bold text-gray-800">Privacy</div>
+                  <div className="text-sm font-bold text-ink">Privacy</div>
                 </div>
 
                 <PrivacySection />
@@ -1123,7 +1123,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
               <button
                 onClick={onLogout}
-                className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-white font-bold text-[#8E3418] ring-1 ring-black/5 transition-all"
                 type="button"
                 title="Esci"
               >
@@ -1134,16 +1134,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
           )}
 
           {tab === "preferenze" && (
-            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+            <div className="bg-white rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Settings size={16} className="text-emerald-600" />
-                <div className="text-sm font-bold text-gray-800">Preferenze EcoChef</div>
+                <div className="text-sm font-bold text-ink">Preferenze EcoChef</div>
               </div>
 
               {prefsLoading ? (
                 <div className="text-center py-6">
                   <Loader2 className="animate-spin mx-auto text-emerald-600 mb-2" size={28} />
-                  <p className="text-gray-500 text-sm font-medium">Caricamento...</p>
+                  <p className="text-muted text-sm font-medium">Caricamento...</p>
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -1158,7 +1158,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                           className={`px-3 py-2 rounded-xl text-sm font-bold border transition-colors ${
                             prefs.diet === d
                               ? "bg-emerald-600 text-white border-emerald-600"
-                              : "bg-white text-gray-700 border-gray-200 hover:border-emerald-300"
+                              : "bg-white text-ink border-black/10 hover:border-emerald-400"
                           }`}
                         >
                           {d === "omnivore" ? "Onnivora" : d === "veg" ? "Vegetariana" : "Vegana"}
@@ -1167,16 +1167,16 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-3 bg-white border border-black/10 rounded-xl p-4">
                     <div>
-                      <div className="text-sm font-bold text-gray-800">Senza lattosio</div>
-                      <div className="text-xs text-gray-500">Evita ingredienti con lattosio.</div>
+                      <div className="text-sm font-bold text-ink">Senza lattosio</div>
+                      <div className="text-xs text-muted">Evita ingredienti con lattosio.</div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setPrefs((p) => ({ ...p, lactose_free: !p.lactose_free }))}
                       className={`w-14 h-8 rounded-full transition-colors relative ${
-                        prefs.lactose_free ? "bg-emerald-600" : "bg-gray-300"
+                        prefs.lactose_free ? "bg-emerald-600" : "bg-[#D6CFBE]"
                       }`}
                       aria-label="toggle senza lattosio"
                     >
@@ -1195,11 +1195,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     <input
                       type="text"
                       placeholder="es. cipolla, aglio, peperoncino"
-                      className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                      className="w-full p-3 rounded-xl border border-black/10 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
                       value={avoidText}
                       onChange={(e) => setAvoidText(e.target.value)}
                     />
-                    <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
+                    <p className="text-[11px] text-muted mt-2">Separati da virgola.</p>
                   </div>
 
                   <div>
@@ -1209,11 +1209,11 @@ const getPurchaseTitle = (purchase: Purchase) => {
                     <input
                       type="text"
                       placeholder="es. arachidi, crostacei"
-                      className="w-full p-3 rounded-xl border border-gray-200 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
+                      className="w-full p-3 rounded-xl border border-black/10 outline-none focus:border-emerald-500 transition-colors text-sm bg-white"
                       value={allergiesText}
                       onChange={(e) => setAllergiesText(e.target.value)}
                     />
-                    <p className="text-[11px] text-gray-400 mt-2">Separati da virgola.</p>
+                    <p className="text-[11px] text-muted mt-2">Separati da virgola.</p>
                   </div>
 
                   <button

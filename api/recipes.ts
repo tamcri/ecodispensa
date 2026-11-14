@@ -340,6 +340,9 @@ REGOLE DIETETICHE E SICUREZZA:
 - Se un ingrediente NON è nella DISPENSA DISPONIBILE, deve stare in "missingIngredients".
 - Se la dispensa è vuota, "ingredientsUsed" deve essere [] e gli ingredienti necessari devono stare in "missingIngredients".
 
+PORTATA:
+- "course" indica la portata: "primo" (pasta, riso, zuppe, gnocchi), "secondo" (carne, pesce, uova, formaggi come piatto principale), "contorno" (verdure, insalate, patate), "dolce", oppure "altro" (pizze, antipasti, piatti unici, salse).
+
 REGOLE DI QUALITÀ INGREDIENTI:
 - Usa ingredienti specifici e coerenti.
 - Non usare mai: "pasta avanzata", "pasta a scelta", "formaggio a piacere", "verdure miste", "ingredienti vari", "condimento pronto".
@@ -376,6 +379,7 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
 [
   {
     "title": "Nome coerente della ricetta",
+    "course": "primo|secondo|contorno|dolce|altro",
     "difficulty": "Facile|Media|Difficile",
     "time": "es. 35 min",
     "servings": ${finalServings},

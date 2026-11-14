@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeCourse } from "./_lib/course.js";
 
 function getBearerToken(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -79,6 +80,7 @@ export default async function handler(
         user_id: userId,
         source,
         title: recipe.title,
+        course: normalizeCourse(recipe.course, recipe.title),
         difficulty: recipe.difficulty ?? null,
         time: recipe.time ?? null,
         servings: recipe.servings ?? null,

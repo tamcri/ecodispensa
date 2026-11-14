@@ -17,6 +17,8 @@ export type SavedRecipe = {
   rating?: number | null;
   cooked_at?: string | null;
   saved_items_count?: number | null;
+  /** Portata: primo, secondo, contorno, dolce, altro */
+  course?: string | null;
 };
 
 export type RecipeStatus = "saved" | "planned" | "cooked";

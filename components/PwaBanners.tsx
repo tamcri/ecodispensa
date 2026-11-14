@@ -171,7 +171,7 @@ export const PwaBanners = () => {
       style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
     >
       {updateReady && (
-        <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-gray-900 text-white px-4 py-3 shadow-lg">
+        <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-forest text-white px-4 py-3 shadow-lg">
           <RefreshCw size={18} className="shrink-0 text-emerald-400" />
           <p className="flex-1 text-sm">È disponibile una nuova versione.</p>
           <button
@@ -188,8 +188,8 @@ export const PwaBanners = () => {
         <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-lg">
           <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-900">Installa EcoDispensa</p>
-            <p className="text-xs text-gray-500">Aprila dalla schermata Home come un'app.</p>
+            <p className="text-sm font-semibold text-ink">Installa EcoDispensa</p>
+            <p className="text-xs text-muted">Aprila dalla schermata Home come un'app.</p>
           </div>
           <button
             type="button"
@@ -202,7 +202,7 @@ export const PwaBanners = () => {
           <button
             type="button"
             onClick={dismissInstall}
-            className="p-1 text-gray-400 hover:text-gray-600"
+            className="p-1 text-muted hover:text-muted"
             aria-label="Chiudi"
           >
             <X size={18} />
@@ -214,14 +214,14 @@ export const PwaBanners = () => {
         <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-lg">
           <div className="flex items-start gap-3">
             <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
-            <div className="flex-1 text-sm text-gray-700">
-              <p className="font-semibold text-gray-900">Installa EcoDispensa</p>
+            <div className="flex-1 text-sm text-ink">
+              <p className="font-semibold text-ink">Installa EcoDispensa</p>
               <p className="mt-1">
                 Apri il menu del browser (i tre puntini ⋮ in alto a destra) e scegli <b>Installa app</b> oppure{" "}
                 <b>Aggiungi a schermata Home</b>. Se non compare, apri l'app da Chrome all'indirizzo ecodispensa.vercel.app.
               </p>
             </div>
-            <button type="button" onClick={dismissInstall} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Chiudi">
+            <button type="button" onClick={dismissInstall} className="p-1 text-muted hover:text-muted" aria-label="Chiudi">
               <X size={18} />
             </button>
           </div>
@@ -232,8 +232,8 @@ export const PwaBanners = () => {
         <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-lg">
           <div className="flex items-start gap-3">
             <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
-            <div className="flex-1 text-sm text-gray-700">
-              <p className="font-semibold text-gray-900">Installa EcoDispensa sull'iPhone</p>
+            <div className="flex-1 text-sm text-ink">
+              <p className="font-semibold text-ink">Installa EcoDispensa sull'iPhone</p>
               <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                 <li>
                   Tocca <Share size={15} className="inline align-[-2px] text-blue-500" /> <b>Condividi</b> (in Safari è in basso, in Chrome
@@ -248,7 +248,7 @@ export const PwaBanners = () => {
             <button
               type="button"
               onClick={dismissInstall}
-              className="p-1 text-gray-400 hover:text-gray-600"
+              className="p-1 text-muted hover:text-muted"
               aria-label="Chiudi"
             >
               <X size={18} />

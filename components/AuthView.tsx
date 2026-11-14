@@ -130,7 +130,7 @@ export default function AuthView() {
             <h2 className="font-display text-[29px] font-extrabold leading-[1.06] tracking-tight text-ink [@media(max-height:700px)]:text-[25px]">
               Compra meglio, cucina tutto, <span className="text-[#4F6B4A]">non sprecare niente.</span>
             </h2>
-            <p className="text-[15px] leading-relaxed text-[#3D4840]">
+            <p className="text-[15px] leading-relaxed text-[#3D4A3B]">
               Organizza la dispensa, ricevi avvisi sulle scadenze e trova ricette su misura.
             </p>
           </div>
@@ -150,7 +150,7 @@ export default function AuthView() {
             >
               Ho già un account
             </button>
-            <p className="text-center text-xs text-[#3D4840]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+            <p className="text-center text-xs text-[#3D4A3B]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
           </div>
         </div>
       </div>
@@ -244,7 +244,7 @@ export default function AuthView() {
             </div>
           </div>
 
-          {msg && <div className="rounded-2xl bg-peach p-3 text-sm font-semibold text-[#8A3B0C]">{msg}</div>}
+          {msg && <div className="rounded-2xl bg-peach p-3 text-sm font-semibold text-[#8E3418]">{msg}</div>}
 
           <button
             type="submit"
@@ -305,14 +305,14 @@ export default function AuthView() {
               />
             </div>
             {resetMsg && (
-              <div className={`rounded-2xl p-3 text-sm font-semibold ${resetMsg.ok ? "bg-mint text-emerald-800" : "bg-peach text-[#8A3B0C]"}`}>
+              <div className={`rounded-2xl p-3 text-sm font-semibold ${resetMsg.ok ? "bg-mint text-emerald-800" : "bg-peach text-[#8E3418]"}`}>
                 {resetMsg.text}
               </div>
             )}
             <button
               type="submit"
               disabled={!canReset || resetLoading}
-              className="h-12 w-full rounded-2xl bg-ink text-[15px] font-bold text-white disabled:opacity-50"
+              className="h-12 w-full rounded-2xl bg-forest text-[15px] font-bold text-white disabled:opacity-50"
             >
               {resetLoading ? "Attendi…" : "Cambia password ed entra"}
             </button>

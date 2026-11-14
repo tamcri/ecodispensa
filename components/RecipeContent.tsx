@@ -24,7 +24,7 @@ export const RecipeContent = ({
       )}
     </div>
 
-    {recipe.description && <p className="text-[15px] leading-relaxed text-[#3D4840]">{recipe.description}</p>}
+    {recipe.description && <p className="text-[15px] leading-relaxed text-[#3D4A3B]">{recipe.description}</p>}
 
     <div className="flex flex-col gap-4">
       <div>
@@ -33,7 +33,7 @@ export const RecipeContent = ({
         </h4>
         <div className="flex flex-wrap gap-2">
           {(recipe.ingredientsUsed ?? []).map((ing, i) => (
-            <span key={`${ing.name}-${i}`} className="rounded-xl bg-mint px-3 py-1.5 text-sm text-[#155A34]">
+            <span key={`${ing.name}-${i}`} className="rounded-xl bg-mint px-3 py-1.5 text-sm text-[#2F4A2C]">
               {(ing.quantity || ing.unit) && (
                 <span className="font-bold">
                   {ing.quantity} {ing.unit}{" "}
@@ -49,12 +49,12 @@ export const RecipeContent = ({
       </div>
 
       <div>
-        <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#C2410C]">
+        <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#8E3418]">
           <ShoppingCart size={14} /> Da comprare
         </h4>
         <div className="flex flex-wrap gap-2">
           {(recipe.missingIngredients ?? []).map((ing: any, i) => (
-            <span key={`${String(ing)}-${i}`} className="rounded-xl bg-peach px-3 py-1.5 text-sm text-[#8A3B0C]">
+            <span key={`${String(ing)}-${i}`} className="rounded-xl bg-peach px-3 py-1.5 text-sm text-[#8E3418]">
               {typeof ing === "string" ? ing : ing?.name ?? String(ing)}
             </span>
           ))}
@@ -75,7 +75,7 @@ export const RecipeContent = ({
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lemon font-display text-sm font-extrabold text-ink">
                 {idx + 1}
               </span>
-              <p className="text-[15px] leading-relaxed text-[#3D4840]">{step}</p>
+              <p className="text-[15px] leading-relaxed text-[#3D4A3B]">{step}</p>
             </li>
           ))}
         </ol>

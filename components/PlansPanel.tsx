@@ -75,7 +75,7 @@ export const PlansPanel = ({
   const buyLabel = (code: string, label: string) =>
     busy === code ? <Loader2 size={16} className="animate-spin" /> : checkoutEnabled ? label : "Disponibile a breve";
 
-  if (loading) return <p className="text-sm text-gray-500">Caricamento piani…</p>;
+  if (loading) return <p className="text-sm text-muted">Caricamento piani…</p>;
 
   // risparmio reale dell'annuale rispetto a 12 mensilità
   const savingPct =
@@ -90,7 +90,7 @@ export const PlansPanel = ({
       )}
 
       {checkoutEnabled && (
-        <label className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-700">
+        <label className="flex items-start gap-2 rounded-xl bg-white p-3 text-xs text-ink">
           <input
             type="checkbox"
             checked={waiver}
@@ -109,20 +109,20 @@ export const PlansPanel = ({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">Il più conveniente</p>
-              <p className="mt-0.5 text-lg font-extrabold text-gray-900">Mensile</p>
-              <p className="text-sm text-gray-600">
+              <p className="mt-0.5 text-lg font-extrabold text-ink">Mensile</p>
+              <p className="text-sm text-muted">
                 {euro(monthly.price_cents)} al mese · {monthly.credits_amount} crediti ogni mese
               </p>
             </div>
-            <p className="text-right text-xs text-gray-500">≈ {euro(Math.round(monthly.price_cents / monthly.credits_amount))} a credito</p>
+            <p className="text-right text-xs text-muted">≈ {euro(Math.round(monthly.price_cents / monthly.credits_amount))} a credito</p>
           </div>
-          <p className="mt-2 text-xs text-gray-500">Per esempio 4 menu settimanali e 36 richieste di ricette.</p>
+          <p className="mt-2 text-xs text-muted">Per esempio 4 menu settimanali e 36 richieste di ricette.</p>
           {isCurrentMonthly ? (
             <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
               È il tuo piano attuale. {currentStatus}
             </p>
           ) : isCurrentYearly ? (
-            <p className="mt-3 rounded-xl bg-gray-50 p-3 text-sm text-gray-700">
+            <p className="mt-3 rounded-xl bg-white p-3 text-sm text-ink">
               Hai l’Annuale. Per passare al Mensile: disdici l’Annuale e, alla scadenza del {untilText}, scegli il Mensile.
             </p>
           ) : (
@@ -135,7 +135,7 @@ export const PlansPanel = ({
               >
                 {buyLabel(monthly.code, `Abbonati a ${euro(monthly.price_cents)}/mese`)}
               </button>
-              <p className="mt-2 text-center text-xs text-gray-600">
+              <p className="mt-2 text-center text-xs text-muted">
                 <b>Si rinnova in automatico ogni mese</b> ({euro(monthly.price_cents)}) · disdici quando vuoi dal Profilo
               </p>
             </>
@@ -144,11 +144,11 @@ export const PlansPanel = ({
       )}
 
       {yearly && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <div className="rounded-2xl border border-black/10 bg-white p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-lg font-extrabold text-gray-900">Annuale</p>
-              <p className="text-sm text-gray-600">
+              <p className="text-lg font-extrabold text-ink">Annuale</p>
+              <p className="text-sm text-muted">
                 {euro(yearly.price_cents)} all’anno · circa {euro(Math.round(yearly.price_cents / 12))} al mese
               </p>
             </div>
@@ -156,7 +156,7 @@ export const PlansPanel = ({
               <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Risparmi il {savingPct}%</span>
             )}
           </div>
-          <p className="mt-2 text-xs text-gray-500">{yearly.credits_amount} crediti ogni mese per 12 mesi, con un unico pagamento all’anno.</p>
+          <p className="mt-2 text-xs text-muted">{yearly.credits_amount} crediti ogni mese per 12 mesi, con un unico pagamento all’anno.</p>
           {isCurrentYearly ? (
             <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
               È il tuo piano attuale. {currentStatus}
@@ -167,13 +167,13 @@ export const PlansPanel = ({
                 type="button"
                 disabled={!checkoutEnabled || !onSwitchToYearly || !!busy}
                 onClick={() => setConfirmSwitch(true)}
-                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-forest text-sm font-bold text-white disabled:opacity-50"
               >
                 {checkoutEnabled ? "Passa all’Annuale" : "Disponibile a breve"}
               </button>
             ) : (
-              <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-                <p className="font-bold text-gray-900">Passare all’Annuale?</p>
+              <div className="mt-3 rounded-xl border border-black/10 bg-white p-3 text-sm text-ink">
+                <p className="font-bold text-ink">Passare all’Annuale?</p>
                 <p className="mt-1">
                   Paghi subito {euro(yearly.price_cents)} <b>meno i giorni del mese in corso che non hai ancora usato</b>: la
                   differenza la calcola Stripe sulla carta che hai già usato. L’anno parte da oggi, i crediti del mese restano e il
@@ -184,7 +184,7 @@ export const PlansPanel = ({
                   <button
                     type="button"
                     onClick={() => setConfirmSwitch(false)}
-                    className="h-10 rounded-xl bg-white font-bold text-gray-700 ring-1 ring-gray-200"
+                    className="h-10 rounded-xl bg-white font-bold text-ink ring-1 ring-black/10"
                   >
                     Annulla
                   </button>
@@ -201,7 +201,7 @@ export const PlansPanel = ({
                         setBusy(null);
                       }
                     }}
-                    className="flex h-10 items-center justify-center rounded-xl bg-gray-900 font-bold text-white disabled:opacity-50"
+                    className="flex h-10 items-center justify-center rounded-xl bg-forest font-bold text-white disabled:opacity-50"
                   >
                     {busy === "switch" ? <Loader2 size={16} className="animate-spin" /> : "Sì, passa"}
                   </button>
@@ -214,11 +214,11 @@ export const PlansPanel = ({
                 type="button"
                 disabled={!checkoutEnabled || !waiver || !!busy}
                 onClick={() => buy(yearly.code)}
-                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-bold text-white disabled:opacity-50"
+                className="mt-3 flex h-11 w-full items-center justify-center rounded-xl bg-forest text-sm font-bold text-white disabled:opacity-50"
               >
                 {buyLabel(yearly.code, `Abbonati a ${euro(yearly.price_cents)}/anno`)}
               </button>
-              <p className="mt-2 text-center text-xs text-gray-600">
+              <p className="mt-2 text-center text-xs text-muted">
                 <b>Si rinnova in automatico ogni anno</b> ({euro(yearly.price_cents)}) · disdici quando vuoi dal Profilo
               </p>
             </>
@@ -227,9 +227,9 @@ export const PlansPanel = ({
       )}
 
       {topup && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
-          <p className="text-lg font-extrabold text-gray-900">Ricarica crediti</p>
-          <p className="text-sm text-gray-600">
+        <div className="rounded-2xl border border-black/10 bg-white p-4">
+          <p className="text-lg font-extrabold text-ink">Ricarica crediti</p>
+          <p className="text-sm text-muted">
             Scegli quanti crediti: {euro(topup.price_cents)} l’uno, non scadono.
           </p>
           <div className="mt-3 flex items-center justify-between gap-3">
@@ -238,13 +238,13 @@ export const PlansPanel = ({
               aria-label="Meno crediti"
               onClick={() => setQty(clamp(qtySafe - step))}
               disabled={qtySafe <= min}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-800 disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone text-ink disabled:opacity-40"
             >
               <Minus size={18} />
             </button>
             <div className="text-center">
-              <p className="text-2xl font-extrabold text-gray-900">{qtySafe} crediti</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-2xl font-extrabold text-ink">{qtySafe} crediti</p>
+              <p className="text-xs text-muted">
                 {menus > 0 ? `bastano per ${menus} menu settimanal${menus === 1 ? "e" : "i"}` : `${qtySafe * 4} richieste di ricette`}
               </p>
             </div>
@@ -253,7 +253,7 @@ export const PlansPanel = ({
               aria-label="Più crediti"
               onClick={() => setQty(clamp(qtySafe + step))}
               disabled={qtySafe >= max}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-800 disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone text-ink disabled:opacity-40"
             >
               <Plus size={18} />
             </button>
@@ -271,7 +271,7 @@ export const PlansPanel = ({
           >
             {buyLabel(topup.code, `Carica ${qtySafe} crediti · ${euro(topupCents)}`)}
           </button>
-          <p className="mt-2 text-center text-xs text-gray-600">Pagamento unico, nessun rinnovo.</p>
+          <p className="mt-2 text-center text-xs text-muted">Pagamento unico, nessun rinnovo.</p>
         </div>
       )}
     </div>
