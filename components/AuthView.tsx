@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Bell, ChevronLeft, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { resetPasswordWithCode } from "../services/account";
 
@@ -108,72 +108,64 @@ export default function AuthView() {
   const shell =
     "mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]";
 
-  const brand = (
-    <div className="flex items-center gap-2.5">
-      <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
-      <span className="font-display text-xl font-extrabold tracking-tight text-ink">EcoDispensa</span>
-    </div>
-  );
-
-  // ---------- Benvenuto: cosa fa l'app, poi due pulsanti ----------
+  // ---------- Benvenuto: foto a tutto schermo, testo e due pulsanti in basso ----------
   if (step === "welcome") {
     return (
-      <div className={`${shell} bg-[#F7EBD3]`}>
-        {brand}
+      <div className="relative mx-auto min-h-screen max-w-md overflow-hidden bg-[#F7EBD3]">
+        <img
+          src="/brand/benvenuto-sfondo.jpg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover object-top"
+        />
+        {/* sfumatura crema in basso: il testo resta leggibile su qualsiasi telefono */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-[58%] bg-gradient-to-t from-[#F7EBD3] via-[#F7EBD3]/90 to-transparent"
+        />
 
-        <div className="relative">
-          <img
-            src="/brand/benvenuto.jpg"
-            alt="Un barattolo di pasta con una fascia verde e un cuore: il cibo di casa, conservato con cura"
-            className="aspect-square max-h-[42vh] w-full rounded-4xl object-cover"
-          />
-          <div
-            className="absolute bottom-3 left-3 flex items-center gap-2.5 rounded-2xl bg-white/95 px-3 py-2 text-ink shadow-[0_8px_20px_rgba(23,32,26,0.12)]"
-            aria-hidden="true"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-peach text-[#9A3412]">
-              <Bell size={16} />
-            </span>
-            <span className="text-[13px] leading-tight">
-              <span className="block font-bold">Il latte scade domani</span>
-              <span className="text-muted">Idea: una frittata morbida</span>
-            </span>
+        <div className="relative flex min-h-screen flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+          <div className="flex items-center gap-2.5 self-start rounded-2xl bg-[#F7EBD3]/85 py-1.5 pl-1.5 pr-3.5 backdrop-blur-sm">
+            <img src="/icons/icon-192.png" alt="" className="h-9 w-9 rounded-xl" />
+            <span className="font-display text-lg font-extrabold tracking-tight text-ink">EcoDispensa</span>
           </div>
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <h1 className="font-display text-[32px] font-extrabold leading-[1.04] tracking-tight text-ink">
-            Il cibo che compri, finalmente tutto usato.
-          </h1>
-          <p className="text-[15px] leading-relaxed text-[#4A524C]">
-            Ti avviso prima che scada, ti propongo cosa cucinarci e al supermercato ti dico se ce l'hai già.
-          </p>
-        </div>
+          <div className="mt-auto flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <h1 className="font-display text-[32px] font-extrabold leading-[1.04] tracking-tight text-ink">
+                Il cibo che compri, finalmente tutto usato.
+              </h1>
+              <p className="text-[15px] leading-relaxed text-[#3D4840]">
+                Ti avviso prima che scada, ti propongo cosa cucinarci e al supermercato ti dico se ce l'hai già.
+              </p>
+            </div>
 
-        <div className="flex flex-wrap gap-2">
-          {benefits.map((b) => (
-            <span key={b} className="rounded-full bg-white/80 px-3 py-1.5 text-[13px] font-bold text-ink">
-              {b}
-            </span>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-2">
+              {benefits.map((b) => (
+                <span key={b} className="rounded-full bg-white/85 px-3 py-1.5 text-[13px] font-bold text-ink">
+                  {b}
+                </span>
+              ))}
+            </div>
 
-        <div className="mt-auto flex flex-col gap-2.5 pt-2">
-          <button
-            type="button"
-            onClick={() => openForm("signup")}
-            className="h-[54px] w-full rounded-2xl bg-[#4F6B4A] text-[16px] font-bold text-white active:scale-[0.99]"
-          >
-            Inizia gratis
-          </button>
-          <button
-            type="button"
-            onClick={() => openForm("login")}
-            className="h-[54px] w-full rounded-2xl bg-white text-[16px] font-bold text-ink ring-1 ring-black/10 active:scale-[0.99]"
-          >
-            Ho già un account
-          </button>
-          <p className="text-center text-xs text-[#4A524C]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => openForm("signup")}
+                className="h-[54px] w-full rounded-2xl bg-[#4F6B4A] text-[16px] font-bold text-white shadow-[0_8px_20px_rgba(79,107,74,0.3)] active:scale-[0.99]"
+              >
+                Inizia gratis
+              </button>
+              <button
+                type="button"
+                onClick={() => openForm("login")}
+                className="h-[54px] w-full rounded-2xl bg-white text-[16px] font-bold text-ink ring-1 ring-black/10 active:scale-[0.99]"
+              >
+                Ho già un account
+              </button>
+              <p className="text-center text-xs text-[#3D4840]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+            </div>
+          </div>
         </div>
       </div>
     );
