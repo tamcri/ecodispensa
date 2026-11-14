@@ -23,7 +23,7 @@ import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { PrivacySection } from "./PrivacySection";
 import { PlansPanel, type PlanProduct } from "./PlansPanel";
 import { CodesCard } from "./CodesCard";
-import { AdminCodesPanel } from "./AdminCodesPanel";
+import { AdminDashboard } from "./AdminDashboard";
 import { isAdmin } from "../services/codes";
 import { displayNameFromEmail } from "../services/household";
 
@@ -624,7 +624,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end justify-center animate-fade-in">
-      {adminOpen && <AdminCodesPanel onClose={() => setAdminOpen(false)} />}
+      {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
       <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] max-h-[92dvh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
         <div className="sticky top-0 bg-ground px-5 pt-5 pb-3 flex justify-between items-center z-10 rounded-t-4xl">
           <div className="min-w-0 flex items-center gap-2">
@@ -1004,7 +1004,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                   onClick={() => setAdminOpen(true)}
                   className="flex h-[52px] w-full items-center justify-between rounded-2xl bg-forest px-4 text-sm font-bold text-white"
                 >
-                  <span>Area riservata · Codici</span>
+                  <span>Area riservata · Dashboard</span>
                   <ChevronRight size={18} />
                 </button>
               )}
