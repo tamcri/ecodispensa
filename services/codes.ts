@@ -254,3 +254,41 @@ export async function fetchAdminUsers(search: string): Promise<AdminUser[]> {
   }
   return (data ?? []) as AdminUser[];
 }
+
+export type AdminSubs = {
+  active: { monthly: number; yearly: number; gift: number; cancelling: number; paying: number };
+  prices: { monthly: number; yearly: number };
+  monthly_recurring: number;
+  yearly_recurring: number;
+  sold: Record<"monthly" | "yearly" | "switches" | "topups", { count: number; amount: number }>;
+  list: Array<{
+    username: string;
+    plan: "mensile" | "annuale" | "codice";
+    until: string;
+    cancelling: boolean;
+    since: string | null;
+    paid: number;
+    code: string | null;
+  }>;
+};
+
+export async function fetchAdminSubscriptions(): Promise<AdminSubs | null> {
+  const { data, error } = await supabase.rpc("admin_subscriptions");
+  if (error) {
+    console.error("admin_subscriptions error:", error);
+    return null;
+  }
+  return data as AdminSubs;
+}
+
+/** Regala crediti a un utente (assistenza, promozioni): restano nel registro crediti */
+export async function giftCredits(username: string, amount: number): Promise<{ credits?: number; error?: string }> {
+  const { data, error } = await supabase.rpc("admin_gift_credits", { p_username: username, p_amount: amount });
+  if (error) {
+    const m = String(error.message ?? "");
+    if (m.includes("BAD_AMOUNT")) return { error: "Da 1 a 200 crediti alla volta." };
+    if (m.includes("USER_NOT_FOUND")) return { error: "Utente non trovato." };
+    return { error: "Operazione non riuscita." };
+  }
+  return { credits: (data as any)?.credits };
+}
