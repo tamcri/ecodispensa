@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { resetPasswordWithCode } from "../services/account";
+import { codeFromUrl, savePendingCode } from "../services/codes";
 
 type Mode = "login" | "signup";
 
@@ -13,8 +14,11 @@ function toFakeEmail(username: string) {
 }
 
 export default function AuthView() {
-  const [step, setStep] = useState<"welcome" | "form">("welcome");
-  const [mode, setMode] = useState<Mode>("login");
+  // arrivati con un link di invito (?codice=...): si apre subito la registrazione con il codice scritto
+  const [urlCode] = useState(() => codeFromUrl());
+  const [step, setStep] = useState<"welcome" | "form">(urlCode ? "form" : "welcome");
+  const [mode, setMode] = useState<Mode>(urlCode ? "signup" : "login");
+  const [promoCode, setPromoCode] = useState(urlCode ?? "");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,7 +57,13 @@ export default function AuthView() {
           return;
         }
 
-        setMsg("Registrazione completata. Ora puoi accedere.");
+        // il codice si usa al primo accesso, quando l'account esiste davvero
+        if (promoCode.trim()) savePendingCode(promoCode, username);
+        setMsg(
+          promoCode.trim()
+            ? "Registrazione completata. Ora accedi: il tuo codice regalo si attiva subito."
+            : "Registrazione completata. Ora puoi accedere."
+        );
         setMode("login");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -243,6 +253,24 @@ export default function AuthView() {
               </button>
             </div>
           </div>
+
+          {mode === "signup" && (
+            <div>
+              <label htmlFor="auth-code" className="text-xs font-bold text-muted">
+                Hai un codice? <span className="font-semibold">(facoltativo)</span>
+              </label>
+              <input
+                id="auth-code"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                className={`${inputClass} font-mono tracking-wider`}
+                placeholder="Codice di un amico, creator o Comune"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           {msg && <div className="rounded-2xl bg-peach p-3 text-sm font-semibold text-[#8E3418]">{msg}</div>}
 

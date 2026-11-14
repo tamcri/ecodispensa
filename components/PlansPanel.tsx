@@ -28,6 +28,7 @@ export const PlansPanel = ({
   cancelAtPeriodEnd = false,
   activeUntilLabel = null,
   onSwitchToYearly,
+  isGift = false,
 }: {
   products: PlanProduct[];
   loading: boolean;
@@ -38,12 +39,16 @@ export const PlansPanel = ({
   cancelAtPeriodEnd?: boolean;
   activeUntilLabel?: string | null;
   onSwitchToYearly?: () => Promise<void>;
+  /** Abbonamento attivato con un codice: nessun rinnovo, niente da disdire */
+  isGift?: boolean;
 }) => {
   const [confirmSwitch, setConfirmSwitch] = useState(false);
   const isCurrentYearly = isSubscribed && currentPlanCode === "premium_yearly";
   const isCurrentMonthly = isSubscribed && !isCurrentYearly;
   const untilText = activeUntilLabel ?? "la fine del periodo pagato";
-  const currentStatus = cancelAtPeriodEnd
+  const currentStatus = isGift
+    ? `Attivato con un codice: valido fino al ${untilText}, senza rinnovo automatico.`
+    : cancelAtPeriodEnd
     ? `Disdetto: resta attivo fino al ${untilText}. Per continuare premi «Riattiva il rinnovo» nel tuo piano qui sopra.`
     : `Rinnovo automatico il ${untilText}.`;
   const monthly = products.find((p) => p.code === "premium_monthly");

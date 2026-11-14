@@ -12,6 +12,7 @@ import { HomeView } from "./components/HomeView";
 import { acceptSharedRecipe, fetchCredits } from "./services/api";
 import { SharedRecipeView } from "./components/SharedRecipeView";
 import { ProfileButtonContext } from "./components/ui";
+import { redeemCode, redeemMessage, takePendingCode } from "./services/codes";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
 import { dateInDays, nameMatchScore } from "./foodGuide";
@@ -151,6 +152,22 @@ const App = () => {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [session]);
+
+  // Codice inserito alla registrazione: lo uso al primo accesso e mostro com'è andata
+  const [codeNotice, setCodeNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    const code = takePendingCode(displayNameFromEmail(session.user?.email));
+    if (!code) return;
+    redeemCode(code).then((r) => {
+      setCodeNotice({ ok: r.ok, text: redeemMessage(r) });
+      fetchCredits().then((c) => {
+        if (c !== null) setCredits(c);
+      });
+    });
+    // il link di invito non serve più nella barra degli indirizzi
+    if (window.location.search.includes("codice=")) window.history.replaceState(null, "", window.location.pathname);
   }, [session]);
 
   // Crediti EcoChef mostrati nella schermata Oggi
@@ -728,6 +745,19 @@ const App = () => {
   return (
     <ProfileButtonContext.Provider value={{ initial: userInitial, open: () => setProfileOpen(true) }}>
     <div className="relative mx-auto flex min-h-screen max-w-md flex-col bg-ground">
+      {codeNotice && (
+        <div
+          role="status"
+          className={`fixed inset-x-0 top-0 z-[55] mx-auto flex max-w-md items-start gap-3 px-5 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-[0_8px_20px_rgba(31,42,30,0.12)] ${
+            codeNotice.ok ? "bg-mint text-forest" : "bg-peach text-[#8E3418]"
+          }`}
+        >
+          <p className="flex-1 pt-2 text-sm font-semibold leading-snug">{codeNotice.text}</p>
+          <button type="button" onClick={() => setCodeNotice(null)} className="h-9 shrink-0 rounded-xl bg-white/70 px-3 text-xs font-bold">
+            Ok
+          </button>
+        </div>
+      )}
       <main className="flex-1 px-5 pb-40 pt-[max(3.25rem,calc(env(safe-area-inset-top)+1.25rem))]">
         {view === "home" && (
           <HomeView
