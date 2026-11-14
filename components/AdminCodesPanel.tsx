@@ -29,7 +29,7 @@ function downloadCsv(name: string, codes: Array<{ code: string; used?: boolean }
 }
 
 /** Area riservata: crea codici per Comuni, aziende e creator e controlla quanti sono stati usati */
-export const AdminCodesPanel = ({ onClose }: { onClose: () => void }) => {
+export const AdminCodesPanel = ({ onClose, embedded = false }: { onClose?: () => void; embedded?: boolean }) => {
   const [data, setData] = useState<CodesOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -111,18 +111,22 @@ export const AdminCodesPanel = ({ onClose }: { onClose: () => void }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-ground">
-      <div className="mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={onClose} className="flex h-11 items-center gap-1 pr-3 text-sm font-bold text-ink">
-            <ChevronLeft size={20} /> Profilo
-          </button>
-          <span className="rounded-full bg-forest px-3 py-1 text-xs font-bold text-white">Area riservata</span>
-        </div>
-        <div>
-          <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight text-ink">Codici</h1>
-          <p className="text-[13px] text-muted">Visibile solo a te. Crea i codici per accordi e creator e guarda quanti li usano.</p>
-        </div>
+    <div className={embedded ? "" : "fixed inset-0 z-[60] overflow-y-auto bg-ground"}>
+      <div className={embedded ? "flex flex-col gap-4" : "mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]"}>
+        {!embedded && (
+          <>
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={onClose} className="flex h-11 items-center gap-1 pr-3 text-sm font-bold text-ink">
+                <ChevronLeft size={20} /> Profilo
+              </button>
+              <span className="rounded-full bg-forest px-3 py-1 text-xs font-bold text-white">Area riservata</span>
+            </div>
+            <div>
+              <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight text-ink">Codici</h1>
+              <p className="text-[13px] text-muted">Visibile solo a te. Crea i codici per accordi e creator e guarda quanti li usano.</p>
+            </div>
+          </>
+        )}
 
         {/* ---------- Comuni e aziende ---------- */}
         <section className="flex flex-col gap-3 rounded-[24px] bg-white p-4">

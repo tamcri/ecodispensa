@@ -210,3 +210,47 @@ export async function setBatchActive(batchId: string, active: boolean) {
   const { error } = await supabase.rpc("admin_set_batch_active", { p_batch_id: batchId, p_active: active });
   return error ? adminError(error) : null;
 }
+
+// ---------- Dashboard dell'amministratore ----------
+export type AdminDashboard = {
+  users: { total: number; new_7d: number; new_30d: number; active_7d: number; active_30d: number; by_day: Array<{ day: string; n: number }> };
+  plans: { monthly: number; yearly: number; gift: number; cancelling: number };
+  revenue: { total: number; last_30d: number; this_month: number; payments_30d: number; topups_30d: number };
+  usage: { recipes_30d: number; menus_30d: number; credits_30d: number; saved_recipes: number; cooked_recipes: number; recipe_photos: number };
+  waste: { pantry_items: number; used_30d: number; wasted_30d: number; top_wasted: Array<{ name: string; n: number }> };
+  households: { total: number; shared: number };
+  push: number;
+};
+
+export type AdminUser = {
+  username: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  plan: "gratis" | "mensile" | "annuale" | "codice";
+  cancelling: boolean;
+  premium_until: string | null;
+  credits: number;
+  pantry: number;
+  recipes: number;
+  spent: number;
+  code: string | null;
+  admin: boolean;
+};
+
+export async function fetchAdminDashboard(): Promise<AdminDashboard | null> {
+  const { data, error } = await supabase.rpc("admin_dashboard");
+  if (error) {
+    console.error("admin_dashboard error:", error);
+    return null;
+  }
+  return data as AdminDashboard;
+}
+
+export async function fetchAdminUsers(search: string): Promise<AdminUser[]> {
+  const { data, error } = await supabase.rpc("admin_users", { p_search: search || null, p_limit: 200 });
+  if (error) {
+    console.error("admin_users error:", error);
+    return [];
+  }
+  return (data ?? []) as AdminUser[];
+}
