@@ -199,8 +199,8 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         quantity: item.quantity != null ? item.quantity : 1,
         unit: item.unit && ['pz', 'kg', 'g', 'l'].includes(item.unit) ? item.unit : 'pz',
         // le confezioni scansionate hanno la data stampata: niente stima
-        expiryDate: item.barcode ? '' : suggestedExpiry(item.name) ?? '',
-        estimated: !item.barcode && !!suggestedExpiry(item.name),
+        expiryDate: item.barcode ? '' : suggestedExpiry(item.name, item.category) ?? '',
+        estimated: !item.barcode && !!suggestedExpiry(item.name, item.category),
         barcode: item.barcode ?? null,
       }))
     );

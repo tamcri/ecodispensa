@@ -17,6 +17,8 @@ export interface PantryItem {
   category: Category;
   addedAt: number;
   barcode?: string | null;
+  /** Lunga conservazione: nessuna scadenza da inserire (sale, olio, spezie…) */
+  longLife?: boolean;
 }
 
 export interface ShoppingItem {

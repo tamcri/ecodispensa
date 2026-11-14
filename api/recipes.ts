@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { reconcileWithPantry } from "./_lib/ingredients.js";
 
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
@@ -133,6 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalTime = Number.isFinite(timeMinutes) && timeMinutes > 0 ? timeMinutes : Number(profile?.max_time_minutes_default ?? 30);
 
     let pantryText = "";
+    // Nomi dei prodotti davvero in dispensa (non scaduti): servono a correggere l'AI dopo la risposta
+    let availablePantryNames: string[] | null = null;
     let expiredPantryText = "";
     let expiringSoonPantryText = "";
 
@@ -198,6 +201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   pantryText = availableItems.map(formatItem).join("\n");
+  availablePantryNames = availableItems.map((it) => it.name);
   expiredPantryText = expiredItems.map(formatItem).join("\n");
   expiringSoonPantryText = expiringSoonItems.map(formatItem).join("\n");
 } else if (inventoryList) {
@@ -467,8 +471,14 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
         const end = cleaned.lastIndexOf("]");
         if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
 
-        const recipes = JSON.parse(cleaned);
+        let recipes = JSON.parse(cleaned);
         if (!Array.isArray(recipes) || recipes.length === 0) throw new Error("NO_RECIPES");
+        // Quello che l'AI dice di "usare dalla dispensa" deve esserci davvero:
+        // il resto va tra gli ingredienti da comprare (così compare il pulsante per la spesa)
+        if (availablePantryNames) {
+          const names = availablePantryNames;
+          recipes = recipes.map((rec: any) => reconcileWithPantry(rec, names).recipe);
+        }
         return {
           recipes,
           remainingCredits: typeof remainingAfterConsume === "number" ? remainingAfterConsume : null,

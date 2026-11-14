@@ -30,6 +30,10 @@ const P = Category.PANTRY;
 
 // L'ordine conta: le voci più specifiche vanno prima di quelle generiche.
 export const FOOD_GUIDE: FoodGuideEntry[] = [
+  // --- Gastronomia e freschi pronti (prima: "gnocchi di patate" non è una patata) ---
+  { keys: ['pasta fresca', 'tortellin', 'ravioli', 'gnocchi', 'lasagn'], category: P, days: 3, where: 'frigo', fresh: false, tip: 'Se non la cucini entro la data, congelala cruda: si cuoce direttamente da congelata.' },
+  { keys: ['insalata di riso', 'gastronomi', 'piatto pronto', 'piatti pronti'], category: Category.OTHER, days: 2, where: 'frigo', fresh: true, tip: 'I piatti pronti del banco vanno consumati entro 1-2 giorni.' },
+
   // --- Frutta ---
   { keys: ['fragol', 'lampon', 'mirtill', 'more ', 'frutti di bosco', 'ribes'], category: F, days: 3, where: 'frigo', fresh: true, tip: "Non lavarli finché non li mangi: l'umidità li fa ammuffire in fretta." },
   { keys: ['banan'], category: F, days: 5, where: 'dispensa', fresh: true, tip: "Tienile lontane dall'altra frutta: rilasciano etilene e fanno maturare tutto prima." },
@@ -42,6 +46,10 @@ export const FOOD_GUIDE: FoodGuideEntry[] = [
   { keys: ['ananas', 'mango', 'papaya'], category: F, days: 4, where: 'dispensa', fresh: true, tip: 'Una volta tagliato, in un contenitore chiuso in frigo e da finire in 2-3 giorni.' },
   { keys: ['melon', 'angur', 'cocomer'], category: F, days: 5, where: 'frigo', fresh: true, tip: 'Tagliato, copri la polpa con la pellicola e consumalo entro 3 giorni.' },
   { keys: ['avocad'], category: F, days: 4, where: 'dispensa', fresh: true, tip: "Mezzo avocado avanzato: lascia il nocciolo e spruzza un po' di limone sulla polpa." },
+  { keys: ['fich'], category: F, days: 2, where: 'frigo', fresh: true, tip: 'Delicatissimi: in frigo su un piatto, senza sovrapporli, e da mangiare in un paio di giorni.' },
+  { keys: ['melagran', 'melograno'], category: F, days: 30, where: 'frigo', fresh: true, tip: 'Intera dura settimane; i chicchi sgranati si conservano in frigo 5 giorni o si congelano.' },
+  { keys: ['cach', 'kaki'], category: F, days: 5, where: 'dispensa', fresh: true, tip: 'Falli maturare fuori frigo; quando sono morbidi, in frigo e da mangiare in pochi giorni.' },
+  { keys: ['castagn', 'marron'], category: F, days: 7, where: 'frigo', fresh: true, tip: 'In un sacchetto di carta in frigo; se non le usi presto, incidile e congelale.' },
   { keys: ['pomodor', 'pachin', 'datterin', 'ciliegin'], category: F, days: 5, where: 'dispensa', fresh: true, tip: 'Fuori dal frigo restano più saporiti; mettili in frigo solo se sono già molto maturi.' },
 
   // --- Verdura ---
@@ -57,6 +65,11 @@ export const FOOD_GUIDE: FoodGuideEntry[] = [
   { keys: ['finocch', 'porr'], category: F, days: 7, where: 'frigo', fresh: true, tip: 'Nel cassetto del frigo, avvolti in un panno umido.' },
   { keys: ['sedan'], category: F, days: 10, where: 'frigo', fresh: true, tip: 'Avvolto nella carta stagnola resta croccante per settimane.' },
   { keys: ['carot'], category: F, days: 21, where: 'frigo', fresh: true, tip: "Togli il ciuffo verde: sottrae umidità alla carota e la fa ammorbidire." },
+  { keys: ['ravanell', 'rape ', 'rapa ', 'barbabietol'], category: F, days: 7, where: 'frigo', fresh: true, tip: 'Togli le foglie (si cucinano a parte) e conserva le radici nel cassetto del frigo.' },
+  { keys: ['cipollott', 'germogl'], category: F, days: 4, where: 'frigo', fresh: true, tip: 'In frigo avvolti in carta da cucina leggermente umida.' },
+  { keys: ['pisell', 'fave ', 'fava '], category: F, days: 3, where: 'frigo', fresh: true, tip: 'Freschi nel baccello si conservano pochi giorni: sgranali e congela quelli che non usi.' },
+  { keys: ['pannocch', 'mais fresco'], category: F, days: 3, where: 'frigo', fresh: true, tip: 'Con le foglie, in frigo: lo zucchero si trasforma in amido in fretta, meglio cuocerle presto.' },
+  { keys: ['cavolin'], category: F, days: 5, where: 'frigo', fresh: true, tip: 'Nel cassetto del frigo, senza lavarli prima.' },
   { keys: ['zucca'], category: F, days: 7, where: 'frigo', fresh: true, tip: 'Intera dura mesi in un luogo fresco; tagliata, avvolgila nella pellicola e usala entro 5-7 giorni.' },
   { keys: ['patat'], category: F, days: 30, where: 'dispensa', fresh: true, tip: 'Al buio e al fresco, lontano dalle cipolle: insieme germogliano prima.' },
   { keys: ['cipoll', 'scalogn'], category: F, days: 30, where: 'dispensa', fresh: true, tip: 'In un luogo fresco e asciutto, lontano dalle patate. Mezza cipolla avanzata: in frigo in un contenitore chiuso.' },
@@ -127,10 +140,31 @@ export function dateInDays(days: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Scadenza proposta in automatico: solo per i prodotti freschi senza etichetta. */
-export function suggestedExpiry(name: string): string | null {
+/**
+ * Stima di riserva per i freschi che la guida non conosce, in base alla categoria.
+ * Solo per le categorie dove di solito non c'è una data stampata.
+ */
+export const CATEGORY_FALLBACK_DAYS: Partial<Record<Category, number>> = {
+  [Category.FRUIT_VEG]: 5,
+  [Category.MEAT_FISH]: 2,
+};
+
+/** Il nome indica un prodotto confezionato o trasformato (di solito con la data stampata). */
+export const looksProcessed = (name: string) => {
+  const n = normalizeFoodName(name);
+  return PROCESSED.some((w) => n.includes(w));
+};
+
+/**
+ * Scadenza proposta in automatico: solo per i prodotti freschi senza etichetta.
+ * Prima la guida; se non conosce il prodotto, la stima per categoria (Ortofrutta, Carne e pesce).
+ */
+export function suggestedExpiry(name: string, category?: Category | null): string | null {
   const g = findFoodGuide(name);
-  return g && g.fresh ? dateInDays(g.days) : null;
+  if (g) return g.fresh ? dateInDays(g.days) : null;
+  if (!category || normalizeFoodName(name).trim().length < 2 || looksProcessed(name)) return null;
+  const days = CATEGORY_FALLBACK_DAYS[category];
+  return days ? dateInDays(days) : null;
 }
 
 export const WHERE_LABEL: Record<StoragePlace, string> = {
