@@ -17,10 +17,14 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ChevronRight,
 } from "lucide-react";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { PrivacySection } from "./PrivacySection";
 import { PlansPanel, type PlanProduct } from "./PlansPanel";
+import { CodesCard } from "./CodesCard";
+import { AdminCodesPanel } from "./AdminCodesPanel";
+import { isAdmin } from "../services/codes";
 import { displayNameFromEmail } from "../services/household";
 
 type Diet = "omnivore" | "veg" | "vegan";
@@ -199,6 +203,11 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [planCode, setPlanCode] = useState<string | null>(null);
+  // abbonamento attivato con un codice (nessun abbonamento Stripe dietro)
+  const [hasStripeSub, setHasStripeSub] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [admin, setAdmin] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [subBusy, setSubBusy] = useState(false);
   const [subMsg, setSubMsg] = useState<string | null>(null);
@@ -242,7 +251,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
       const { data, error: selErr } = await supabase
         .from("user_profiles")
-        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code")
+        .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code,stripe_subscription_id")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -255,7 +264,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
 
         const { data: data2, error: selErr2 } = await supabase
           .from("user_profiles")
-          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code")
+          .select("diet,lactose_free,avoid,allergies,plan_type,premium_until,subscription_cancel_at_period_end,premium_plan_code,stripe_subscription_id")
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -275,6 +284,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
         setPremiumUntil(data2?.premium_until ?? null);
         setCancelAtPeriodEnd(Boolean((data2 as any)?.subscription_cancel_at_period_end));
         setPlanCode((data2 as any)?.premium_plan_code ?? null);
+        setHasStripeSub(Boolean((data2 as any)?.stripe_subscription_id));
         return;
       }
 
@@ -292,6 +302,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       setPremiumUntil(data?.premium_until ?? null);
       setCancelAtPeriodEnd(Boolean((data as any)?.subscription_cancel_at_period_end));
       setPlanCode((data as any)?.premium_plan_code ?? null);
+      setHasStripeSub(Boolean((data as any)?.stripe_subscription_id));
     } catch (e) {
       console.error("prefs load error:", e);
       setPrefs(DEFAULT_PREFS);
@@ -541,6 +552,10 @@ const startCheckout = async (productCode: string, quantity?: number) => {
     init();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, reloadKey]);
+
+  useEffect(() => {
+    if (open) isAdmin().then(setAdmin);
   }, [open]);
 
   const premiumUntilDate = premiumUntil ? new Date(premiumUntil) : null;
@@ -554,6 +569,8 @@ const startCheckout = async (productCode: string, quantity?: number) => {
     premiumUntilDate !== null &&
     !Number.isNaN(premiumUntilDate.getTime()) &&
     premiumUntilDate.getTime() > Date.now();
+
+  const isGift = isPremiumActive && !hasStripeSub;
 
   const isPremiumExpired =
     planType === "premium" &&
@@ -607,6 +624,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end justify-center animate-fade-in">
+      {adminOpen && <AdminCodesPanel onClose={() => setAdminOpen(false)} />}
       <div className="bg-ground w-full max-w-md rounded-t-4xl max-h-[92vh] max-h-[92dvh] overflow-y-auto animate-slide-up flex flex-col pb-safe">
         <div className="sticky top-0 bg-ground px-5 pt-5 pb-3 flex justify-between items-center z-10 rounded-t-4xl">
           <div className="min-w-0 flex items-center gap-2">
@@ -786,7 +804,9 @@ const getPurchaseTitle = (purchase: Purchase) => {
                               ABBONAMENTO ATTIVO
                             </div>
                             <div className="text-xs text-muted mt-0.5">
-                              {premiumUntilLabel
+                              {isGift
+                                ? `Attivato con un codice: valido fino al ${premiumUntilLabel ?? "—"}, senza rinnovo`
+                                : premiumUntilLabel
                                 ? cancelAtPeriodEnd
                                   ? `Disdetto: attivo fino al ${premiumUntilLabel}`
                                   : `Rinnovo automatico il ${premiumUntilLabel}`
@@ -848,7 +868,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       {showBillingPanel ? "Chiudi" : "Ricarica crediti"}
                     </button>
 
-                    {cancelAtPeriodEnd ? (
+                    {isGift ? null : cancelAtPeriodEnd ? (
                       <button
                         type="button"
                         disabled={subBusy}
@@ -965,10 +985,29 @@ const getPurchaseTitle = (purchase: Purchase) => {
                       cancelAtPeriodEnd={cancelAtPeriodEnd}
                       activeUntilLabel={premiumUntilLabel}
                       onSwitchToYearly={switchToYearly}
+                      isGift={isGift}
                     />
                   </div>
                 )}
               </div>
+
+              <CodesCard
+                onRedeemed={() => {
+                  refreshCredits();
+                  setReloadKey((k) => k + 1);
+                }}
+              />
+
+              {admin && (
+                <button
+                  type="button"
+                  onClick={() => setAdminOpen(true)}
+                  className="flex h-[52px] w-full items-center justify-between rounded-2xl bg-forest px-4 text-sm font-bold text-white"
+                >
+                  <span>Area riservata · Codici</span>
+                  <ChevronRight size={18} />
+                </button>
+              )}
 
               <div className="bg-white rounded-2xl p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
