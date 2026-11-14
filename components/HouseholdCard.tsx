@@ -100,10 +100,10 @@ export const HouseholdCard = ({
   const alone = (household?.members.length ?? 0) <= 1;
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4">
+    <div className="rounded-2xl border border-black/10 bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
         <Users size={16} className="text-emerald-600" />
-        <div className="text-sm font-bold text-gray-800">Famiglia</div>
+        <div className="text-sm font-bold text-ink">Famiglia</div>
       </div>
 
       {loading ? (
@@ -111,10 +111,10 @@ export const HouseholdCard = ({
           <Loader2 className="mx-auto animate-spin text-emerald-600" size={22} />
         </div>
       ) : !household ? (
-        <p className="text-sm text-gray-500">Non riesco a caricare la famiglia. Riprova più tardi.</p>
+        <p className="text-sm text-muted">Non riesco a caricare la famiglia. Riprova più tardi.</p>
       ) : (
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted">
             {alone
               ? "Condividi dispensa e lista della spesa con chi vive con te: così nessuno compra due volte la stessa cosa."
               : "Dispensa, lista della spesa e statistiche sono condivise con:"}
@@ -124,7 +124,7 @@ export const HouseholdCard = ({
             <ul className="flex flex-col gap-1.5">
               {household.members.map((m) => (
                 <li key={m.user_id} className="flex items-center gap-2 text-sm">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink font-display text-sm font-extrabold text-lemon">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-forest font-display text-sm font-extrabold text-honey">
                     {(m.display_name ?? "?").charAt(0).toUpperCase()}
                   </span>
                   <span className="font-semibold text-ink">{m.display_name ?? "Membro"}</span>
@@ -152,7 +152,7 @@ export const HouseholdCard = ({
                 <button
                   type="button"
                   onClick={share}
-                  className="flex h-10 items-center gap-1.5 rounded-xl bg-ink px-3 text-sm font-bold text-white"
+                  className="flex h-10 items-center gap-1.5 rounded-xl bg-forest px-3 text-sm font-bold text-white"
                 >
                   {copied ? <Copy size={16} /> : <Share2 size={16} />}
                   {copied ? "Copiato" : "Invita"}
@@ -185,14 +185,14 @@ export const HouseholdCard = ({
               </button>
             </div>
             {alone && (
-              <p className="text-xs text-gray-500">I prodotti che hai adesso verranno portati nella dispensa condivisa.</p>
+              <p className="text-xs text-muted">I prodotti che hai adesso verranno portati nella dispensa condivisa.</p>
             )}
           </form>
 
           {!alone &&
             (confirmLeave ? (
-              <div className="flex flex-col gap-2 rounded-2xl bg-[#FBE0E3] p-3">
-                <p className="text-sm text-[#9B2335]">
+              <div className="flex flex-col gap-2 rounded-2xl bg-[#F3D3D3] p-3">
+                <p className="text-sm text-[#8A1F2B]">
                   Uscendo ripartirai con una dispensa vuota; i prodotti restano agli altri membri.
                 </p>
                 <div className="flex gap-2">
@@ -205,13 +205,13 @@ export const HouseholdCard = ({
                 </div>
               </div>
             ) : (
-              <button type="button" onClick={() => setConfirmLeave(true)} className="self-start text-xs font-semibold text-gray-500 underline underline-offset-2">
+              <button type="button" onClick={() => setConfirmLeave(true)} className="self-start text-xs font-semibold text-muted underline underline-offset-2">
                 Esci dalla famiglia
               </button>
             ))}
 
           {message && (
-            <p className={`text-sm font-semibold ${message.tone === "ok" ? "text-emerald-700" : "text-[#9B2335]"}`}>{message.text}</p>
+            <p className={`text-sm font-semibold ${message.tone === "ok" ? "text-emerald-700" : "text-[#8A1F2B]"}`}>{message.text}</p>
           )}
         </div>
       )}

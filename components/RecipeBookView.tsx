@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, Star, Trash2 } from "lucide-react";
+import { Search, Star, Trash2 } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { fetchSavedRecipes, RecipeMeta, SavedRecipe } from "../services/api";
 import { ScreenHeader, Spinner } from "./ui";
 import { tintFor } from "./RecipePhoto";
 import { RecipeDetailSheet } from "./RecipeDetailSheet";
 import { Category, CookResult, IngredientUsage, Recipe } from "../types";
+import { Course, normalizeCourse } from "../api/_lib/course";
 
-type Filter = "all" | "planned" | "cooked" | "suggest" | "search" | "meal_plan" | "shared";
+type StatusFilter = "all" | "planned" | "cooked";
+type CourseFilter = "all" | Course;
 
-const FILTERS: Array<[Filter, string]> = [
-  ["all", "Tutte"],
-  ["planned", "Da cucinare"],
-  ["cooked", "Cucinate"],
-  ["suggest", "Dalla dispensa"],
-  ["search", "Cercate"],
-  ["meal_plan", "Dai menu"],
-  ["shared", "Sfide e regali"],
+const COURSE_ORDER: Array<[Course, string]> = [
+  ["primo", "Primi"],
+  ["secondo", "Secondi"],
+  ["contorno", "Contorni"],
+  ["dolce", "Dolci"],
+  ["altro", "Altro"],
 ];
+
+/** Portata salvata, oppure indovinata dal titolo per le ricette più vecchie */
+const courseOf = (r: SavedRecipe): Course => normalizeCourse(r.course ?? r.recipe_json?.course, r.title);
 
 function toRecipe(r: SavedRecipe): Recipe {
   const j = r.recipe_json ?? {};
@@ -42,14 +45,14 @@ const metaOf = (r: SavedRecipe): RecipeMeta => ({
 
 const StatusBadge = ({ r }: { r: SavedRecipe }) => {
   if (r.status === "planned") {
-    return <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-[#155A34]">In programma</span>;
+    return <span className="shrink-0 rounded-full bg-mint px-2.5 py-1 text-[11px] font-bold text-forest">In programma</span>;
   }
   if (r.status === "cooked") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 text-[11px] font-bold text-lemon">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-forest px-2.5 py-1 text-[11px] font-bold text-white">
         {r.rating ? (
           <>
-            <Star size={11} className="fill-lemon" /> {r.rating}
+            <Star size={11} className="fill-[#E9B949] text-[#E9B949]" /> {r.rating}
           </>
         ) : (
           "Cucinata"
@@ -76,7 +79,9 @@ export function RecipeBookView({
 }) {
   const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [course, setCourse] = useState<CourseFilter>("all");
+  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -110,17 +115,29 @@ export function RecipeBookView({
     [recipes]
   );
 
-  const visible = useMemo(() => {
-    if (filter === "all") return sorted;
-    if (filter === "planned" || filter === "cooked") return sorted.filter((r) => r.status === filter);
-    return sorted.filter((r) => r.source === filter);
-  }, [sorted, filter]);
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(
+    () =>
+      sorted.filter(
+        (r) =>
+          (status === "all" || r.status === status) &&
+          (course === "all" || courseOf(r) === course) &&
+          (!q || r.title.toLowerCase().includes(q))
+      ),
+    [sorted, status, course, q]
+  );
 
-  const available = FILTERS.filter(([id]) => {
-    if (id === "all") return true;
-    if (id === "planned" || id === "cooked") return recipes.some((r) => r.status === id);
-    return recipes.some((r) => r.source === id);
-  });
+  // Raggruppate per portata, nell'ordine Primi, Secondi, Contorni, Dolci, Altro
+  const groups = useMemo(
+    () =>
+      COURSE_ORDER.map(([id, label]) => ({ id, label, rows: visible.filter((r) => courseOf(r) === id) })).filter(
+        (g) => g.rows.length > 0
+      ),
+    [visible]
+  );
+
+  const presentCourses = COURSE_ORDER.filter(([id]) => recipes.some((r) => courseOf(r) === id));
+  const cookedCount = recipes.filter((r) => r.status === "cooked").length;
 
   const selected = recipes.find((r) => r.id === selectedId) ?? null;
 
@@ -156,37 +173,67 @@ export function RecipeBookView({
     closeDetail();
   };
 
-  const [hero, ...rest] = visible;
   const plannedCount = recipes.filter((r) => r.status === "planned").length;
 
+  const chip = (on: boolean) =>
+    `h-9 shrink-0 rounded-full px-3.5 text-[13px] font-bold ${on ? "bg-forest text-white" : "bg-white text-ink"}`;
+  const small = (on: boolean) =>
+    `h-8 shrink-0 rounded-full px-3 text-xs font-bold ${on ? "bg-mint text-forest" : "text-muted"}`;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
       <ScreenHeader
-        title="Ricettario"
+        title="Ricette"
         subtitle={
           loading
             ? " "
             : `${recipes.length === 1 ? "1 ricetta salvata" : `${recipes.length} ricette salvate`}${
-                plannedCount ? ` · ${plannedCount} da cucinare` : ""
+                plannedCount ? ` · ${plannedCount} in programma` : ""
               }`
         }
       />
 
       {recipes.length > 0 && (
-        <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar">
-          {available.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setFilter(id)}
-              className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${
-                filter === id ? "bg-ink text-white" : "bg-white text-ink"
-              }`}
-            >
-              {label}
+        <>
+          <label className="flex h-12 items-center gap-2.5 rounded-2xl bg-white px-4 text-muted">
+            <Search size={20} />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cerca tra le tue ricette"
+              aria-label="Cerca tra le tue ricette"
+              className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none"
+            />
+          </label>
+
+          <div className="-mx-5 flex gap-2 overflow-x-auto px-5 no-scrollbar">
+            <button type="button" onClick={() => setCourse("all")} className={chip(course === "all")}>
+              Tutte
             </button>
-          ))}
-        </div>
+            {presentCourses.map(([id, label]) => (
+              <button key={id} type="button" onClick={() => setCourse(id)} className={chip(course === id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="-mt-1 flex gap-1">
+            <button type="button" onClick={() => setStatus("all")} className={small(status === "all")}>
+              Tutte
+            </button>
+            {plannedCount > 0 && (
+              <button type="button" onClick={() => setStatus("planned")} className={small(status === "planned")}>
+                In programma · {plannedCount}
+              </button>
+            )}
+            {cookedCount > 0 && (
+              <button type="button" onClick={() => setStatus("cooked")} className={small(status === "cooked")}>
+                Cucinate · {cookedCount}
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {loading ? (
@@ -197,53 +244,37 @@ export function RecipeBookView({
           <p className="text-sm text-muted">Le ricette che EcoChef ti propone vengono salvate qui in automatico.</p>
         </div>
       ) : visible.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted">Nessuna ricetta in questo gruppo.</p>
+        <p className="py-10 text-center text-sm text-muted">Nessuna ricetta trovata.</p>
       ) : (
-        <>
-          {hero && (
-            <button
-              type="button"
-              onClick={() => setSelectedId(hero.id)}
-              className="flex flex-col gap-2.5 rounded-4xl bg-forest p-2.5 pb-5 text-left text-white"
-            >
-              {hero.image_url && <img src={hero.image_url} alt="" className="h-40 w-full rounded-3xl object-cover" />}
-              <span className={`flex flex-col gap-2 px-2.5 ${hero.image_url ? "" : "pt-2.5"}`}>
-                <span className="self-start rounded-full bg-lemon px-2.5 py-1 text-xs font-bold text-ink">
-                  {hero.status === "planned" ? "Da cucinare" : hero.status === "cooked" ? "Cucinata da te" : "Ultima salvata"}
-                </span>
-                <span className="font-display text-[26px] font-extrabold leading-[1.1]">{hero.title}</span>
-                <span className="text-[13px] text-[#BFE3CB]">{metaLine(hero)}</span>
-                <span className="mt-1 inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-white px-4 text-sm font-bold text-ink">
-                  <Play size={16} fill="currentColor" /> Apri la ricetta
-                </span>
-              </span>
-            </button>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            {rest.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setSelectedId(r.id)}
-                className="flex flex-col overflow-hidden rounded-[22px] bg-white text-left transition-transform active:scale-[0.98]"
-              >
-                {r.image_url ? (
-                  <img src={r.image_url} alt="" className="h-24 w-full object-cover" loading="lazy" />
-                ) : (
-                  <span className={`h-2 w-full ${tintFor(r.title)}`} aria-hidden="true" />
-                )}
-                <span className="flex flex-1 flex-col gap-1.5 p-3">
-                  <span className="line-clamp-3 text-[15px] font-bold leading-tight text-ink">{r.title}</span>
-                  <span className="text-xs text-muted">{metaLine(r)}</span>
-                  <span className="mt-auto pt-1">
-                    <StatusBadge r={r} />
+        <div className="flex flex-col gap-4">
+          {groups.map((g) => (
+            <section key={g.id} className="flex flex-col gap-2">
+              <h2 className="flex items-center justify-between px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
+                <span>{g.label}</span>
+                <span>{g.rows.length}</span>
+              </h2>
+              {g.rows.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedId(r.id)}
+                  className="flex min-w-0 items-center gap-3 rounded-[18px] bg-white px-3 py-2.5 text-left transition-transform active:scale-[0.99]"
+                >
+                  {r.image_url ? (
+                    <img src={r.image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" loading="lazy" />
+                  ) : (
+                    <span className={`h-11 w-11 shrink-0 rounded-xl ${tintFor(r.title)}`} aria-hidden="true" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold text-ink">{r.title}</span>
+                    <span className="block truncate text-xs text-muted">{metaLine(r)}</span>
                   </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
+                  <StatusBadge r={r} />
+                </button>
+              ))}
+            </section>
+          ))}
+        </div>
       )}
 
       <RecipeDetailSheet
@@ -260,7 +291,7 @@ export function RecipeBookView({
             type="button"
             onClick={() => setConfirmDelete(true)}
             aria-label="Elimina dal ricettario"
-            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-[#FBE0E3] text-[#9B2335]"
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-[#F3D3D3] text-[#8A1F2B]"
           >
             <Trash2 size={20} />
           </button>

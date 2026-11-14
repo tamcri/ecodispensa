@@ -69,7 +69,7 @@ export const SharedRecipeView = ({
         <div className="mx-5 flex flex-col items-center gap-3 rounded-4xl bg-white px-6 py-10 text-center">
           <p className="font-display text-xl font-bold text-ink">Ricetta non trovata</p>
           <p className="text-sm text-muted">Il link potrebbe essere sbagliato o la ricetta è stata eliminata.</p>
-          <button type="button" onClick={onClose} className="h-11 rounded-2xl bg-ink px-5 text-sm font-bold text-white">
+          <button type="button" onClick={onClose} className="h-11 rounded-2xl bg-forest px-5 text-sm font-bold text-white">
             Vai all'app
           </button>
         </div>
@@ -108,9 +108,9 @@ export const SharedRecipeView = ({
             type="button"
             onClick={accept}
             disabled={busy}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-ink text-base font-bold text-white disabled:opacity-60"
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-forest text-base font-bold text-white disabled:opacity-60"
           >
-            {busy ? <Loader2 size={20} className="animate-spin text-lemon" /> : challenge ? <Swords size={20} className="text-lemon" /> : null}
+            {busy ? <Loader2 size={20} className="animate-spin text-honey" /> : challenge ? <Swords size={20} className="text-honey" /> : null}
             {challenge
               ? loggedIn
                 ? "Accetto la sfida"

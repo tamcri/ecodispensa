@@ -162,9 +162,9 @@ export const MealPlanForm = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-4">
+      <div className="bg-white rounded-2xl border border-black/10 p-4 space-y-4">
         <div>
-          <label htmlFor="meal-plan-start-date" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="meal-plan-start-date" className="block text-sm font-medium text-ink mb-2">
             Data inizio
           </label>
           <input
@@ -172,15 +172,15 @@ export const MealPlanForm = ({
             type="date"
             value={startDateIso}
             onChange={(e) => setStartDateIso(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
+            className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
           />
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-muted mt-2">
             Data selezionata: {startDateIso ? isoToDisplay(startDateIso) : "—"}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Durata piano</label>
+          <label className="block text-sm font-medium text-ink mb-2">Durata piano</label>
           <div className="grid grid-cols-5 gap-2">
             {[1, 2, 3, 5, 7].map((value) => {
               const typedValue = value as 1 | 2 | 3 | 5 | 7;
@@ -194,7 +194,7 @@ export const MealPlanForm = ({
                   className={`py-2 rounded-xl text-sm font-medium border transition-colors ${
                     active
                       ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-gray-700 border-gray-200 hover:border-emerald-300"
+                      : "bg-white text-ink border-black/10 hover:border-emerald-400"
                   }`}
                 >
                   {value}g
@@ -205,7 +205,7 @@ export const MealPlanForm = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Pasti da pianificare</label>
+          <label className="block text-sm font-medium text-ink mb-2">Pasti da pianificare</label>
           <div className="flex gap-3">
             <button
               type="button"
@@ -213,7 +213,7 @@ export const MealPlanForm = ({
               className={`flex-1 py-3 rounded-xl border text-sm font-medium transition-colors ${
                 lunch
                   ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                  : "bg-white text-gray-700 border-gray-200"
+                  : "bg-white text-ink border-black/10"
               }`}
             >
               Pranzo
@@ -224,7 +224,7 @@ export const MealPlanForm = ({
               className={`flex-1 py-3 rounded-xl border text-sm font-medium transition-colors ${
                 dinner
                   ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                  : "bg-white text-gray-700 border-gray-200"
+                  : "bg-white text-ink border-black/10"
               }`}
             >
               Cena
@@ -234,7 +234,7 @@ export const MealPlanForm = ({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="meal-plan-people" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="meal-plan-people" className="block text-sm font-medium text-ink mb-2">
               Persone
             </label>
             <input
@@ -245,12 +245,12 @@ export const MealPlanForm = ({
               step={1}
               value={people}
               onChange={(e) => setPeople(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400"
+              className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400"
             />
           </div>
 
           <div>
-            <label htmlFor="meal-plan-budget" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="meal-plan-budget" className="block text-sm font-medium text-ink mb-2">
               Budget (€)
             </label>
             <input
@@ -261,20 +261,20 @@ export const MealPlanForm = ({
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
               placeholder="Opzionale"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400"
+              className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400"
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="meal-plan-complexity" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="meal-plan-complexity" className="block text-sm font-medium text-ink mb-2">
             Complessità
           </label>
           <select
             id="meal-plan-complexity"
             value={complexity}
             onChange={(e) => setComplexity(e.target.value as MealPlanComplexity)}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
+            className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
           >
             <option value="easy">Facile</option>
             <option value="medium">Media</option>
@@ -284,7 +284,7 @@ export const MealPlanForm = ({
         </div>
 
         <div>
-  <label className="block text-sm font-medium text-gray-700 mb-2">
+  <label className="block text-sm font-medium text-ink mb-2">
     Stile del piano
   </label>
 
@@ -301,7 +301,7 @@ export const MealPlanForm = ({
           | "antiwaste"
       )
     }
-    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
+    className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400 bg-white"
   >
     <option value="balanced">⚖️ Equilibrato</option>
     <option value="light">🥗 Leggero</option>
@@ -311,16 +311,16 @@ export const MealPlanForm = ({
     <option value="antiwaste">♻️ Anti-spreco</option>
   </select>
 
-  <p className="text-xs text-gray-500 mt-2">
+  <p className="text-xs text-muted mt-2">
     Determina la priorità principale del piano alimentare.
   </p>
 </div>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+        <div className="rounded-xl border border-black/10 bg-white p-4">
           <div className="mb-2">
             <label
               htmlFor="meal-plan-daily-calories"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-ink"
             >
               Obiettivo calorie giornaliere
             </label>
@@ -336,19 +336,19 @@ export const MealPlanForm = ({
             onChange={(e) => setDailyCalorieTarget(e.target.value)}
             inputMode="numeric"
             placeholder="Es. 1800"
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400 disabled:bg-stone disabled:text-muted disabled:cursor-not-allowed"
           />
 
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-muted mt-2">
             Opzionale. EcoDispensa userà il valore come riferimento e mostrerà una stima kcal per pasto e per giorno.
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="text-[11px] text-muted mt-1">
             Valori indicativi, non costituiscono indicazione medica o nutrizionale. Il totale considera solo i pasti pianificati in EcoDispensa.
           </p>
         </div>
 
         <div>
-          <label htmlFor="meal-plan-notes" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="meal-plan-notes" className="block text-sm font-medium text-ink mb-2">
             Note
           </label>
           <textarea
@@ -358,7 +358,7 @@ export const MealPlanForm = ({
             maxLength={400}
             rows={4}
             placeholder="Es. preferisco piatti mediterranei, pochi utensili, ricette rapide..."
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:border-emerald-400 resize-none"
+            className="w-full rounded-xl border border-black/10 px-3 py-2.5 outline-none focus:border-emerald-400 resize-none"
           />
         </div>
       </div>
@@ -370,7 +370,7 @@ export const MealPlanForm = ({
       >
         {loading ? "Preparo il menu..." : `Genera il menu · ${creditCost} crediti`}
       </button>
-      <p className={`-mt-2 text-center text-xs ${notEnoughCredits ? "font-semibold text-[#9B2335]" : "text-gray-500"}`}>
+      <p className={`-mt-2 text-center text-xs ${notEnoughCredits ? "font-semibold text-[#8A1F2B]" : "text-muted"}`}>
         {notEnoughCredits
           ? `Ti servono ${creditCost} crediti: ne hai ${credits}.`
           : `Il menu usa ${creditCost} crediti. Se qualcosa va storto te li restituiamo.`}

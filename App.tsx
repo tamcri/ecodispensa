@@ -11,6 +11,7 @@ import { RecipeBookView } from "./components/RecipeBookView";
 import { HomeView } from "./components/HomeView";
 import { acceptSharedRecipe, fetchCredits } from "./services/api";
 import { SharedRecipeView } from "./components/SharedRecipeView";
+import { ProfileButtonContext } from "./components/ui";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
 import { dateInDays, nameMatchScore } from "./foodGuide";
@@ -712,11 +713,11 @@ const App = () => {
   const userInitial = (session?.user?.email ?? "?").trim().charAt(0).toUpperCase();
 
   const navItems: Array<{ id: ViewState; label: string; icon: React.ReactNode }> = [
-    { id: "home", label: "Oggi", icon: <Home size={22} /> },
-    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={22} /> },
-    { id: "chef", label: "EcoChef", icon: <ChefHat size={26} /> },
-    { id: "shopping", label: "Spesa", icon: <ShoppingCart size={22} /> },
-    { id: "recipeBook", label: "Ricette", icon: <BookOpen size={22} /> },
+    { id: "home", label: "Oggi", icon: <Home size={20} /> },
+    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={20} /> },
+    { id: "chef", label: "EcoChef", icon: <ChefHat size={24} /> },
+    { id: "shopping", label: "Spesa", icon: <ShoppingCart size={20} /> },
+    { id: "recipeBook", label: "Ricette", icon: <BookOpen size={20} /> },
   ];
 
   const goTo = (next: ViewState) => {
@@ -725,6 +726,7 @@ const App = () => {
   };
 
   return (
+    <ProfileButtonContext.Provider value={{ initial: userInitial, open: () => setProfileOpen(true) }}>
     <div className="relative mx-auto flex min-h-screen max-w-md flex-col bg-ground">
       <main className="flex-1 px-5 pb-40 pt-[max(3.25rem,calc(env(safe-area-inset-top)+1.25rem))]">
         {view === "home" && (
@@ -781,7 +783,7 @@ const App = () => {
 
       <nav
         aria-label="Navigazione principale"
-        className="fixed inset-x-0 z-40 mx-auto grid h-[68px] max-w-[calc(28rem-2rem)] grid-cols-5 items-center rounded-[34px] bg-ink shadow-[0_12px_32px_rgba(23,32,26,0.28)]"
+        className="fixed inset-x-0 z-40 mx-auto grid h-[68px] max-w-[calc(28rem-2rem)] grid-cols-5 items-center rounded-[28px] bg-white shadow-[0_10px_30px_rgba(47,74,44,0.14)]"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 14px)", left: "1rem", right: "1rem" }}
       >
         {navItems.map((item) => {
@@ -794,8 +796,8 @@ const App = () => {
                 onClick={() => goTo("chef")}
                 aria-label="EcoChef"
                 aria-current={active ? "page" : undefined}
-                className={`-mt-8 flex h-[62px] w-[62px] items-center justify-center justify-self-center rounded-full border-[5px] border-ground transition-transform active:scale-95 ${
-                  active ? "bg-emerald-600 text-white" : "bg-lemon text-ink"
+                className={`-mt-8 flex h-[60px] w-[60px] items-center justify-center justify-self-center rounded-full border-[5px] border-ground shadow-[0_8px_18px_rgba(79,107,74,0.35)] transition-transform active:scale-95 ${
+                  active ? "bg-forest text-honey" : "bg-emerald-600 text-white"
                 }`}
               >
                 {item.icon}
@@ -809,10 +811,10 @@ const App = () => {
               onClick={() => goTo(item.id)}
               aria-current={active ? "page" : undefined}
               className={`flex h-full flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
-                active ? "font-bold text-lemon" : "font-semibold text-[#A9B3AC]"
+                active ? "font-extrabold text-forest" : "font-semibold text-muted"
               }`}
             >
-              {item.icon}
+              <span className={`flex h-7 w-11 items-center justify-center rounded-full ${active ? "bg-mint" : ""}`}>{item.icon}</span>
               {item.label}
             </button>
           );
@@ -834,6 +836,7 @@ const App = () => {
         onLogout={handleLogout}
       />
     </div>
+    </ProfileButtonContext.Provider>
   );
 };
 

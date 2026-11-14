@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Utensils,
   CalendarDays,
+  ChefHat,
 } from "lucide-react";
 import { CreditsBadge, ScreenHeader, Sheet, Spinner } from "./ui";
 import { tintFor } from "./RecipePhoto";
@@ -841,16 +842,18 @@ if (typeof recipesResp?.remainingCredits === "number") {
     <div className="flex flex-col gap-3.5">
       <ScreenHeader
         title="EcoChef"
-        right={
-          <CreditsBadge credits={ecoCredits} dark onClick={refreshCredits} />
+        subtitle={
+          <span className="mt-1 inline-flex">
+            <CreditsBadge credits={ecoCredits} onClick={refreshCredits} />
+          </span>
         }
       />
 
-      <div role="tablist" aria-label="Modalità EcoChef" className="grid grid-cols-3 gap-1 rounded-2xl bg-[#E6E9E0] p-1">
+      <div role="tablist" aria-label="Modalità EcoChef" className="grid grid-cols-3 gap-1 rounded-2xl bg-[#EDE6D6] p-1">
         {(
           [
-            ["suggest", "Dalla dispensa"],
-            ["search", "Cerca ricetta"],
+            ["suggest", "Con quello che ho"],
+            ["search", "Cerca"],
             ["mealPlan", "Menu"],
           ] as Array<[ChefMode, string]>
         ).map(([id, label]) => (
@@ -861,7 +864,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
             aria-selected={mode === id}
             onClick={() => switchMode(id)}
             className={`h-10 rounded-xl text-[13px] transition-all ${
-              mode === id ? "bg-white font-bold text-ink shadow-sm" : "font-semibold text-[#4A524C]"
+              mode === id ? "bg-white font-extrabold text-ink shadow-sm" : "font-semibold text-[#4A5448]"
             }`}
           >
             {id === "mealPlan" ? (
@@ -876,7 +879,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       </div>
 
       {noCredits && !premiumStatusLoading && ecoCredits !== null && (
-        <div className="rounded-3xl bg-peach p-4 text-sm text-[#8A3B0C]">
+        <div className="rounded-3xl bg-peach p-4 text-sm text-[#8E3418]">
           <p className="font-bold">Crediti esauriti</p>
           <p>{isPremiumActive ? "Hai usato tutti i crediti di questo mese: tornano a 25 al rinnovo. Intanto puoi aggiungere una ricarica dal Profilo." : "Hai usato tutti i crediti. Per generare nuove ricette serve almeno 1 credito: a breve potrai abbonarti dal Profilo."} Le ricette salvate restano sempre disponibili nel Ricettario.</p>
         </div>
@@ -884,25 +887,25 @@ if (typeof recipesResp?.remainingCredits === "number") {
 
       {mode === "suggest" && (
         <>
-          <section className="flex flex-col gap-3.5 rounded-4xl bg-lemon p-5 text-ink">
-            <h2 className="font-display text-[26px] font-extrabold leading-[1.1]">Cosa cucino con quello che ho?</h2>
+          <section className="flex flex-col gap-3 rounded-[24px] bg-white p-[18px] text-ink">
+            <h2 className="font-display text-[20px] font-extrabold leading-[1.15]">Parto da quello che scade prima</h2>
             {items.length === 0 ? (
               <p className="text-sm">Aggiungi qualche prodotto in dispensa e ti propongo le ricette.</p>
             ) : (
               <>
-                <p className="text-sm text-[#3D3A1F]">
+                <p className="text-sm text-muted">
                   {expiringItemsCount > 0
-                    ? `Parto da quello che scade prima (${expiringItemsCount} in scadenza):`
-                    : "Parto da quello che scade prima:"}
+                    ? `${expiringItemsCount} ${expiringItemsCount === 1 ? "prodotto scade" : "prodotti scadono"} a breve: li uso per primi.`
+                    : "Uso per primi i prodotti con la scadenza più vicina."}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {priorityItems.map((i) => (
-                    <span key={i.id} className="rounded-full bg-ink px-3 py-2 text-[13px] font-bold text-white">
+                    <span key={i.id} className="rounded-full bg-mint px-3 py-2 text-[13px] font-bold text-forest">
                       {i.name}
                     </span>
                   ))}
                   {getValidPantryItems(items).length > priorityItems.length && (
-                    <span className="rounded-full border-2 border-dashed border-ink/30 px-3 py-1.5 text-[13px] font-bold">
+                    <span className="rounded-full px-3 py-2 text-[13px] font-bold text-muted ring-1 ring-black/10">
                       +{getValidPantryItems(items).length - priorityItems.length} altri
                     </span>
                   )}
@@ -910,7 +913,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
               </>
             )}
             {expiredItemsCount > 0 && (
-              <p className="flex items-center gap-1.5 text-xs font-bold text-[#9B2335]">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-[#8A1F2B]">
                 <AlertTriangle size={14} /> {expiredItemsCount} {expiredItemsCount === 1 ? "prodotto scaduto non verrà usato" : "prodotti scaduti non verranno usati"}
               </p>
             )}
@@ -922,10 +925,10 @@ if (typeof recipesResp?.remainingCredits === "number") {
             type="button"
             onClick={handleGenerateSuggestions}
             disabled={items.length === 0 || loading || inCooldown || noCredits}
-            className="flex h-14 items-center justify-center gap-2.5 rounded-[18px] bg-ink text-base font-bold text-white transition-transform active:scale-[0.99] disabled:opacity-50"
+            className="flex h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-emerald-600 text-base font-bold text-white transition-transform active:scale-[0.99] disabled:opacity-50"
           >
-            {loading ? <Loader2 size={20} className="animate-spin text-lemon" /> : <Sparkles size={20} className="text-lemon" />}
-            {recipes.length > 0 ? "Altre idee" : "Trova ricette"}
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <ChefHat size={20} />}
+            {recipes.length > 0 ? "Altre idee" : "Proponimi 3 ricette"}
           </button>
           <p className="-mt-1.5 text-center text-xs text-muted">Ogni 4 richieste di ricette usi 1 credito · il menu settimanale ne usa 4</p>
         </>
@@ -947,7 +950,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
               disabled={!searchQuery.trim() || loading || inCooldown || noCredits}
               aria-label="Cerca"
               title={noCredits ? "Crediti esauriti" : inCooldown ? "Aspetta qualche secondo e riprova" : "Cerca"}
-              className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-ink text-lemon disabled:opacity-50"
+              className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-50"
             >
               {loading ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
             </button>
@@ -971,7 +974,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
           {mealPlanLoading && <Spinner label="Organizzo il tuo menu…" />}
 
           {mealPlanError && (
-            <div className="rounded-2xl bg-[#FBE0E3] p-4 text-center text-sm font-semibold text-[#9B2335]">{mealPlanError}</div>
+            <div className="rounded-2xl bg-[#F3D3D3] p-4 text-center text-sm font-semibold text-[#8A1F2B]">{mealPlanError}</div>
           )}
 
           {mealPlanResult && !mealPlanLoading && (
@@ -990,7 +993,7 @@ if (typeof recipesResp?.remainingCredits === "number") {
       )}
 
       {error && mode !== "mealPlan" && (
-        <div className="rounded-2xl bg-[#FBE0E3] p-4 text-center text-sm font-semibold text-[#9B2335]">{error}</div>
+        <div className="rounded-2xl bg-[#F3D3D3] p-4 text-center text-sm font-semibold text-[#8A1F2B]">{error}</div>
       )}
 
       {mode !== "mealPlan" && recipes.length > 0 && !loading && (
@@ -1094,17 +1097,17 @@ const RecipeCard = ({
             <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-ink">In programma</span>
           )}
           {status === "cooked" && (
-            <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold text-lemon">Cucinata</span>
+            <span className="rounded-full bg-forest px-2.5 py-1 text-[11px] font-bold text-honey">Cucinata</span>
           )}
         </span>
       )}
       <span className="flex flex-col gap-2 p-4">
         <span className="flex flex-wrap gap-1.5 text-xs font-bold">
-          <span className="rounded-full bg-mint px-2.5 py-1 text-[#1E5A35]">
+          <span className="rounded-full bg-mint px-2.5 py-1 text-[#2F4A2C]">
             Usa {used} {used === 1 ? "tuo prodotto" : "tuoi prodotti"}
           </span>
           {missing > 0 ? (
-            <span className="rounded-full bg-peach px-2.5 py-1 text-[#9A3412]">
+            <span className="rounded-full bg-peach px-2.5 py-1 text-[#8E3418]">
               {missing === 1 ? "Manca 1" : `Mancano ${missing}`}
             </span>
           ) : (

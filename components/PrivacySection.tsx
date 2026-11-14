@@ -28,8 +28,8 @@ export const PrivacySection = () => {
   };
 
   return (
-    <div className="flex flex-col gap-3 text-sm text-gray-600">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center justify-between text-left font-semibold text-gray-800">
+    <div className="flex flex-col gap-3 text-sm text-muted">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center justify-between text-left font-semibold text-ink">
         Quali dati salviamo
         <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -38,7 +38,7 @@ export const PrivacySection = () => {
         <div className="flex flex-col gap-2">
           {DATA_WE_KEEP.map(([title, text]) => (
             <p key={title}>
-              <b className="text-gray-800">{title}:</b> {text}
+              <b className="text-ink">{title}:</b> {text}
             </p>
           ))}
           <p>
@@ -84,7 +84,7 @@ export const PrivacySection = () => {
                 setTyped("");
                 setError(null);
               }}
-              className="h-11 rounded-xl bg-white font-bold text-gray-700"
+              className="h-11 rounded-xl bg-white font-bold text-ink"
             >
               Annulla
             </button>

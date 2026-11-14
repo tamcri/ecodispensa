@@ -230,21 +230,14 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <ScreenHeader title="Spesa" />
-
-      {items.length > 0 && (
-        <section className="flex flex-col gap-2.5 rounded-3xl bg-tangerine px-[18px] py-4 text-ink">
-          <div className="flex items-baseline justify-between">
-            <span className="font-display text-[22px] font-extrabold">
-              {completedItems.length} di {items.length} nel carrello
-            </span>
-            <span className="text-[13px] font-bold">{pct}%</span>
-          </div>
-          <span className="block h-2.5 overflow-hidden rounded-full bg-ink/20">
-            <span className="block h-2.5 rounded-full bg-ink transition-all duration-500" style={{ width: `${pct}%` }} />
-          </span>
-        </section>
-      )}
+      <ScreenHeader
+        title="Spesa"
+        subtitle={
+          items.length > 0
+            ? `${items.length - completedItems.length} da prendere · ${completedItems.length} nel carrello`
+            : 'La lista è vuota'
+        }
+      />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
         <div className="flex gap-2">
@@ -275,9 +268,9 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           </button>
         </div>
         {typedMatches.length > 0 && (
-          <div className="flex gap-3 rounded-2xl bg-lemon/50 p-3.5 animate-fade-in" role="status">
-            <Info size={18} className="mt-0.5 shrink-0 text-ink" />
-            <div className="text-sm text-[#3D3A1F]">
+          <div className="flex gap-3 rounded-2xl bg-honey p-3.5 animate-fade-in" role="status">
+            <Info size={18} className="mt-0.5 shrink-0 text-[#6E5208]" />
+            <div className="text-sm text-[#4A3A08]">
               <p className="font-bold text-ink">Ce l'hai già in dispensa</p>
               {typedMatches.slice(0, 3).map((p) => (
                 <p key={p.id}>
@@ -296,7 +289,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                 type="button"
                 onClick={() => setSelectedCategory(c)}
                 className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-bold ${
-                  selectedCategory === c ? 'bg-ink text-white' : getCategoryTheme(c).chip
+                  selectedCategory === c ? 'bg-forest text-white' : getCategoryTheme(c).chip
                 }`}
               >
                 {c}
@@ -329,12 +322,12 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                   onClick={() => onToggle(item.id)}
                   className="flex min-h-[52px] w-full items-center gap-3 border-b border-black/5 text-left last:border-0"
                 >
-                  <span className="h-[26px] w-[26px] shrink-0 rounded-full border-2 border-[#C5CCC7]" />
+                  <span className="h-[26px] w-[26px] shrink-0 rounded-full border-2 border-emerald-400 bg-white" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-semibold text-ink">{item.name}</span>
                     {inPantry(item.name)[0] && (
-                      <span className="block truncate text-xs font-semibold text-[#8A3B0C]">
-                        In dispensa: {describe(inPantry(item.name)[0])}
+                      <span className="block truncate text-xs font-semibold text-[#6E5208]">
+                        Ce l'hai già: {describe(inPantry(item.name)[0])}
                       </span>
                     )}
                   </span>
@@ -357,7 +350,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             <button
               type="button"
               onClick={onClearCompleted}
-              className="flex h-9 items-center gap-1 rounded-full px-2 text-xs font-bold text-[#9B2335]"
+              className="flex h-9 items-center gap-1 rounded-full px-2 text-xs font-bold text-[#8A1F2B]"
             >
               <Trash2 size={14} /> Svuota
             </button>
@@ -384,10 +377,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           <button
             type="button"
             onClick={openMove}
-            className="mt-2 flex h-[54px] items-center justify-center gap-2 rounded-[18px] bg-emerald-600 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(30,138,78,0.3)]"
+            className="mt-2 flex h-[54px] items-center justify-center gap-2 rounded-[18px] bg-emerald-600 text-[15px] font-bold text-white shadow-[0_10px_24px_rgba(79,107,74,0.3)]"
           >
             <Refrigerator size={20} />
-            Sposta {completedItems.length} {completedItems.length === 1 ? 'prodotto' : 'prodotti'} in dispensa
+            Metti {completedItems.length === 1 ? "l'unico preso" : `i ${completedItems.length} presi`} in dispensa
           </button>
         </div>
       )}
@@ -450,7 +443,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                   setScanResult(null);
                   if (scanResult?.kind !== 'unknown') setShowCamera(true);
                 }}
-                className={`h-[52px] rounded-2xl bg-ink text-[15px] font-bold text-white ${scanResult?.kind === 'inList' ? '' : 'col-span-2'}`}
+                className={`h-[52px] rounded-2xl bg-forest text-[15px] font-bold text-white ${scanResult?.kind === 'inList' ? '' : 'col-span-2'}`}
               >
                 {scanResult?.kind === 'unknown' ? 'Lo scrivo io' : 'Scansiona il prossimo'}
               </button>
@@ -459,28 +452,28 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         }
       >
         {scanResult?.kind === 'inList' && (
-          <p className="text-[15px] text-[#3D4840]">
+          <p className="text-[15px] text-[#3D4A3B]">
             <span className="font-bold text-ink">{scanResult.item.name}</span> era nella tua lista: l'ho messo nel carrello.
           </p>
         )}
         {scanResult?.kind === 'inCart' && (
-          <p className="text-[15px] text-[#3D4840]">
+          <p className="text-[15px] text-[#3D4A3B]">
             <span className="font-bold text-ink">{scanResult.item.name}</span> l'hai già preso: è tra i prodotti nel carrello.
           </p>
         )}
         {scanResult?.kind === 'added' && (
-          <p className="text-[15px] text-[#3D4840]">
+          <p className="text-[15px] text-[#3D4A3B]">
             <span className="font-bold text-ink">{scanResult.name}</span> non era in lista: l'ho aggiunto tra i prodotti nel carrello.
           </p>
         )}
         {scanResult?.kind === 'unknown' && (
-          <p className="text-[15px] text-[#3D4840]">
+          <p className="text-[15px] text-[#3D4A3B]">
             Non trovo questo codice nell'archivio prodotti. Scrivi il nome nel campo "Aggiungi prodotto": la prossima volta lo riconosco io.
           </p>
         )}
         {scanResult?.kind === 'inPantry' && (
           <div className="flex flex-col gap-3">
-            <p className="text-[15px] text-[#3D4840]">
+            <p className="text-[15px] text-[#3D4A3B]">
               Forse non ti serve: di <span className="font-bold text-ink">{scanResult.name}</span> hai già
             </p>
             {scanResult.matches.slice(0, 3).map((m) => {
@@ -496,7 +489,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                   </div>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
-                      urgent ? 'bg-peach text-[#9A3412]' : 'bg-mint text-[#1E5A35]'
+                      urgent ? 'bg-peach text-[#8E3418]' : 'bg-mint text-[#2F4A2C]'
                     }`}
                   >
                     {expiryLabel(days)}

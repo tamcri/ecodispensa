@@ -42,7 +42,7 @@ export const RecoveryCodeCard = ({ compact = false, onCreated }: { compact?: boo
   if (compact && (has === null || (has && !code))) return null;
 
   return (
-    <section className={`flex flex-col gap-3 rounded-3xl p-4 ${compact ? "bg-white ring-2 ring-lemon" : "border border-gray-100 bg-white"}`}>
+    <section className={`flex flex-col gap-3 rounded-3xl p-4 ${compact ? "bg-white ring-2 ring-lemon" : "border border-black/10 bg-white"}`}>
       <div className="flex items-center gap-2">
         <KeyRound size={18} className="text-[#C9930A]" />
         <p className="text-sm font-bold text-ink">Codice di recupero</p>
@@ -55,7 +55,7 @@ export const RecoveryCodeCard = ({ compact = false, onCreated }: { compact?: boo
           </p>
           <div className="flex items-center justify-between gap-2 rounded-2xl bg-ground p-3">
             <span className="font-mono text-lg font-bold tracking-wider text-ink">{code}</span>
-            <button type="button" onClick={copy} className="flex h-10 items-center gap-1.5 rounded-xl bg-ink px-3 text-sm font-bold text-white">
+            <button type="button" onClick={copy} className="flex h-10 items-center gap-1.5 rounded-xl bg-forest px-3 text-sm font-bold text-white">
               {copied ? <Check size={16} /> : <Copy size={16} />}
               {copied ? "Copiato" : "Copia"}
             </button>

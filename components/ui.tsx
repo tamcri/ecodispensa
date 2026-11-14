@@ -2,7 +2,25 @@ import React, { useEffect, useRef, useState } from "react";
 import { Camera, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import { getCategoryTheme, getInitial } from "../constants";
 
-/** Titolo grande in cima a ogni schermata */
+/** Iniziale dell'utente e apertura del Profilo: ogni intestazione mostra lo stesso pulsante a destra */
+export const ProfileButtonContext = React.createContext<{ initial: string; open: () => void } | null>(null);
+
+export const ProfileButton = () => {
+  const ctx = React.useContext(ProfileButtonContext);
+  if (!ctx) return null;
+  return (
+    <button
+      type="button"
+      onClick={ctx.open}
+      aria-label="Profilo e impostazioni"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 font-display text-lg font-extrabold text-white active:scale-95"
+    >
+      {ctx.initial}
+    </button>
+  );
+};
+
+/** Intestazione uguale in tutte le schermate: titolo a sinistra, iniziale per il Profilo a destra */
 export const ScreenHeader = ({
   title,
   subtitle,
@@ -12,12 +30,15 @@ export const ScreenHeader = ({
   subtitle?: React.ReactNode;
   right?: React.ReactNode;
 }) => (
-  <div className="flex items-end justify-between gap-3">
+  <div className="flex items-start justify-between gap-3">
     <div className="min-w-0">
-      <h1 className="font-display text-[34px] leading-none font-extrabold tracking-tight text-ink">{title}</h1>
-      {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
+      <h1 className="font-display text-[30px] font-extrabold leading-[1.05] tracking-tight text-ink">{title}</h1>
+      {subtitle && <div className="mt-1 text-[13px] text-muted">{subtitle}</div>}
     </div>
-    {right && <div className="flex shrink-0 items-center gap-2">{right}</div>}
+    <div className="flex shrink-0 items-center gap-2">
+      {right}
+      <ProfileButton />
+    </div>
   </div>
 );
 
@@ -289,7 +310,7 @@ export const CameraCapture = ({
         <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center text-white">
-          <Camera size={40} className="text-lemon" />
+          <Camera size={40} className="text-honey" />
           <p className="text-base">Non riesco ad aprire la fotocamera qui. Puoi scegliere una foto o scattarla dall'app Fotocamera.</p>
           <button
             type="button"
@@ -407,7 +428,7 @@ export const CreditsBadge = ({
     type="button"
     onClick={onClick}
     className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold ${
-      dark ? "bg-ink text-lemon" : "bg-lemon text-ink"
+      dark ? "bg-forest text-honey" : "bg-honey text-[#4A3A08]"
     }`}
     title="Crediti EcoChef"
   >
@@ -504,7 +525,7 @@ export const QuantityInput = ({
             aria-checked={unit === u}
             onClick={() => onUnitChange(u)}
             className={`h-9 rounded-xl text-sm font-bold transition-colors ${
-              unit === u ? "bg-ink text-white" : "bg-white text-ink ring-1 ring-black/5"
+              unit === u ? "bg-forest text-white" : "bg-white text-ink ring-1 ring-black/5"
             }`}
           >
             {u}
