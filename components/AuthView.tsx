@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Bell, ChevronLeft, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { resetPasswordWithCode } from "../services/account";
 
@@ -103,77 +103,55 @@ export default function AuthView() {
     setStep("form");
   };
 
-  const benefits = ["Avvisi prima che scada", "Ricette con ciò che hai", "Spesa senza doppioni"];
-
   const shell =
     "mx-auto flex min-h-screen max-w-md flex-col gap-5 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]";
 
-  const brand = (
-    <div className="flex items-center gap-2.5">
-      <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
-      <span className="font-display text-xl font-extrabold tracking-tight text-ink">EcoDispensa</span>
-    </div>
-  );
-
-  // ---------- Benvenuto: cosa fa l'app, poi due pulsanti ----------
+  // ---------- Benvenuto: nome in alto, foto della famiglia, testo e pulsanti sotto (mai sopra la foto) ----------
   if (step === "welcome") {
     return (
-      <div className={`${shell} bg-[#F7EBD3]`}>
-        {brand}
+      <div className="mx-auto flex min-h-screen max-w-md flex-col bg-[#F7EBD3] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <h1 className="px-5 pb-3 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))] text-center font-display text-[36px] font-extrabold leading-none tracking-tight">
+          <span className="text-[#6F8F66]">Eco</span>
+          <span className="text-[#2F4A2C]">Dispensa</span>
+        </h1>
 
         <div className="relative">
           <img
-            src="/brand/benvenuto.jpg"
-            alt="Un barattolo di pasta con una fascia verde e un cuore: il cibo di casa, conservato con cura"
-            className="aspect-square max-h-[42vh] w-full rounded-4xl object-cover"
+            src="/brand/benvenuto-famiglia.jpg"
+            alt="Una famiglia sorridente cucina insieme con gli ingredienti che ha in casa"
+            className="block aspect-[768/812] max-h-[46vh] w-full object-cover object-[center_37%]"
           />
-          <div
-            className="absolute bottom-3 left-3 flex items-center gap-2.5 rounded-2xl bg-white/95 px-3 py-2 text-ink shadow-[0_8px_20px_rgba(23,32,26,0.12)]"
-            aria-hidden="true"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-peach text-[#9A3412]">
-              <Bell size={16} />
-            </span>
-            <span className="text-[13px] leading-tight">
-              <span className="block font-bold">Il latte scade domani</span>
-              <span className="text-muted">Idea: una frittata morbida</span>
-            </span>
+          {/* sfumatura leggera solo sul bordo basso: nessun testo sopra la foto */}
+          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#F7EBD3] to-transparent" />
+        </div>
+
+        <div className="flex flex-1 flex-col justify-end gap-4 px-5 pt-4">
+          <div className="flex flex-col gap-2">
+            <h2 className="font-display text-[29px] font-extrabold leading-[1.06] tracking-tight text-ink [@media(max-height:700px)]:text-[25px]">
+              Compra meglio, cucina tutto, <span className="text-[#4F6B4A]">non sprecare niente.</span>
+            </h2>
+            <p className="text-[15px] leading-relaxed text-[#3D4840]">
+              Organizza la dispensa, ricevi avvisi sulle scadenze e trova ricette su misura.
+            </p>
           </div>
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <h1 className="font-display text-[32px] font-extrabold leading-[1.04] tracking-tight text-ink">
-            Il cibo che compri, finalmente tutto usato.
-          </h1>
-          <p className="text-[15px] leading-relaxed text-[#4A524C]">
-            Ti avviso prima che scada, ti propongo cosa cucinarci e al supermercato ti dico se ce l'hai già.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {benefits.map((b) => (
-            <span key={b} className="rounded-full bg-white/80 px-3 py-1.5 text-[13px] font-bold text-ink">
-              {b}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-auto flex flex-col gap-2.5 pt-2">
-          <button
-            type="button"
-            onClick={() => openForm("signup")}
-            className="h-[54px] w-full rounded-2xl bg-[#4F6B4A] text-[16px] font-bold text-white active:scale-[0.99]"
-          >
-            Inizia gratis
-          </button>
-          <button
-            type="button"
-            onClick={() => openForm("login")}
-            className="h-[54px] w-full rounded-2xl bg-white text-[16px] font-bold text-ink ring-1 ring-black/10 active:scale-[0.99]"
-          >
-            Ho già un account
-          </button>
-          <p className="text-center text-xs text-[#4A524C]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+          <div className="flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={() => openForm("signup")}
+              className="h-[54px] w-full rounded-2xl bg-[#4F6B4A] text-[16px] font-bold text-white shadow-[0_8px_20px_rgba(79,107,74,0.3)] active:scale-[0.99]"
+            >
+              Inizia gratis
+            </button>
+            <button
+              type="button"
+              onClick={() => openForm("login")}
+              className="h-[54px] w-full rounded-2xl bg-white text-[16px] font-bold text-ink ring-1 ring-black/10 active:scale-[0.99]"
+            >
+              Ho già un account
+            </button>
+            <p className="text-center text-xs text-[#3D4840]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+          </div>
         </div>
       </div>
     );
