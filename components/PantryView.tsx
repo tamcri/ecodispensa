@@ -1,15 +1,18 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
-import { Archive, CalendarClock, Camera, Check, Lightbulb, PenLine, Plus, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
-import { identifyItemFromImage, lookupBarcode, readExpiryFromImage } from '../services/api';
-import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet } from './ui';
+import { Archive, CalendarClock, Camera, Check, Lightbulb, Mic, PenLine, Plus, Receipt, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
+import { identifyItemFromImage, lookupBarcode, readExpiryFromImage, readShoppingItems } from '../services/api';
+import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet, fileToDataUrl } from './ui';
+import { BulkReviewSheet, BulkRow, VoiceSheet, toBulkRows } from './BulkAdd';
 import { findFoodGuide, guideSummary, suggestedExpiry, WHERE_LABEL } from '../foodGuide';
 import { Outcome } from '../services/household';
 
 interface PantryViewProps {
   items: PantryItem[];
   onAdd: (item: Omit<PantryItem, 'id' | 'addedAt'>) => void;
+  /** Tutta la spesa in una volta (scontrino o elenco a voce) */
+  onAddMany: (items: Array<Omit<PantryItem, 'id' | 'addedAt'>>) => Promise<boolean>;
   onUpdate: (id: string, updates: Partial<PantryItem>) => void;
   onRemove: (id: string, outcome?: Outcome | null) => void;
 }
@@ -47,7 +50,7 @@ const fieldClass =
   'h-12 w-full rounded-2xl border-0 bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 const labelClass = 'mb-1.5 block text-xs font-bold text-muted';
 
-export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, onRemove }) => {
+export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany, onUpdate, onRemove }) => {
   const [filterCategory, setFilterCategory] = useState<Category | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
 
@@ -77,6 +80,86 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
   const [dateCameraFor, setDateCameraFor] = useState<'add' | 'edit' | null>(null);
   const [dateNotice, setDateNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [onlyMissing, setOnlyMissing] = useState(false);
+
+  // --- Tutta la spesa in un colpo: scontrino o elenco a voce ---
+  const receiptRef = useRef<HTMLInputElement>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
+  const [bulkSource, setBulkSource] = useState<'receipt' | 'voice'>('receipt');
+  const [bulkNotice, setBulkNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const openReceipt = () => {
+    setAddOpen(false);
+    setBulkNotice(null);
+    receiptRef.current?.click();
+  };
+  const openVoice = () => {
+    setAddOpen(false);
+    setBulkNotice(null);
+    setVoiceOpen(true);
+  };
+
+  const showRead = (read: Awaited<ReturnType<typeof readShoppingItems>>, source: 'receipt' | 'voice') => {
+    if (!read) {
+      setBulkNotice({ ok: false, text: 'Non sono riuscito a leggere la spesa. Controlla la connessione e riprova.' });
+      return;
+    }
+    if (read.length === 0) {
+      setBulkNotice({
+        ok: false,
+        text:
+          source === 'receipt'
+            ? 'Non trovo prodotti in questa foto: inquadra tutto lo scontrino, dritto e con buona luce.'
+            : 'Non ho trovato prodotti in quello che hai scritto: prova con un elenco, per esempio "latte, uova, mele".',
+      });
+      return;
+    }
+    setBulkSource(source);
+    setBulkRows(toBulkRows(read));
+  };
+
+  const onReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsAnalyzing('Leggo lo scontrino…');
+    try {
+      // più grande del solito: le righe dello scontrino sono piccole
+      const image = await fileToDataUrl(file, 2200);
+      if (!image) {
+        setBulkNotice({ ok: false, text: 'Non riesco ad aprire questa foto: riprova.' });
+        return;
+      }
+      showRead(await readShoppingItems({ image }), 'receipt');
+    } finally {
+      setIsAnalyzing(null);
+    }
+  };
+
+  const onVoiceText = async (text: string) => {
+    setVoiceOpen(false);
+    setIsAnalyzing('Metto in ordine la spesa…');
+    try {
+      showRead(await readShoppingItems({ text }), 'voice');
+    } finally {
+      setIsAnalyzing(null);
+    }
+  };
+
+  const confirmBulk = async (list: Array<Omit<PantryItem, 'id' | 'addedAt'>>) => {
+    setBulkRows(null);
+    setIsAnalyzing('Aggiungo in dispensa…');
+    try {
+      const ok = await onAddMany(list);
+      setBulkNotice(
+        ok
+          ? { ok: true, text: list.length === 1 ? 'Fatto: 1 prodotto aggiunto in dispensa.' : `Fatto: ${list.length} prodotti aggiunti in dispensa.` }
+          : { ok: false, text: 'Non sono riuscito a salvare i prodotti. Riprova tra poco.' }
+      );
+    } finally {
+      setIsAnalyzing(null);
+    }
+  };
 
   const guide = useMemo(() => findFoodGuide(form.name), [form.name]);
   const expiryIsEstimate =
@@ -451,6 +534,33 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
         </button>
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={openReceipt}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-bold text-ink ring-1 ring-black/5"
+        >
+          <Receipt size={19} className="text-emerald-700" /> Scontrino
+        </button>
+        <button
+          type="button"
+          onClick={openVoice}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-bold text-ink ring-1 ring-black/5"
+        >
+          <Mic size={19} className="text-emerald-700" /> A voce
+        </button>
+      </div>
+      <input ref={receiptRef} type="file" accept="image/*" className="hidden" onChange={onReceiptFile} aria-hidden="true" tabIndex={-1} />
+
+      {bulkNotice && (
+        <p
+          role="status"
+          className={`rounded-2xl px-4 py-3 text-sm font-semibold ${bulkNotice.ok ? 'bg-mint text-forest' : 'bg-peach text-[#8E3418]'}`}
+        >
+          {bulkNotice.text}
+        </p>
+      )}
+
       {items.length > 0 && (
         <>
 
@@ -503,7 +613,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
           </span>
           <p className="font-display text-xl font-bold text-ink">La dispensa è vuota</p>
           <p className="text-sm text-muted">
-            Scansiona il codice a barre delle confezioni, fotografa frutta e verdura o scrivi il nome: al resto penso io.
+            Fotografa lo scontrino o dimmi a voce cosa hai comprato: carico tutta la spesa in un colpo. Oppure scansiona i codici a barre uno per uno.
           </p>
         </div>
       ) : visible.length === 0 ? (
@@ -646,6 +756,22 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
               className="flex h-[78px] flex-col items-center justify-center gap-1.5 rounded-[18px] bg-mint text-[13px] font-bold text-forest ring-2 ring-emerald-600"
             >
               <PenLine size={22} /> Scrivo io
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={openReceipt}
+              className="flex h-12 items-center justify-center gap-2 rounded-[18px] bg-white text-[13px] font-bold text-ink ring-1 ring-black/5"
+            >
+              <Receipt size={19} /> Tutto lo scontrino
+            </button>
+            <button
+              type="button"
+              onClick={openVoice}
+              className="flex h-12 items-center justify-center gap-2 rounded-[18px] bg-white text-[13px] font-bold text-ink ring-1 ring-black/5"
+            >
+              <Mic size={19} /> Detta la spesa
             </button>
           </div>
           {notice && <p className="rounded-2xl bg-peach px-4 py-3 text-sm font-semibold text-[#8E3418]">{notice}</p>}
@@ -854,6 +980,14 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onUpdate, 
           if (t === 'add') setAddOpen(true);
         }}
         onCapture={handleDateCapture}
+      />
+      <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} onSubmit={onVoiceText} />
+      <BulkReviewSheet
+        rows={bulkRows}
+        source={bulkSource}
+        onChange={setBulkRows}
+        onClose={() => setBulkRows(null)}
+        onConfirm={confirmBulk}
       />
       <AnalyzingOverlay open={!!isAnalyzing} label={isAnalyzing ?? ''} />
     </div>

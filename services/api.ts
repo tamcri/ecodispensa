@@ -161,6 +161,30 @@ export async function readExpiryFromImage(
   }
 }
 
+export type ShoppingItemRead = {
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  storage: "fresh" | "packaged" | "long_life";
+  shelfDays: number;
+};
+
+/** Tutta la spesa da una foto dello scontrino o da un elenco scritto/detto a voce. null = errore. */
+export async function readShoppingItems(input: { image: string } | { text: string }): Promise<ShoppingItemRead[] | null> {
+  try {
+    const { ok, body } = await authFetch("/api/product", {
+      method: "POST",
+      body: JSON.stringify({ ...input, mode: "items" }),
+    });
+    if (!ok || !Array.isArray(body?.items)) return null;
+    return body.items as ShoppingItemRead[];
+  } catch (e) {
+    console.error("read shopping items error:", e);
+    return null;
+  }
+}
+
 /** Riduce la foto scattata dall'utente a max 1280px in jpeg, per caricarla velocemente. */
 async function resizeImage(file: File, maxSide = 1280): Promise<Blob> {
   const url = URL.createObjectURL(file);

@@ -131,7 +131,7 @@ function drawScaled(source: HTMLVideoElement | HTMLImageElement, w: number, h: n
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
-export async function fileToDataUrl(file: File): Promise<string | null> {
+export async function fileToDataUrl(file: File, maxSide = 1024): Promise<string | null> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -140,7 +140,7 @@ export async function fileToDataUrl(file: File): Promise<string | null> {
       el.onerror = reject;
       el.src = url;
     });
-    return drawScaled(img, img.naturalWidth, img.naturalHeight);
+    return drawScaled(img, img.naturalWidth, img.naturalHeight, maxSide);
   } catch {
     return null;
   } finally {
