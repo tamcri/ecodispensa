@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
 import { Archive, CalendarClock, Camera, Image as ImageIcon, Check, Lightbulb, Mic, PenLine, Plus, Receipt, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
-import { identifyItemFromImage, lookupBarcode, readExpiryFromImage, readShoppingItems } from '../services/api';
+import { fetchIsPremium, identifyItemFromImage, lookupBarcode, readExpiryFromImage, readShoppingItems } from '../services/api';
 import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet, fileToDataUrl } from './ui';
 import { BulkMeta, BulkReviewSheet, BulkRow, VoiceSheet, toBulkMeta, toBulkRows, todayIso } from './BulkAdd';
 import { GroceriesInput, centsToInput, parseEuroInput } from '../services/spending';
@@ -16,6 +16,8 @@ interface PantryViewProps {
   onAddGroceries: (input: GroceriesInput) => Promise<boolean>;
   /** Prezzo inserito dopo, dalla scheda del prodotto */
   onSetPrice: (id: string, priceCents: number | null) => void;
+  /** Apre i piani di abbonamento (la lettura dello scontrino è per gli abbonati) */
+  onOpenPlans: () => void;
   onUpdate: (id: string, updates: Partial<PantryItem>) => void;
   onRemove: (id: string, outcome?: Outcome | null) => void;
 }
@@ -53,7 +55,7 @@ const fieldClass =
   'h-12 w-full rounded-2xl border-0 bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 const labelClass = 'mb-1.5 block text-xs font-bold text-muted';
 
-export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroceries, onSetPrice, onUpdate, onRemove }) => {
+export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroceries, onSetPrice, onOpenPlans, onUpdate, onRemove }) => {
   const [filterCategory, setFilterCategory] = useState<Category | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
 
@@ -89,6 +91,11 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
   const receiptRef = useRef<HTMLInputElement>(null);
   const receiptCameraRef = useRef<HTMLInputElement>(null);
   const [receiptAsk, setReceiptAsk] = useState(false);
+  const [premium, setPremium] = useState<boolean | null>(null);
+  const [premiumAsk, setPremiumAsk] = useState(false);
+  useEffect(() => {
+    fetchIsPremium().then(setPremium);
+  }, []);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
   const [bulkMeta, setBulkMeta] = useState<BulkMeta>({ store: '', date: todayIso(), totalText: '' });
@@ -98,7 +105,8 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
   const openReceipt = () => {
     setAddOpen(false);
     setBulkNotice(null);
-    setReceiptAsk(true);
+    if (premium === false) setPremiumAsk(true);
+    else setReceiptAsk(true);
   };
   const pickReceipt = (from: 'camera' | 'gallery') => {
     setReceiptAsk(false);
@@ -111,6 +119,11 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
   };
 
   const showRead = (read: Awaited<ReturnType<typeof readShoppingItems>>, source: 'receipt' | 'voice') => {
+    if (read === 'PREMIUM_REQUIRED') {
+      setPremium(false);
+      setPremiumAsk(true);
+      return;
+    }
     if (!read) {
       setBulkNotice({ ok: false, text: 'Non sono riuscito a leggere la spesa. Controlla la connessione e riprova.' });
       return;
@@ -564,6 +577,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
           className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-bold text-ink ring-1 ring-black/5"
         >
           <Receipt size={19} className="text-emerald-700" /> Scontrino
+          {premium === false && <span className="rounded-full bg-honey px-2 py-0.5 text-[11px] font-bold text-[#6E5208]">Premium</span>}
         </button>
         <button
           type="button"
@@ -1031,6 +1045,50 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
         }}
         onCapture={handleDateCapture}
       />
+      <Sheet open={premiumAsk} onClose={() => setPremiumAsk(false)} title="Lo scontrino con l'abbonamento">
+        <div className="flex flex-col gap-4 pb-2">
+          <div className="rounded-3xl bg-forest p-5 text-white">
+            <p className="flex items-center gap-2 font-display text-xl font-extrabold text-honey">
+              <Receipt size={22} /> Tutta la spesa con una foto
+            </p>
+            <ul className="mt-3 flex flex-col gap-2 text-[14px] leading-snug text-[#E3EBDB]">
+              <li className="flex gap-2">
+                <Check size={18} className="mt-0.5 shrink-0 text-honey" /> Fotografi lo scontrino e tutti i prodotti entrano in dispensa, con le scadenze stimate
+              </li>
+              <li className="flex gap-2">
+                <Check size={18} className="mt-0.5 shrink-0 text-honey" /> Prezzi, negozio e totale letti da soli: sai quanto spendi e quanto butti
+              </li>
+              <li className="flex gap-2">
+                <Check size={18} className="mt-0.5 shrink-0 text-honey" /> In più 25 crediti EcoChef ogni mese per ricette e menu
+              </li>
+            </ul>
+          </div>
+          <p className="px-1 text-center text-[13px] text-muted">
+            È inclusa negli abbonamenti mensile e annuale. La spesa a voce resta gratuita per tutti.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setPremiumAsk(false);
+              onOpenPlans();
+            }}
+            className="h-[52px] rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
+          >
+            Scopri i piani
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPremiumAsk(false);
+              setVoiceOpen(true);
+            }}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-bold text-ink ring-1 ring-black/5"
+          >
+            <Mic size={18} /> Intanto detta la spesa a voce
+          </button>
+        </div>
+      </Sheet>
+
       <Sheet open={receiptAsk} onClose={() => setReceiptAsk(false)} title="Scontrino">
         <div className="flex flex-col gap-3 pb-2">
           <button

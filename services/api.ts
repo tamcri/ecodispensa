@@ -161,6 +161,19 @@ export async function readExpiryFromImage(
   }
 }
 
+/** Abbonamento mensile o annuale attivo (anche con un codice di attivazione) */
+export async function fetchIsPremium(): Promise<boolean> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) return false;
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("plan_type, premium_until")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+  const until = data?.premium_until ? new Date(String(data.premium_until)) : null;
+  return data?.plan_type === "premium" && until !== null && !Number.isNaN(until.getTime()) && until.getTime() > Date.now();
+}
+
 export type ShoppingItemRead = {
   name: string;
   category: string;
@@ -175,12 +188,15 @@ export type ShoppingItemRead = {
 export type ShoppingRead = { store: string; date: string; total: number | null; items: ShoppingItemRead[] };
 
 /** Tutta la spesa da una foto dello scontrino o da un elenco scritto/detto a voce. null = errore. */
-export async function readShoppingItems(input: { image: string } | { text: string }): Promise<ShoppingRead | null> {
+export async function readShoppingItems(
+  input: { image: string } | { text: string }
+): Promise<ShoppingRead | "PREMIUM_REQUIRED" | null> {
   try {
     const { ok, body } = await authFetch("/api/product", {
       method: "POST",
       body: JSON.stringify({ ...input, mode: "items" }),
     });
+    if (body?.error === "PREMIUM_REQUIRED") return "PREMIUM_REQUIRED";
     if (!ok || !Array.isArray(body?.items)) return null;
     return {
       store: typeof body.store === "string" ? body.store : "",

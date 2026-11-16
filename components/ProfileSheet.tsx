@@ -210,6 +210,8 @@ export type ProfileSheetProps = {
   pushActive?: boolean;
   onHouseholdChanged?: () => void;
   onLogout: () => Promise<void>;
+  /** Pagina da aprire subito (es. "piano" dal pulsante Premium dello scontrino) */
+  initialPage?: Page;
 };
 
 export const ProfileSheet: React.FC<ProfileSheetProps> = ({
@@ -221,6 +223,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   pushActive = false,
   onHouseholdChanged,
   onLogout,
+  initialPage,
 }) => {
   const [page, setPage] = useState<Page>("home");
 
@@ -558,7 +561,9 @@ const startCheckout = async (productCode: string, quantity?: number) => {
   };
 
   useEffect(() => {
-    if (open) setPage("home");
+    if (!open) return;
+    setPage(initialPage ?? "home");
+    if (initialPage === "piano") setShowBillingPanel(true);
   }, [open]);
 
   useEffect(() => {

@@ -7,7 +7,7 @@
  * Un'unica funzione per restare nel limite di funzioni del piano Vercel gratuito.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getUserClient, responseText } from "./_lib/openai.js";
+import { getUserClient, isPremiumActive, responseText } from "./_lib/openai.js";
 
 const CATEGORIES = ["Ortofrutta", "Latticini", "Carne & Pesce", "Dispensa", "Surgelati", "Casa", "Altro"];
 const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB di jpeg in base64
@@ -301,6 +301,8 @@ async function itemsHandler(req: VercelRequest, res: VercelResponse) {
     if (image) {
       if (!image.startsWith("data:image/")) return res.status(400).json({ error: "Bad image" });
       if (image.length > MAX_IMAGE_CHARS) return res.status(413).json({ error: "Image too large" });
+      // la lettura dello scontrino è inclusa negli abbonamenti (la voce resta per tutti)
+      if (!(await isPremiumActive(auth.supabase, auth.userId))) return res.status(402).json({ error: "PREMIUM_REQUIRED" });
     } else if (text.length < 2) {
       return res.status(400).json({ error: "Missing image or text" });
     }
