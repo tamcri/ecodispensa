@@ -2,6 +2,7 @@
  * Prodotti:
  *  - POST /api/product            { image }  → riconosce il prodotto da una foto (OpenAI)
  *  - POST /api/product            { image, mode: "date" } → legge la data di scadenza stampata
+ *  - POST /api/product            { image | text, mode: "items" } → tutta la spesa da uno scontrino o da un elenco detto a voce
  *  - GET  /api/product?code=EAN              → cerca il codice a barre su Open Food Facts
  * Un'unica funzione per restare nel limite di funzioni del piano Vercel gratuito.
  */
@@ -275,8 +276,131 @@ Ignora date di produzione, confezionamento e lotti (es. "PROD.", "CONF.", "L.").
   }
 }
 
+const MAX_TEXT_CHARS = 2000;
+const MAX_ITEMS = 60;
+
+/**
+ * Tutta la spesa in un colpo: dalla foto dello scontrino (anche la schermata di uno scontrino digitale)
+ * oppure da un elenco scritto o detto a voce ("ho comprato latte, sei uova e un chilo di mele").
+ * Non consuma crediti: serve a riempire la dispensa.
+ */
+async function itemsHandler(req: VercelRequest, res: VercelResponse) {
+  try {
+    const auth = await getUserClient(req);
+    if ("error" in auth) return res.status(auth.status).json({ error: auth.error });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+
+    const image = typeof req.body?.image === "string" ? req.body.image : "";
+    const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, MAX_TEXT_CHARS) : "";
+    if (image) {
+      if (!image.startsWith("data:image/")) return res.status(400).json({ error: "Bad image" });
+      if (image.length > MAX_IMAGE_CHARS) return res.status(413).json({ error: "Image too large" });
+    } else if (text.length < 2) {
+      return res.status(400).json({ error: "Missing image or text" });
+    }
+
+    const rules = `Per ogni prodotto alimentare o per la casa rispondi con:
+- name: nome chiaro in italiano, con la maiuscola iniziale (es. "Latte parzialmente scremato", "Mozzarella fior di latte", "Banane"). Niente marche se non servono a capire il prodotto.
+- category: una tra ${CATEGORIES.join(", ")}.
+- quantity: numero di pezzi o confezioni (es. "x3" o "3 vasetti" → 3); per i prodotti al peso il peso; 1 se non è chiaro.
+- unit: "pz" per pezzi e confezioni, "kg" o "g" per i prodotti al peso, "l" per i liquidi sfusi.
+- storage: "fresh" per frutta, verdura, pane, carne, pesce e gastronomia senza data stampata; "packaged" per i confezionati con una data stampata (latte, yogurt, formaggi, salumi, uova, pasta fresca); "long_life" per pasta secca, riso, farina, scatolame, olio, sale, caffè, biscotti, bevande a lunga conservazione e prodotti per la casa.
+- shelfDays: giorni di conservazione tipici dall'acquisto, conservato come si deve (es. banane 5, latte fresco 6, yogurt 20, mozzarella 5, uova 21); 0 per "long_life".
+Unisci le righe uguali sommando le quantità. Al massimo ${MAX_ITEMS} prodotti. Non inventare prodotti che non ci sono.`;
+
+    const prompt = image
+      ? `Nella foto c'è lo scontrino di un supermercato italiano, oppure la schermata di uno scontrino digitale.
+Elenca i prodotti acquistati. Gli scontrini abbreviano i nomi (es. "LATTE PS UHT 1L", "MOZZ.FIORDIL.125G", "BANANE KG 1,234"): traducili in nomi chiari.
+Ignora totali, subtotali, sconti, resto, pagamenti, IVA, buste e shopper, punti e carte fedeltà, depositi e righe di servizio.
+Se la foto non è uno scontrino ma una spesa appoggiata sul tavolo, elenca i prodotti che vedi.
+${rules}`
+      : `L'utente ha scritto o dettato a voce cosa ha comprato: «${text.replace(/[«»]/g, "")}».
+Elenca i prodotti. Capisci i numeri scritti a parole ("sei uova" → 6 pz, "un chilo di mele" → 1 kg, "mezzo chilo" → 0.5 kg, "un litro di latte" → 1 pz).
+Ignora le parole che non sono prodotti ("ho comprato", "poi", "e anche").
+${rules}`;
+
+    const content: any[] = [{ type: "input_text", text: prompt }];
+    if (image) content.push({ type: "input_image", image_url: image, detail: "high" });
+
+    const model = image
+      ? process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini"
+      : process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [{ role: "user", content }],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "shopping_items",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["items"],
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["name", "category", "quantity", "unit", "storage", "shelfDays"],
+                    properties: {
+                      name: { type: "string" },
+                      category: { type: "string", enum: CATEGORIES },
+                      quantity: { type: "number" },
+                      unit: { type: "string", enum: ["pz", "kg", "g", "l"] },
+                      storage: { type: "string", enum: ["fresh", "packaged", "long_life"] },
+                      shelfDays: { type: "number" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) {
+      console.error("OpenAI items error:", data?.error?.message ?? r.status);
+      return res.status(502).json({ error: "READ_FAILED" });
+    }
+
+    let out: any = null;
+    try {
+      out = JSON.parse(responseText(data));
+    } catch {
+      out = null;
+    }
+    const items = (Array.isArray(out?.items) ? out.items : [])
+      .filter((i: any) => typeof i?.name === "string" && i.name.trim().length >= 2)
+      .slice(0, MAX_ITEMS)
+      .map((i: any) => ({
+        name: i.name.trim().slice(0, 80),
+        category: CATEGORIES.includes(i.category) ? i.category : "Altro",
+        quantity: Number.isFinite(i.quantity) && i.quantity > 0 ? Math.round(i.quantity * 1000) / 1000 : 1,
+        unit: ["pz", "kg", "g", "l"].includes(i.unit) ? i.unit : "pz",
+        storage: ["fresh", "packaged", "long_life"].includes(i.storage) ? i.storage : "packaged",
+        shelfDays: Number.isFinite(i.shelfDays) ? Math.max(0, Math.min(730, Math.round(i.shelfDays))) : 0,
+      }));
+
+    return res.status(200).json({ items });
+  } catch (e: any) {
+    console.error("items error:", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST" && req.body?.mode === "date") return readDateHandler(req, res);
+  if (req.method === "POST" && req.body?.mode === "items") return itemsHandler(req, res);
   if (req.method === "POST") return identifyHandler(req, res);
   if (req.method === "GET") return barcodeHandler(req, res);
   return res.status(405).json({ error: "Method not allowed" });

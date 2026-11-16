@@ -285,6 +285,29 @@ const App = () => {
     await loadPantryFromSupabase();
   };
 
+  /** Tutta la spesa in una volta (scontrino o elenco a voce): un solo salvataggio */
+  const addPantryItemsBulk = async (items: Array<Omit<PantryItem, "id" | "addedAt">>): Promise<boolean> => {
+    if (items.length === 0) return true;
+    const { error } = await supabase.from("pantry_items").insert(
+      items.map((item) => ({
+        user_id: session.user.id,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        expiry_date: item.expiryDate ?? null,
+        category: item.category,
+        barcode: item.barcode ?? null,
+        long_life: !!item.longLife,
+      }))
+    );
+    if (error) {
+      console.error("Supabase pantry bulk insert error:", error);
+      return false;
+    }
+    await loadPantryFromSupabase();
+    return true;
+  };
+
   const updatePantryItem = async (id: string, updates: Partial<PantryItem>) => {
     setPantryItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
 
@@ -803,7 +826,7 @@ const App = () => {
           />
         )}
         {view === "pantry" && (
-          <PantryView items={pantryItems} onAdd={addPantryItem} onUpdate={updatePantryItem} onRemove={removePantryItem} />
+          <PantryView items={pantryItems} onAdd={addPantryItem} onAddMany={addPantryItemsBulk} onUpdate={updatePantryItem} onRemove={removePantryItem} />
         )}
         {view === "shopping" && (
           <ShoppingListView
