@@ -168,17 +168,26 @@ export type ShoppingItemRead = {
   unit: string;
   storage: "fresh" | "packaged" | "long_life";
   shelfDays: number;
+  /** prezzo della riga in euro, null se non c'è */
+  price: number | null;
 };
 
+export type ShoppingRead = { store: string; date: string; total: number | null; items: ShoppingItemRead[] };
+
 /** Tutta la spesa da una foto dello scontrino o da un elenco scritto/detto a voce. null = errore. */
-export async function readShoppingItems(input: { image: string } | { text: string }): Promise<ShoppingItemRead[] | null> {
+export async function readShoppingItems(input: { image: string } | { text: string }): Promise<ShoppingRead | null> {
   try {
     const { ok, body } = await authFetch("/api/product", {
       method: "POST",
       body: JSON.stringify({ ...input, mode: "items" }),
     });
     if (!ok || !Array.isArray(body?.items)) return null;
-    return body.items as ShoppingItemRead[];
+    return {
+      store: typeof body.store === "string" ? body.store : "",
+      date: typeof body.date === "string" ? body.date : "",
+      total: typeof body.total === "number" ? body.total : null,
+      items: body.items as ShoppingItemRead[],
+    };
   } catch (e) {
     console.error("read shopping items error:", e);
     return null;

@@ -4,15 +4,18 @@ import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme
 import { Archive, CalendarClock, Camera, Image as ImageIcon, Check, Lightbulb, Mic, PenLine, Plus, Receipt, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
 import { identifyItemFromImage, lookupBarcode, readExpiryFromImage, readShoppingItems } from '../services/api';
 import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet, fileToDataUrl } from './ui';
-import { BulkReviewSheet, BulkRow, VoiceSheet, toBulkRows } from './BulkAdd';
+import { BulkMeta, BulkReviewSheet, BulkRow, VoiceSheet, toBulkMeta, toBulkRows, todayIso } from './BulkAdd';
+import { GroceriesInput, centsToInput, parseEuroInput } from '../services/spending';
 import { findFoodGuide, guideSummary, suggestedExpiry, WHERE_LABEL } from '../foodGuide';
 import { Outcome } from '../services/household';
 
 interface PantryViewProps {
   items: PantryItem[];
   onAdd: (item: Omit<PantryItem, 'id' | 'addedAt'>) => void;
-  /** Tutta la spesa in una volta (scontrino o elenco a voce) */
-  onAddMany: (items: Array<Omit<PantryItem, 'id' | 'addedAt'>>) => Promise<boolean>;
+  /** Tutta la spesa in una volta (scontrino o elenco a voce), con prezzi, negozio e totale */
+  onAddGroceries: (input: GroceriesInput) => Promise<boolean>;
+  /** Prezzo inserito dopo, dalla scheda del prodotto */
+  onSetPrice: (id: string, priceCents: number | null) => void;
   onUpdate: (id: string, updates: Partial<PantryItem>) => void;
   onRemove: (id: string, outcome?: Outcome | null) => void;
 }
@@ -50,7 +53,7 @@ const fieldClass =
   'h-12 w-full rounded-2xl border-0 bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 const labelClass = 'mb-1.5 block text-xs font-bold text-muted';
 
-export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany, onUpdate, onRemove }) => {
+export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroceries, onSetPrice, onUpdate, onRemove }) => {
   const [filterCategory, setFilterCategory] = useState<Category | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
 
@@ -63,6 +66,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
 
   const [editing, setEditing] = useState<PantryItem | null>(null);
   const [editForm, setEditForm] = useState<FormState>(emptyForm);
+  const [editPrice, setEditPrice] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const [showCamera, setShowCamera] = useState(false);
@@ -87,6 +91,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
   const [receiptAsk, setReceiptAsk] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
+  const [bulkMeta, setBulkMeta] = useState<BulkMeta>({ store: '', date: todayIso(), totalText: '' });
   const [bulkSource, setBulkSource] = useState<'receipt' | 'voice'>('receipt');
   const [bulkNotice, setBulkNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -110,7 +115,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
       setBulkNotice({ ok: false, text: 'Non sono riuscito a leggere la spesa. Controlla la connessione e riprova.' });
       return;
     }
-    if (read.length === 0) {
+    if (read.items.length === 0) {
       setBulkNotice({
         ok: false,
         text:
@@ -121,7 +126,8 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
       return;
     }
     setBulkSource(source);
-    setBulkRows(toBulkRows(read));
+    setBulkMeta(toBulkMeta(read));
+    setBulkRows(toBulkRows(read.items));
   };
 
   const onReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,14 +158,21 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
     }
   };
 
-  const confirmBulk = async (list: Array<Omit<PantryItem, 'id' | 'addedAt'>>) => {
+  const confirmBulk = async (input: GroceriesInput) => {
     setBulkRows(null);
     setIsAnalyzing('Aggiungo in dispensa…');
     try {
-      const ok = await onAddMany(list);
+      const ok = await onAddGroceries(input);
+      const n = input.items.length;
+      const priced = input.items.some((i) => i.priceCents !== null) || input.totalCents !== null;
       setBulkNotice(
         ok
-          ? { ok: true, text: list.length === 1 ? 'Fatto: 1 prodotto aggiunto in dispensa.' : `Fatto: ${list.length} prodotti aggiunti in dispensa.` }
+          ? {
+              ok: true,
+              text: `Fatto: ${n === 1 ? '1 prodotto aggiunto' : `${n} prodotti aggiunti`} in dispensa.${
+                priced ? ' La spesa è nelle tue spese, in Home.' : ''
+              }`,
+            }
           : { ok: false, text: 'Non sono riuscito a salvare i prodotti. Riprova tra poco.' }
       );
     } finally {
@@ -244,12 +257,16 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
       expiryDate: item.expiryDate ?? '',
       longLife: !!item.longLife,
     });
+    setEditPrice(centsToInput(item.priceCents));
     setDateNotice(null);
   };
 
   const saveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    const price = parseEuroInput(editPrice);
+    if (price === undefined) return;
+    if (price !== (editing.priceCents ?? null)) onSetPrice(editing.id, price);
     onUpdate(editing.id, {
       quantity: editForm.quantity,
       unit: editForm.unit,
@@ -970,6 +987,23 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
                 })}
               {dateNoticeBox}
             </div>
+            <div>
+              <label className={labelClass} htmlFor="edit-price">
+                Prezzo pagato (€) <span className="font-semibold">· facoltativo, per sapere quanto spendi</span>
+              </label>
+              <input
+                id="edit-price"
+                type="text"
+                inputMode="decimal"
+                placeholder="Es. 1,29"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                className={`${fieldClass} ${parseEuroInput(editPrice) === undefined ? 'ring-2 ring-[#C2502A]' : ''}`}
+              />
+              {parseEuroInput(editPrice) === undefined && (
+                <p className="mt-1.5 text-xs text-[#8E3418]">Scrivi il prezzo così: 1,29</p>
+              )}
+            </div>
           </div>
           {editGuide && (
             <div className="flex gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-black/5">
@@ -1022,8 +1056,10 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
       <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} onSubmit={onVoiceText} />
       <BulkReviewSheet
         rows={bulkRows}
+        meta={bulkMeta}
         source={bulkSource}
         onChange={setBulkRows}
+        onMetaChange={setBulkMeta}
         onClose={() => setBulkRows(null)}
         onConfirm={confirmBulk}
       />

@@ -19,6 +19,9 @@ export interface PantryItem {
   barcode?: string | null;
   /** Lunga conservazione: nessuna scadenza da inserire (sale, olio, spezie…) */
   longLife?: boolean;
+  /** Prezzo pagato (centesimi) per la quantità comprata `priceQty` */
+  priceCents?: number | null;
+  priceQty?: number | null;
 }
 
 export interface ShoppingItem {

@@ -66,7 +66,15 @@ export async function renameHousehold(id: string, name: string) {
 export type Outcome = "consumed" | "wasted";
 
 export async function logPantryEvents(
-  rows: Array<{ name: string; category?: string | null; quantity?: number | null; unit?: string | null; outcome: Outcome }>
+  rows: Array<{
+    name: string;
+    category?: string | null;
+    quantity?: number | null;
+    unit?: string | null;
+    outcome: Outcome;
+    /** valore in centesimi di quello che è stato usato o buttato, se si conosce il prezzo */
+    valueCents?: number | null;
+  }>
 ) {
   if (!rows.length) return;
   const { error } = await supabase.from("pantry_events").insert(
@@ -76,6 +84,7 @@ export async function logPantryEvents(
       quantity: r.quantity ?? null,
       unit: r.unit ?? null,
       outcome: r.outcome,
+      value_cents: r.valueCents ?? null,
     }))
   );
   if (error) console.error("pantry_events insert error:", error);
