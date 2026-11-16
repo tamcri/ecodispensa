@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { PantryItem, Category } from '../types';
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS, getCategoryTheme } from '../constants';
-import { Archive, CalendarClock, Camera, Check, Lightbulb, Mic, PenLine, Plus, Receipt, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
+import { Archive, CalendarClock, Camera, Image as ImageIcon, Check, Lightbulb, Mic, PenLine, Plus, Receipt, ScanBarcode, ScanText, Search, Trash2 } from 'lucide-react';
 import { identifyItemFromImage, lookupBarcode, readExpiryFromImage, readShoppingItems } from '../services/api';
 import { AnalyzingOverlay, CameraCapture, CameraMode, Monogram, QuantityInput, ScreenHeader, Sheet, fileToDataUrl } from './ui';
 import { BulkReviewSheet, BulkRow, VoiceSheet, toBulkRows } from './BulkAdd';
@@ -83,6 +83,8 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
 
   // --- Tutta la spesa in un colpo: scontrino o elenco a voce ---
   const receiptRef = useRef<HTMLInputElement>(null);
+  const receiptCameraRef = useRef<HTMLInputElement>(null);
+  const [receiptAsk, setReceiptAsk] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
   const [bulkSource, setBulkSource] = useState<'receipt' | 'voice'>('receipt');
@@ -91,7 +93,11 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
   const openReceipt = () => {
     setAddOpen(false);
     setBulkNotice(null);
-    receiptRef.current?.click();
+    setReceiptAsk(true);
+  };
+  const pickReceipt = (from: 'camera' | 'gallery') => {
+    setReceiptAsk(false);
+    (from === 'camera' ? receiptCameraRef : receiptRef).current?.click();
   };
   const openVoice = () => {
     setAddOpen(false);
@@ -551,6 +557,16 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
         </button>
       </div>
       <input ref={receiptRef} type="file" accept="image/*" className="hidden" onChange={onReceiptFile} aria-hidden="true" tabIndex={-1} />
+      <input
+        ref={receiptCameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={onReceiptFile}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
 
       {bulkNotice && (
         <p
@@ -981,6 +997,28 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddMany,
         }}
         onCapture={handleDateCapture}
       />
+      <Sheet open={receiptAsk} onClose={() => setReceiptAsk(false)} title="Scontrino">
+        <div className="flex flex-col gap-3 pb-2">
+          <button
+            type="button"
+            onClick={() => pickReceipt('camera')}
+            className="flex h-14 items-center justify-center gap-2.5 rounded-2xl bg-emerald-600 text-[15px] font-bold text-white"
+          >
+            <Camera size={20} /> Scatta una foto
+          </button>
+          <button
+            type="button"
+            onClick={() => pickReceipt('gallery')}
+            className="flex h-14 items-center justify-center gap-2.5 rounded-2xl bg-white text-[15px] font-bold text-ink ring-1 ring-black/5"
+          >
+            <ImageIcon size={20} /> Scegli dalla galleria
+          </button>
+          <p className="px-1 text-center text-[13px] leading-snug text-muted">
+            Inquadra tutto lo scontrino, dritto e con buona luce. Dalla galleria puoi scegliere anche la schermata di uno
+            scontrino digitale.
+          </p>
+        </div>
+      </Sheet>
       <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} onSubmit={onVoiceText} />
       <BulkReviewSheet
         rows={bulkRows}
