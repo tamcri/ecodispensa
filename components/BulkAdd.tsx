@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Archive, Check, Mic, MicOff, Sparkles } from 'lucide-react';
-import { Category, PantryItem } from '../types';
-import { ShoppingItemRead } from '../services/api';
+import { Category } from '../types';
+import { ShoppingItemRead, ShoppingRead } from '../services/api';
+import { GroceriesInput, centsToInput, formatEuro, parseEuroInput } from '../services/spending';
 import { dateInDays, findFoodGuide, suggestedExpiry } from '../foodGuide';
 import { Sheet } from './ui';
 
@@ -15,7 +16,23 @@ export type BulkRow = {
   category: Category;
   expiryDate: string;
   longLife: boolean;
+  /** prezzo scritto dall'utente, es. "1,29" */
+  priceText: string;
 };
+
+/** Negozio, data e totale dello scontrino (modificabili prima di salvare) */
+export type BulkMeta = { store: string; date: string; totalText: string };
+
+export const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export const toBulkMeta = (read: ShoppingRead): BulkMeta => ({
+  store: read.store || '',
+  date: read.date || todayIso(),
+  totalText: read.total !== null ? centsToInput(Math.round(read.total * 100)) : '',
+});
 
 const CATEGORIES = Object.values(Category) as string[];
 
@@ -43,6 +60,7 @@ export function toBulkRows(read: ShoppingItemRead[]): BulkRow[] {
       category,
       expiryDate,
       longLife,
+      priceText: r.price !== null && r.price !== undefined ? centsToInput(Math.round(r.price * 100)) : '',
     };
   });
 }
@@ -55,33 +73,52 @@ const qtyLabel = (q: number, unit: string) => {
 /** Elenco da confermare: si tolgono i prodotti sbagliati, si correggono nomi e date, poi si aggiunge tutto. */
 export const BulkReviewSheet = ({
   rows,
+  meta,
   source,
   onChange,
+  onMetaChange,
   onClose,
   onConfirm,
 }: {
   rows: BulkRow[] | null;
+  meta: BulkMeta;
   source: 'receipt' | 'voice';
   onChange: (rows: BulkRow[]) => void;
+  onMetaChange: (meta: BulkMeta) => void;
   onClose: () => void;
-  onConfirm: (items: Array<Omit<PantryItem, 'id' | 'addedAt'>>) => void;
+  onConfirm: (input: GroceriesInput) => void;
 }) => {
   const list = rows ?? [];
   const selected = list.filter((r) => r.selected && r.name.trim());
   const update = (key: string, patch: Partial<BulkRow>) => onChange(list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  const confirm = () =>
-    onConfirm(
-      selected.map((r) => ({
+  const prices = selected.map((r) => parseEuroInput(r.priceText));
+  const badPrice = prices.some((p) => p === undefined) || parseEuroInput(meta.totalText) === undefined;
+  const sumCents = prices.reduce<number>((a, p) => a + (typeof p === 'number' ? p : 0), 0);
+  const pricedCount = prices.filter((p) => typeof p === 'number').length;
+  const totalCents = parseEuroInput(meta.totalText);
+
+  const confirm = () => {
+    if (badPrice) return;
+    onConfirm({
+      source,
+      store: meta.store.trim(),
+      date: meta.date || todayIso(),
+      totalCents: typeof totalCents === 'number' ? totalCents : null,
+      items: selected.map((r, i) => ({
         name: r.name.trim(),
         quantity: r.quantity,
         unit: r.unit,
         category: r.category,
         expiryDate: r.longLife ? undefined : r.expiryDate || undefined,
-        barcode: null,
         longLife: r.longLife,
-      }))
-    );
+        priceCents: typeof prices[i] === 'number' ? (prices[i] as number) : null,
+      })),
+    });
+  };
+
+  const smallField =
+    'h-10 w-full rounded-xl bg-white px-3 text-[14px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 
   return (
     <Sheet
@@ -92,7 +129,7 @@ export const BulkReviewSheet = ({
         <button
           type="button"
           onClick={confirm}
-          disabled={selected.length === 0}
+          disabled={selected.length === 0 || badPrice}
           className="h-[52px] w-full rounded-2xl bg-emerald-600 text-[15px] font-bold text-white disabled:opacity-40"
         >
           {selected.length === 1 ? 'Aggiungi 1 prodotto in dispensa' : `Aggiungi ${selected.length} prodotti in dispensa`}
@@ -104,7 +141,58 @@ export const BulkReviewSheet = ({
           {source === 'receipt' ? 'Controlla i nomi letti dallo scontrino. ' : ''}
           Le scadenze sono stimate: correggile qui o più tardi dalla dispensa. Per i confezionati vale la data stampata.
           Togli la spunta a quello che non vuoi aggiungere.
+          {source === 'voice' ? ' I prezzi sono facoltativi: servono a sapere quanto spendi.' : ''}
         </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2">
+            <label htmlFor="bulk-store" className="mb-1 block text-xs font-bold text-muted">
+              Negozio
+            </label>
+            <input
+              id="bulk-store"
+              type="text"
+              value={meta.store}
+              onChange={(e) => onMetaChange({ ...meta, store: e.target.value })}
+              placeholder="Es. Conad, Lidl, mercato…"
+              className={smallField}
+            />
+          </div>
+          <div>
+            <label htmlFor="bulk-date" className="mb-1 block text-xs font-bold text-muted">
+              Data della spesa
+            </label>
+            <input
+              id="bulk-date"
+              type="date"
+              value={meta.date}
+              onChange={(e) => onMetaChange({ ...meta, date: e.target.value })}
+              className={smallField}
+            />
+          </div>
+          <div>
+            <label htmlFor="bulk-total" className="mb-1 block text-xs font-bold text-muted">
+              {source === 'receipt' ? 'Totale scontrino (€)' : 'Totale (€), se lo sai'}
+            </label>
+            <input
+              id="bulk-total"
+              type="text"
+              inputMode="decimal"
+              value={meta.totalText}
+              onChange={(e) => onMetaChange({ ...meta, totalText: e.target.value })}
+              placeholder={pricedCount ? centsToInput(sumCents) : '0,00'}
+              className={`${smallField} ${parseEuroInput(meta.totalText) === undefined ? 'ring-2 ring-[#C2502A]' : ''}`}
+            />
+          </div>
+          {pricedCount > 0 && (
+            <p className="col-span-2 px-1 text-xs text-muted">
+              Somma dei prezzi dei prodotti spuntati: <b className="text-ink">{formatEuro(sumCents)}</b>
+              {typeof totalCents === 'number' && Math.abs(totalCents - sumCents) > 1
+                ? ' · la differenza col totale di solito sono sconti o buste'
+                : ''}
+            </p>
+          )}
+        </div>
 
         {list.map((r) => (
           <div
@@ -136,6 +224,23 @@ export const BulkReviewSheet = ({
               <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
                 <span>
                   {qtyLabel(r.quantity, r.unit)} · {r.category}
+                </span>
+                <label className="sr-only" htmlFor={`bulk-price-${r.key}`}>
+                  Prezzo di {r.name} in euro
+                </label>
+                <span className="flex items-center gap-1">
+                  <input
+                    id={`bulk-price-${r.key}`}
+                    type="text"
+                    inputMode="decimal"
+                    value={r.priceText}
+                    onChange={(e) => update(r.key, { priceText: e.target.value })}
+                    placeholder="prezzo"
+                    className={`h-9 w-[76px] rounded-xl bg-ground px-2.5 text-right text-[13px] text-ink outline-none focus:ring-2 focus:ring-emerald-500 ${
+                      parseEuroInput(r.priceText) === undefined ? 'ring-2 ring-[#C2502A]' : ''
+                    }`}
+                  />
+                  <span aria-hidden="true">€</span>
                 </span>
                 <span className="ml-auto">
                   {r.longLife ? (

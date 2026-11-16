@@ -15,6 +15,8 @@ import { ProfileButtonContext } from "./components/ui";
 import { isAdmin, redeemCode, redeemMessage, takePendingCode } from "./services/codes";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
+import { SpendingSheet } from "./components/SpendingSheet";
+import { addGroceries, GroceriesInput, setItemPrice, wastedValueCents } from "./services/spending";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
 import { dateInDays, nameMatchScore } from "./foodGuide";
 
@@ -60,6 +62,7 @@ const App = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [pushActive, setPushActive] = useState(false);
   const [statsVersion, setStatsVersion] = useState(0);
+  const [spendingOpen, setSpendingOpen] = useState(false);
 
   // ✅ Supabase session
   const [session, setSession] = useState<any>(null);
@@ -285,27 +288,21 @@ const App = () => {
     await loadPantryFromSupabase();
   };
 
-  /** Tutta la spesa in una volta (scontrino o elenco a voce): un solo salvataggio */
-  const addPantryItemsBulk = async (items: Array<Omit<PantryItem, "id" | "addedAt">>): Promise<boolean> => {
-    if (items.length === 0) return true;
-    const { error } = await supabase.from("pantry_items").insert(
-      items.map((item) => ({
-        user_id: session.user.id,
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        expiry_date: item.expiryDate ?? null,
-        category: item.category,
-        barcode: item.barcode ?? null,
-        long_life: !!item.longLife,
-      }))
-    );
-    if (error) {
-      console.error("Supabase pantry bulk insert error:", error);
-      return false;
-    }
+  /** Tutta la spesa in una volta (scontrino o elenco a voce): prodotti in dispensa e spesa registrata insieme */
+  const addGroceriesToPantry = async (input: GroceriesInput): Promise<boolean> => {
+    const ok = await addGroceries(input);
     await loadPantryFromSupabase();
-    return true;
+    if (ok) setStatsVersion((v) => v + 1);
+    return ok;
+  };
+
+  const setPantryItemPrice = async (id: string, priceCents: number | null) => {
+    setPantryItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, priceCents, priceQty: priceCents === null ? null : i.priceQty ?? i.quantity } : i))
+    );
+    const ok = await setItemPrice(id, priceCents);
+    if (!ok) await loadPantryFromSupabase();
+    else setStatsVersion((v) => v + 1);
   };
 
   const updatePantryItem = async (id: string, updates: Partial<PantryItem>) => {
@@ -349,7 +346,14 @@ const App = () => {
     }
     if (item && outcome) {
       await logPantryEvents([
-        { name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, outcome },
+        {
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+          outcome,
+          valueCents: wastedValueCents(item.priceCents, item.priceQty, item.quantity),
+        },
       ]);
       setStatsVersion((v) => v + 1);
     }
@@ -696,7 +700,7 @@ const App = () => {
   const loadPantryFromSupabase = async () => {
     const { data, error } = await supabase
       .from("pantry_items")
-      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode, long_life")
+      .select("id, name, quantity, unit, expiry_date, category, added_at, barcode, long_life, price_cents, price_qty")
       .order("added_at", { ascending: false });
 
     if (error) {
@@ -714,6 +718,8 @@ const App = () => {
       addedAt: r.added_at ? new Date(r.added_at).getTime() : Date.now(),
       barcode: r.barcode ?? null,
       longLife: !!r.long_life,
+      priceCents: r.price_cents ?? null,
+      priceQty: r.price_qty !== null && r.price_qty !== undefined ? Number(r.price_qty) : null,
     }));
 
     setPantryItems(items);
@@ -823,10 +829,11 @@ const App = () => {
             onResolveExpired={removePantryItem}
             onPostpone={(id, days) => updatePantryItem(id, { expiryDate: dateInDays(days) })}
             statsVersion={statsVersion}
+            onOpenSpending={() => setSpendingOpen(true)}
           />
         )}
         {view === "pantry" && (
-          <PantryView items={pantryItems} onAdd={addPantryItem} onAddMany={addPantryItemsBulk} onUpdate={updatePantryItem} onRemove={removePantryItem} />
+          <PantryView items={pantryItems} onAdd={addPantryItem} onAddGroceries={addGroceriesToPantry} onSetPrice={setPantryItemPrice} onUpdate={updatePantryItem} onRemove={removePantryItem} />
         )}
         {view === "shopping" && (
           <ShoppingListView
@@ -899,6 +906,8 @@ const App = () => {
           );
         })}
       </nav>
+
+      <SpendingSheet open={spendingOpen} onClose={() => setSpendingOpen(false)} onChanged={() => setStatsVersion((v) => v + 1)} />
 
       <ProfileSheet
         open={profileOpen}

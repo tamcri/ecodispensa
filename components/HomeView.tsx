@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChefHat, ChevronRight, Lightbulb, Plus } from "lucide-react";
+import { ChefHat, ChevronRight, Lightbulb, Plus, Wallet } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState } from "../types";
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS } from "../constants";
 import { Monogram, ProfileButton } from "./ui";
@@ -8,6 +8,7 @@ import { tintFor } from "./RecipePhoto";
 import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
 import { findFoodGuide } from "../foodGuide";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
+import { fetchSpending, formatEuro, Spending } from "../services/spending";
 
 interface HomeViewProps {
   pantryItems: PantryItem[];
@@ -20,6 +21,7 @@ interface HomeViewProps {
   onResolveExpired?: (id: string, outcome: Outcome) => void;
   onPostpone?: (id: string, days: number) => void;
   statsVersion?: number;
+  onOpenSpending?: () => void;
 }
 
 const greeting = () => {
@@ -45,7 +47,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onResolveExpired,
   onPostpone,
   statsVersion = 0,
+  onOpenSpending,
 }) => {
+  const [spending, setSpending] = useState<Spending | null>(null);
+  useEffect(() => {
+    fetchSpending().then(setSpending);
+  }, [statsVersion]);
   const [recipes, setRecipes] = useState<SavedRecipe[] | null>(null);
   const [stats, setStats] = useState<WasteStats | null>(null);
 
@@ -262,6 +269,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <span className="text-xs text-muted">da comprare</span>
         </button>
       </div>
+
+      {onOpenSpending && (
+        <button type="button" onClick={onOpenSpending} className="flex items-center gap-3 rounded-3xl bg-white p-4 text-left">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint text-forest">
+            <Wallet size={22} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-ink">Le mie spese</span>
+            <span className="block truncate text-[13px] text-muted">
+              {spending && (spending.month_total > 0 || spending.wasted_value > 0)
+                ? `${formatEuro(spending.month_total)} questo mese · buttati ${formatEuro(spending.wasted_value)}`
+                : "Fotografa lo scontrino per sapere quanto spendi"}
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-muted" />
+        </button>
+      )}
 
       {tip && (
         <section className="flex gap-3 rounded-3xl bg-honey p-4">

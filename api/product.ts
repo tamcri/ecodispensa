@@ -277,6 +277,10 @@ Ignora date di produzione, confezionamento e lotti (es. "PROD.", "CONF.", "L.").
 }
 
 const MAX_TEXT_CHARS = 2000;
+
+/** Prezzo in euro plausibile (arrotondato ai centesimi) oppure null */
+const euros = (v: any): number | null =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 100000 ? Math.round(v * 100) / 100 : null;
 const MAX_ITEMS = 60;
 
 /**
@@ -308,17 +312,20 @@ async function itemsHandler(req: VercelRequest, res: VercelResponse) {
 - unit: "pz" per pezzi e confezioni, "kg" o "g" per i prodotti al peso, "l" per i liquidi sfusi.
 - storage: "fresh" per frutta, verdura, pane, carne, pesce e gastronomia senza data stampata; "packaged" per i confezionati con una data stampata (latte, yogurt, formaggi, salumi, uova, pasta fresca); "long_life" per pasta secca, riso, farina, scatolame, olio, sale, caffè, biscotti, bevande a lunga conservazione e prodotti per la casa.
 - shelfDays: giorni di conservazione tipici dall'acquisto, conservato come si deve (es. banane 5, latte fresco 6, yogurt 20, mozzarella 5, uova 21); 0 per "long_life".
+- price: prezzo pagato in euro per quella riga (tutta la quantità), già tolti gli sconti che si riferiscono a quel prodotto; null se non c'è.
 Unisci le righe uguali sommando le quantità. Al massimo ${MAX_ITEMS} prodotti. Non inventare prodotti che non ci sono.`;
 
     const prompt = image
       ? `Nella foto c'è lo scontrino di un supermercato italiano, oppure la schermata di uno scontrino digitale.
 Elenca i prodotti acquistati. Gli scontrini abbreviano i nomi (es. "LATTE PS UHT 1L", "MOZZ.FIORDIL.125G", "BANANE KG 1,234"): traducili in nomi chiari.
 Ignora totali, subtotali, sconti, resto, pagamenti, IVA, buste e shopper, punti e carte fedeltà, depositi e righe di servizio.
-Se la foto non è uno scontrino ma una spesa appoggiata sul tavolo, elenca i prodotti che vedi.
+Se la foto non è uno scontrino ma una spesa appoggiata sul tavolo, elenca i prodotti che vedi (price null).
+Leggi anche: store = nome del negozio o della catena (es. "Conad", "Esselunga"), stringa vuota se non c'è; date = data dello scontrino in formato YYYY-MM-DD (le date italiane sono giorno/mese/anno), stringa vuota se non c'è; total = totale pagato in euro (la riga TOTALE o "IMPORTO PAGATO"), null se non c'è.
 ${rules}`
       : `L'utente ha scritto o dettato a voce cosa ha comprato: «${text.replace(/[«»]/g, "")}».
 Elenca i prodotti. Capisci i numeri scritti a parole ("sei uova" → 6 pz, "un chilo di mele" → 1 kg, "mezzo chilo" → 0.5 kg, "un litro di latte" → 1 pz).
 Ignora le parole che non sono prodotti ("ho comprato", "poi", "e anche").
+Se l'utente dice un prezzo ("latte 1 euro e 29", "mele 2,50"), mettilo in price; se dice dove ha comprato ("da Lidl"), mettilo in store. date stringa vuota, total null.
 ${rules}`;
 
     const content: any[] = [{ type: "input_text", text: prompt }];
@@ -342,14 +349,17 @@ ${rules}`;
             schema: {
               type: "object",
               additionalProperties: false,
-              required: ["items"],
+              required: ["store", "date", "total", "items"],
               properties: {
+                store: { type: "string" },
+                date: { type: "string" },
+                total: { type: ["number", "null"] },
                 items: {
                   type: "array",
                   items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["name", "category", "quantity", "unit", "storage", "shelfDays"],
+                    required: ["name", "category", "quantity", "unit", "storage", "shelfDays", "price"],
                     properties: {
                       name: { type: "string" },
                       category: { type: "string", enum: CATEGORIES },
@@ -357,6 +367,7 @@ ${rules}`;
                       unit: { type: "string", enum: ["pz", "kg", "g", "l"] },
                       storage: { type: "string", enum: ["fresh", "packaged", "long_life"] },
                       shelfDays: { type: "number" },
+                      price: { type: ["number", "null"] },
                     },
                   },
                 },
@@ -389,9 +400,17 @@ ${rules}`;
         unit: ["pz", "kg", "g", "l"].includes(i.unit) ? i.unit : "pz",
         storage: ["fresh", "packaged", "long_life"].includes(i.storage) ? i.storage : "packaged",
         shelfDays: Number.isFinite(i.shelfDays) ? Math.max(0, Math.min(730, Math.round(i.shelfDays))) : 0,
+        price: euros(i.price),
       }));
 
-    return res.status(200).json({ items });
+    const date = normalizeReadDate(String(out?.date ?? ""));
+    return res.status(200).json({
+      store: typeof out?.store === "string" ? out.store.trim().slice(0, 80) : "",
+      // la data dello scontrino non può essere nel futuro né troppo vecchia
+      date: date && date <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10) && Date.parse(date) > Date.now() - 400 * 86_400_000 ? date : "",
+      total: euros(out?.total),
+      items,
+    });
   } catch (e: any) {
     console.error("items error:", e);
     return res.status(500).json({ error: "Server error" });
