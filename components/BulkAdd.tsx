@@ -296,10 +296,16 @@ export const VoiceSheet = ({
   open,
   onClose,
   onSubmit,
+  title = 'Dimmi cosa hai comprato',
+  placeholder = 'Es. latte, sei uova, un chilo di mele, il pane e due vasetti di yogurt',
+  submitLabel = 'Trova i prodotti',
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (text: string) => void;
+  title?: string;
+  placeholder?: string;
+  submitLabel?: string;
 }) => {
   const [text, setText] = useState('');
   const [interim, setInterim] = useState('');
@@ -383,7 +389,7 @@ export const VoiceSheet = ({
         stop();
         onClose();
       }}
-      title="Dimmi cosa hai comprato"
+      title={title}
       footer={
         <button
           type="button"
@@ -394,7 +400,7 @@ export const VoiceSheet = ({
           }}
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-[15px] font-bold text-white disabled:opacity-40"
         >
-          <Sparkles size={18} /> Trova i prodotti
+          <Sparkles size={18} /> {submitLabel}
         </button>
       }
     >
@@ -429,7 +435,7 @@ export const VoiceSheet = ({
               if (!listening) setText(e.target.value);
             }}
             readOnly={listening}
-            placeholder="Es. latte, sei uova, un chilo di mele, il pane e due vasetti di yogurt"
+            placeholder={placeholder}
             className="w-full rounded-2xl bg-white p-4 text-[15px] leading-relaxed text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500"
           />
         </div>
