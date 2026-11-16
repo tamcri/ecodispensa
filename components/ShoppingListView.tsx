@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { ShoppingItem, Category, PantryItem } from '../types';
 import { daysUntil, expiryLabel, getCategoryTheme } from '../constants';
-import { Camera, Check, Info, Plus, Refrigerator, Trash2 } from 'lucide-react';
-import { identifyItemFromImage, lookupBarcode } from '../services/api';
+import { Camera, Check, Info, Mic, Plus, Refrigerator, Trash2 } from 'lucide-react';
+import { identifyItemFromImage, lookupBarcode, readShoppingItems } from '../services/api';
+import { VoiceSheet } from './BulkAdd';
 import { findFoodGuide, sameProduct, suggestedExpiry } from '../foodGuide';
 import { AnalyzingOverlay, CameraCapture, QuantityInput, ScreenHeader, Sheet } from './ui';
 
@@ -20,6 +21,8 @@ interface ShoppingListViewProps {
   onScanCheck?: (id: string, barcode: string | null) => void;
   onClearCompleted: () => void;
   onMoveToPantry: (itemsToAdd: Omit<PantryItem, 'id' | 'addedAt'>[], shoppingIdsToRemove: string[]) => void;
+  /** Più prodotti insieme (lista detta a voce); quelli già in lista vengono uniti */
+  onAddMany?: (items: Array<{ name: string; category: Category; quantity?: number | null; unit?: string | null }>) => Promise<void>;
 }
 
 type MoveRow = {
@@ -59,7 +62,50 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   onScanCheck,
   onClearCompleted,
   onMoveToPantry,
+  onAddMany,
 }) => {
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceNotice, setVoiceNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const onVoiceText = async (text: string) => {
+    setVoiceOpen(false);
+    setVoiceNotice(null);
+    if (!onAddMany) return;
+    setVoiceBusy(true);
+    try {
+      const read = await readShoppingItems({ text });
+      if (!read || read === 'PREMIUM_REQUIRED') {
+        setVoiceNotice({ ok: false, text: 'Non sono riuscito a capire la lista. Controlla la connessione e riprova.' });
+        return;
+      }
+      if (read.items.length === 0) {
+        setVoiceNotice({ ok: false, text: 'Non ho trovato prodotti: prova con un elenco, per esempio "latte, pane, detersivo".' });
+        return;
+      }
+      const categories = Object.values(Category) as string[];
+      const list = read.items.map((i) => ({
+        name: i.name,
+        category: (categories.includes(i.category) ? i.category : Category.OTHER) as Category,
+        // in lista conta il numero di confezioni: "1 pz" non serve scriverlo
+        quantity: i.unit === 'pz' && i.quantity === 1 ? null : i.quantity,
+        unit: i.unit === 'pz' && i.quantity === 1 ? null : i.unit,
+      }));
+      await onAddMany(list);
+      const inPantry = list.filter((l) => pantryItems.some((p) => sameProduct(p.name, l.name)));
+      setVoiceNotice({
+        ok: true,
+        text: `${list.length === 1 ? 'Aggiunto 1 prodotto' : `Aggiunti ${list.length} prodotti`}: ${list.map((l) => l.name).join(', ')}.${
+          inPantry.length ? ` Attenzione, in dispensa hai già: ${inPantry.map((l) => l.name).join(', ')}.` : ''
+        }`,
+      });
+    } catch {
+      setVoiceNotice({ ok: false, text: 'Non sono riuscito a salvare la lista. Riprova tra poco.' });
+    } finally {
+      setVoiceBusy(false);
+    }
+  };
+
   const [itemName, setItemName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.FRUIT_VEG);
 
@@ -250,6 +296,19 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             aria-label="Aggiungi prodotto"
             className="h-[50px] min-w-0 flex-1 rounded-2xl bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500"
           />
+          {onAddMany && (
+            <button
+              type="button"
+              onClick={() => {
+                setVoiceNotice(null);
+                setVoiceOpen(true);
+              }}
+              aria-label="Detta la lista della spesa"
+              className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl bg-forest text-honey"
+            >
+              <Mic size={22} />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowCamera(true)}
@@ -298,6 +357,15 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
           </div>
         )}
       </form>
+
+      {voiceNotice && (
+        <p
+          role="status"
+          className={`rounded-2xl px-4 py-3 text-sm font-semibold ${voiceNotice.ok ? 'bg-mint text-forest' : 'bg-peach text-[#8E3418]'}`}
+        >
+          {voiceNotice.text}
+        </p>
+      )}
 
       {items.length === 0 && (
         <div className="flex flex-col items-center gap-2 rounded-4xl bg-white px-6 py-10 text-center">
@@ -502,7 +570,15 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
       </Sheet>
 
       <CameraCapture open={showCamera} onClose={() => setShowCamera(false)} onCapture={handleCapture} onBarcode={handleBarcode} />
-      <AnalyzingOverlay open={isAnalyzing} label="Riconosco il prodotto…" />
+      <AnalyzingOverlay open={isAnalyzing || voiceBusy} label={voiceBusy ? 'Scrivo la lista…' : 'Riconosco il prodotto…'} />
+      <VoiceSheet
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onSubmit={onVoiceText}
+        title="Cosa ti serve?"
+        placeholder="Es. latte, due chili di patate, il pane e il detersivo per i piatti"
+        submitLabel="Aggiungi alla lista"
+      />
 
       <Sheet
         open={isMoveOpen}

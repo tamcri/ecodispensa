@@ -848,6 +848,7 @@ const App = () => {
             onToggle={toggleShoppingItem}
             onClearCompleted={clearCompletedShopping}
             onMoveToPantry={moveShoppingToPantry}
+            onAddMany={addShoppingItemsBulk}
           />
         )}
         {view === "chef" && (
