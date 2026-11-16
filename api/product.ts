@@ -319,6 +319,8 @@ Unisci le righe uguali sommando le quantità. Al massimo ${MAX_ITEMS} prodotti. 
       ? `Nella foto c'è lo scontrino di un supermercato italiano, oppure la schermata di uno scontrino digitale.
 Elenca i prodotti acquistati. Gli scontrini abbreviano i nomi (es. "LATTE PS UHT 1L", "MOZZ.FIORDIL.125G", "BANANE KG 1,234"): traducili in nomi chiari.
 Ignora totali, subtotali, sconti, resto, pagamenti, IVA, buste e shopper, punti e carte fedeltà, depositi e righe di servizio.
+Il prezzo di ogni riga è l'importo in euro allineato a destra, con la virgola (es. "1,29"): non confonderlo con pesi, quantità, codici o aliquote IVA. Se una riga sotto il prodotto dice "2 x 0,99", la riga vale 1,98 e quantity è 2. Le righe "SCONTO" o con il segno meno vanno tolte dal prodotto sopra.
+Se un numero non è leggibile con sicurezza, metti price null invece di indovinare.
 Se la foto non è uno scontrino ma una spesa appoggiata sul tavolo, elenca i prodotti che vedi (price null).
 Leggi anche: store = nome del negozio o della catena (es. "Conad", "Esselunga"), stringa vuota se non c'è; date = data dello scontrino in formato YYYY-MM-DD (le date italiane sono giorno/mese/anno), stringa vuota se non c'è; total = totale pagato in euro (la riga TOTALE o "IMPORTO PAGATO"), null se non c'è.
 ${rules}`
@@ -331,58 +333,65 @@ ${rules}`;
     const content: any[] = [{ type: "input_text", text: prompt }];
     if (image) content.push({ type: "input_image", image_url: image, detail: "high" });
 
-    const model = image
-      ? process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini"
-      : process.env.OPENAI_MODEL || "gpt-4o-mini";
+    // Scontrini: un modello più preciso a leggere testi piccoli e prezzi; se non risponde, quello di sempre
+    const fallback = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const models = image
+      ? [...new Set([process.env.OPENAI_RECEIPT_MODEL || "gpt-4o", fallback])]
+      : [process.env.OPENAI_MODEL || "gpt-4o-mini"];
 
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        input: [{ role: "user", content }],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "shopping_items",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["store", "date", "total", "items"],
-              properties: {
-                store: { type: "string" },
-                date: { type: "string" },
-                total: { type: ["number", "null"] },
-                items: {
-                  type: "array",
+    let data: any = null;
+    let ok = false;
+    for (const model of models) {
+      const r = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          input: [{ role: "user", content }],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "shopping_items",
+              strict: true,
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["store", "date", "total", "items"],
+                properties: {
+                  store: { type: "string" },
+                  date: { type: "string" },
+                  total: { type: ["number", "null"] },
                   items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: ["name", "category", "quantity", "unit", "storage", "shelfDays", "price"],
-                    properties: {
-                      name: { type: "string" },
-                      category: { type: "string", enum: CATEGORIES },
-                      quantity: { type: "number" },
-                      unit: { type: "string", enum: ["pz", "kg", "g", "l"] },
-                      storage: { type: "string", enum: ["fresh", "packaged", "long_life"] },
-                      shelfDays: { type: "number" },
-                      price: { type: ["number", "null"] },
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["name", "category", "quantity", "unit", "storage", "shelfDays", "price"],
+                      properties: {
+                        name: { type: "string" },
+                        category: { type: "string", enum: CATEGORIES },
+                        quantity: { type: "number" },
+                        unit: { type: "string", enum: ["pz", "kg", "g", "l"] },
+                        storage: { type: "string", enum: ["fresh", "packaged", "long_life"] },
+                        shelfDays: { type: "number" },
+                        price: { type: ["number", "null"] },
+                      },
                     },
                   },
                 },
               },
             },
           },
-        },
-      }),
-    });
-
-    const data = await r.json();
-    if (!r.ok) {
-      console.error("OpenAI items error:", data?.error?.message ?? r.status);
-      return res.status(502).json({ error: "READ_FAILED" });
+        }),
+      });
+      data = await r.json();
+      if (r.ok) {
+        ok = true;
+        break;
+      }
+      console.error(`OpenAI items error (${model}):`, data?.error?.message ?? r.status);
     }
+    if (!ok) return res.status(502).json({ error: "READ_FAILED" });
 
     let out: any = null;
     try {
