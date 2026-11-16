@@ -60,6 +60,7 @@ const App = () => {
     useState<NotificationPermission>("default");
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profilePage, setProfilePage] = useState<"piano" | undefined>(undefined);
   const [pushActive, setPushActive] = useState(false);
   const [statsVersion, setStatsVersion] = useState(0);
   const [spendingOpen, setSpendingOpen] = useState(false);
@@ -833,7 +834,10 @@ const App = () => {
           />
         )}
         {view === "pantry" && (
-          <PantryView items={pantryItems} onAdd={addPantryItem} onAddGroceries={addGroceriesToPantry} onSetPrice={setPantryItemPrice} onUpdate={updatePantryItem} onRemove={removePantryItem} />
+          <PantryView items={pantryItems} onAdd={addPantryItem} onAddGroceries={addGroceriesToPantry} onSetPrice={setPantryItemPrice} onOpenPlans={() => {
+            setProfilePage("piano");
+            setProfileOpen(true);
+          }} onUpdate={updatePantryItem} onRemove={removePantryItem} />
         )}
         {view === "shopping" && (
           <ShoppingListView
@@ -911,7 +915,11 @@ const App = () => {
 
       <ProfileSheet
         open={profileOpen}
-        onClose={() => setProfileOpen(false)}
+        initialPage={profilePage}
+        onClose={() => {
+          setProfileOpen(false);
+          setProfilePage(undefined);
+        }}
         userEmail={session?.user?.email ?? null}
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={requestNotificationPermission}
