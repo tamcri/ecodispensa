@@ -82,12 +82,17 @@ export const AdminDashboard = ({
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [search, setSearch] = useState("");
   const [subs, setSubs] = useState<AdminSubs | null>(null);
+  const [subsFailed, setSubsFailed] = useState(false);
   const [giftFor, setGiftFor] = useState<string | null>(null);
   const [giftAmount, setGiftAmount] = useState(5);
   const [giftMsg, setGiftMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tab === "subs") fetchAdminSubscriptions().then(setSubs);
+    if (tab === "subs")
+      fetchAdminSubscriptions().then((d) => {
+        setSubs(d);
+        setSubsFailed(!d);
+      });
   }, [tab]);
 
   const sendGift = async (username: string) => {
@@ -127,7 +132,7 @@ export const AdminDashboard = ({
 
   return (
     <div className={standalone ? "min-h-screen bg-ground" : "fixed inset-0 z-[60] overflow-y-auto bg-ground"}>
-      <div className="mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+      <div className="mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 md:max-w-6xl md:px-8 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
         <div className="flex items-center justify-between">
           {standalone ? (
             <span className="flex items-center gap-2">
@@ -184,7 +189,7 @@ export const AdminDashboard = ({
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`h-10 rounded-xl text-[11px] ${tab === id ? "bg-white font-extrabold text-ink shadow-sm" : "font-semibold text-[#4A5448]"}`}
+              className={`h-10 rounded-xl text-[11px] md:h-11 md:text-sm ${tab === id ? "bg-white font-extrabold text-ink shadow-sm" : "font-semibold text-[#4A5448]"}`}
             >
               {label}
             </button>
@@ -197,7 +202,7 @@ export const AdminDashboard = ({
           ) : !dash ? (
             <p className="rounded-2xl bg-peach p-4 text-sm text-[#8E3418]">Non riesco a caricare i numeri. Riprova.</p>
           ) : (
-            <>
+            <div className="flex flex-col gap-4 md:block md:columns-2 md:gap-4 xl:columns-3 md:[&>*]:mb-4 [&>*]:break-inside-avoid">
               <Card title="Iscritti">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={dash.users.total} label="in totale" strong />
@@ -364,14 +369,16 @@ export const AdminDashboard = ({
                   <Stat value={dash.push} label="con avvisi attivi" />
                 </div>
               </Card>
-            </>
+            </div>
           ))}
 
         {tab === "subs" &&
-          (!subs ? (
+          (subsFailed ? (
+            <p className="rounded-2xl bg-peach p-4 text-sm text-[#8E3418]">Non riesco a caricare gli abbonati. Riprova tra poco.</p>
+          ) : !subs ? (
             <Loader2 size={22} className="mx-auto mt-6 animate-spin text-muted" />
           ) : (
-            <>
+            <div className="flex flex-col gap-4 md:block md:columns-2 md:gap-4 xl:columns-3 md:[&>*]:mb-4 [&>*]:break-inside-avoid">
               <Card title="Abbonamenti attivi">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={subs.active.monthly} label="mensili" strong />
@@ -428,11 +435,11 @@ export const AdminDashboard = ({
                   ))
                 )}
               </Card>
-            </>
+            </div>
           ))}
 
         {tab === "users" && (
-          <>
+          <div className="flex flex-col gap-4 md:mx-auto md:w-full md:max-w-3xl">
             <label className="flex h-12 items-center gap-2.5 rounded-2xl bg-white px-4 text-muted">
               <Search size={20} />
               <input
@@ -531,11 +538,19 @@ export const AdminDashboard = ({
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {tab === "codes" && <AdminCodesPanel embedded />}
-        {tab === "schools" && <AdminSchoolsPanel />}
+        {tab === "codes" && (
+          <div className="md:mx-auto md:w-full md:max-w-3xl">
+            <AdminCodesPanel embedded />
+          </div>
+        )}
+        {tab === "schools" && (
+          <div className="md:mx-auto md:w-full md:max-w-3xl">
+            <AdminSchoolsPanel />
+          </div>
+        )}
       </div>
     </div>
   );
