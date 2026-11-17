@@ -272,6 +272,26 @@ export type AdminSubs = {
   }>;
 };
 
+export type AdminAiCosts = {
+  usd_eur: number;
+  since: string | null;
+  period_usd: number;
+  period_calls: number;
+  month_usd: number;
+  by_kind: Array<{ kind: string; calls: number; usd: number; avg_usd: number | null }>;
+  prices: Array<{ model: string; input: number; output: number }>;
+};
+
+/** Costi stimati dell'intelligenza artificiale (OpenAI) negli ultimi giorni */
+export async function fetchAdminAiCosts(days = 30): Promise<AdminAiCosts | null> {
+  const { data, error } = await supabase.rpc("admin_ai_costs", { p_days: days });
+  if (error) {
+    console.error("admin_ai_costs error:", error);
+    return null;
+  }
+  return data as AdminAiCosts;
+}
+
 export async function fetchAdminSubscriptions(): Promise<AdminSubs | null> {
   const { data, error } = await supabase.rpc("admin_subscriptions");
   if (error) {

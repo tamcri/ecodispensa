@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { reconcileWithPantry } from "./_lib/ingredients.js";
+import { logAiUsage } from "./_lib/openai.js";
 
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
@@ -415,6 +416,7 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
       });
 
       const data = await r.json();
+      if (r.ok) await logAiUsage(supabase, "recipes", model, data);
 
       if (!r.ok) {
         console.error("OpenAI error:", data);

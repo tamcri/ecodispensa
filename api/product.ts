@@ -7,7 +7,7 @@
  * Un'unica funzione per restare nel limite di funzioni del piano Vercel gratuito.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getUserClient, isPremiumActive, responseText } from "./_lib/openai.js";
+import { getUserClient, isPremiumActive, logAiUsage, responseText } from "./_lib/openai.js";
 
 const CATEGORIES = ["Ortofrutta", "Latticini", "Carne & Pesce", "Dispensa", "Surgelati", "Casa", "Altro"];
 const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB di jpeg in base64
@@ -73,6 +73,7 @@ Rispondi con:
     });
 
     const data = await r.json();
+    if (r.ok) await logAiUsage(auth.supabase, "product_photo", model, data);
     if (!r.ok) {
       console.error("OpenAI identify error:", data);
       return res.status(502).json({ error: "IDENTIFY_FAILED" });
@@ -257,6 +258,7 @@ Ignora date di produzione, confezionamento e lotti (es. "PROD.", "CONF.", "L.").
     });
 
     const data = await r.json();
+    if (r.ok) await logAiUsage(auth.supabase, "date_photo", model, data);
     if (!r.ok) {
       console.error("OpenAI read date error:", data?.error?.message ?? r.status);
       return res.status(502).json({ error: "READ_FAILED" });
@@ -388,6 +390,7 @@ ${rules}`;
       });
       data = await r.json();
       if (r.ok) {
+        await logAiUsage(auth.supabase, image ? "receipt" : "voice", model, data);
         ok = true;
         break;
       }

@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import { ChevronLeft, Gift, LogOut, Loader2, RefreshCw, Search } from "lucide-react";
 import {
   AdminDashboard as Dash,
+  AdminAiCosts,
   AdminSubs,
   AdminUser,
+  fetchAdminAiCosts,
   fetchAdminDashboard,
   fetchAdminSubscriptions,
   fetchAdminUsers,
@@ -14,6 +16,28 @@ import { AdminCodesPanel } from "./AdminCodesPanel";
 type Tab = "overview" | "subs" | "users" | "codes";
 
 const euro = (n: number) => Number(n || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+/** Importi piccoli (costi dell'intelligenza artificiale): più decimali sotto 1 € */
+const euroFine = (n: number) =>
+  Number(n || 0).toLocaleString("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: Math.abs(n) < 1 && n !== 0 ? 4 : 2,
+  });
+
+const AI_KIND_LABEL: Record<string, string> = {
+  recipes: "Richieste di ricette",
+  menu: "Menu settimanali",
+  receipt: "Scontrini",
+  voice: "Spesa a voce",
+  product_photo: "Foto dei prodotti",
+  date_photo: "Lettura delle date",
+};
+
+/** Commissioni Stripe stimate per carte europee: 1,5% + 0,25 € a pagamento */
+const stripeFees = (gross: number, payments: number) => gross * 0.015 + payments * 0.25;
+const VAT = 1.22;
+
 const dateIt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("it-IT") : "—");
 const pct = (a: number, b: number) => (a + b > 0 ? Math.round((a / (a + b)) * 100) : null);
 
@@ -77,9 +101,13 @@ export const AdminDashboard = ({
     fetchAdminUsers(search).then(setUsers);
   };
 
+  const [ai, setAi] = useState<AdminAiCosts | null>(null);
+
   const loadDash = async () => {
     setLoading(true);
-    setDash(await fetchAdminDashboard());
+    const [d, c] = await Promise.all([fetchAdminDashboard(), fetchAdminAiCosts(30)]);
+    setDash(d);
+    setAi(c);
     setLoading(false);
   };
 
@@ -233,6 +261,78 @@ export const AdminDashboard = ({
                   <Stat value={dash.usage.recipe_photos} label="con la foto" />
                 </div>
               </Card>
+
+              {ai && (
+                <Card
+                  title="Costi dell'intelligenza artificiale · 30 giorni"
+                  note={`Stima dal consumo di ogni richiesta a OpenAI, con il listino in dollari convertito a ${String(ai.usd_eur).replace(".", ",")} € per dollaro. Le foto dei piatti scattate dagli utenti non costano: sono solo salvate.${
+                    ai.since ? ` Conteggio attivo dal ${dateIt(ai.since)}.` : " Il conteggio parte da adesso: le richieste di prima non sono registrate."
+                  }`}
+                >
+                  <div className="grid grid-cols-3 gap-2">
+                    <Stat value={euroFine(ai.period_usd * ai.usd_eur)} label="ultimi 30 giorni" strong />
+                    <Stat value={euroFine(ai.month_usd * ai.usd_eur)} label="questo mese" />
+                    <Stat value={ai.period_calls} label="richieste" />
+                  </div>
+                  {ai.by_kind.length > 0 && (
+                    <div className="flex flex-col">
+                      {ai.by_kind.map((k) => (
+                        <div key={k.kind} className="flex items-center justify-between gap-3 border-b border-[#F1EBDD] py-2 text-sm last:border-b-0">
+                          <span className="min-w-0">
+                            <span className="block font-semibold text-ink">{AI_KIND_LABEL[k.kind] ?? k.kind}</span>
+                            <span className="block text-xs text-muted">
+                              {k.calls} {k.calls === 1 ? "richiesta" : "richieste"}
+                              {k.avg_usd !== null ? ` · ${euroFine(k.avg_usd * ai.usd_eur)} l'una` : ""}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-bold text-ink">{euroFine(k.usd * ai.usd_eur)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {ai && (
+                <Card
+                  title="Guadagno stimato · 30 giorni"
+                  note="Stima: dagli incassi si toglie l'IVA (22%), le commissioni Stripe (circa 1,5% + 0,25 € a pagamento) e l'intelligenza artificiale. Non comprende Vercel, Supabase e le altre spese fisse."
+                >
+                  {(() => {
+                    const gross = dash.revenue.last_30d;
+                    const vat = gross - gross / VAT;
+                    const fees = stripeFees(gross, dash.revenue.payments_30d);
+                    const aiEur = ai.period_usd * ai.usd_eur;
+                    const net = gross - vat - fees - aiEur;
+                    const rows: Array<[string, number]> = [
+                      ["Incassi (IVA inclusa)", gross],
+                      ["IVA da versare", -vat],
+                      ["Commissioni Stripe", -fees],
+                      ["Intelligenza artificiale", -aiEur],
+                    ];
+                    return (
+                      <>
+                        <div className="flex flex-col">
+                          {rows.map(([label, v]) => (
+                            <div key={label} className="flex justify-between border-b border-[#F1EBDD] py-2 text-sm last:border-b-0">
+                              <span className="text-ink">{label}</span>
+                              <span className={v < 0 ? "text-[#8E3418]" : "font-semibold text-ink"}>
+                                {v < 0 ? `− ${euroFine(-v)}` : euroFine(v)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className={`flex items-center justify-between rounded-2xl p-3 ${net >= 0 ? "bg-mint" : "bg-peach"}`}>
+                          <span className="font-bold text-ink">Ti resta</span>
+                          <span className={`font-display text-[24px] font-extrabold ${net >= 0 ? "text-forest" : "text-[#8E3418]"}`}>
+                            {net < 0 ? `− ${euroFine(-net)}` : euroFine(net)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </Card>
+              )}
 
               <Card title="Spreco · ultimi 30 giorni" note="Dai prodotti tolti dalla dispensa: «L'ho usato» o «L'ho buttato».">
                 <div className="grid grid-cols-3 gap-2">
