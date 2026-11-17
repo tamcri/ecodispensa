@@ -14,8 +14,10 @@ export function shouldShowComingSoon(): boolean {
       grantAccess();
       return false;
     }
+    // ?anteprima=presto mostra sempre la pagina, per vederla anche dopo essere entrati
+    if (params.get('anteprima') === 'presto') return true;
     if (localStorage.getItem(ACCESS_KEY) === '1') return false;
-    return PUBLIC_HOSTS.includes(window.location.hostname) || params.get('anteprima') === 'presto';
+    return PUBLIC_HOSTS.includes(window.location.hostname);
   } catch {
     return false;
   }
