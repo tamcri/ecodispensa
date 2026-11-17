@@ -61,3 +61,23 @@ export function responseText(data: any): string {
   }
   return parts.join("");
 }
+
+export type AiKind = "recipes" | "menu" | "menu_fix" | "receipt" | "voice" | "product_photo" | "date_photo";
+
+/**
+ * Registra quanto ha "consumato" una richiesta a OpenAI (token in entrata e in uscita),
+ * per vedere i costi nella dashboard dell'amministratore. Non blocca mai la risposta.
+ */
+export async function logAiUsage(supabase: SupabaseClient, kind: AiKind, model: string, data: any): Promise<void> {
+  try {
+    const usage = data?.usage ?? {};
+    await supabase.rpc("log_ai_usage", {
+      p_kind: kind,
+      p_model: String(data?.model || model || "?"),
+      p_input: Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0,
+      p_output: Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0,
+    });
+  } catch {
+    /* il registro dei costi non deve fermare l'app */
+  }
+}

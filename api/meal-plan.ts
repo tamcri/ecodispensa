@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { logAiUsage } from "./_lib/openai.js";
 
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
@@ -4148,6 +4149,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
       });
 
       const data = await r.json();
+      if (r.ok) await logAiUsage(supabase, "menu", model, data);
 
       if (!r.ok) {
         console.error("OpenAI meal-plan error:", data);
@@ -4318,6 +4320,7 @@ OUTPUT OBBLIGATORIO:
             );
 
             const repairData = await repairResponse.json();
+            if (repairResponse.ok) await logAiUsage(supabase, "menu_fix", model, repairData);
 
             if (repairResponse.ok) {
               const repairText = extractOpenAIOutputText(repairData);
@@ -4563,6 +4566,7 @@ REGOLE OBBLIGATORIE:
 
               const calorieRepairData =
                 await calorieRepairResponse.json();
+              if (calorieRepairResponse.ok) await logAiUsage(supabase, "menu_fix", model, calorieRepairData);
 
               if (calorieRepairResponse.ok) {
                 const calorieRepairText =
