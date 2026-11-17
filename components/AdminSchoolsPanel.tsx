@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Building2, Check, Copy, Download, Loader2, Plus, School, Trash2, Trophy } from "lucide-react";
+import { BarChart3, Building2, Check, Copy, Download, Loader2, Plus, Printer, School, Trash2, Trophy } from "lucide-react";
 import {
   PartnerRow,
   RankingRow,
   SchoolClassRow,
+  SchoolReport,
   createClassCodes,
   deleteSchoolItem,
   fetchClassCodes,
   fetchSchoolRanking,
+  fetchSchoolReport,
   fetchSchoolTree,
   saveClass,
   savePartner,
@@ -15,6 +17,23 @@ import {
 } from "../services/schools";
 import { downloadCsv } from "./AdminCodesPanel";
 import { RankingList } from "./ClassRanking";
+import { CodeCardsPrint, PrintOverlay, SchoolReportPrint } from "./SchoolPrint";
+
+/** Data locale in formato AAAA-MM-GG */
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Periodi pronti per il report */
+function reportPeriod(kind: "year" | "month" | "lastMonth"): { from: string; to: string } {
+  const now = new Date();
+  if (kind === "month") return { from: isoDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: isoDay(now) };
+  if (kind === "lastMonth")
+    return {
+      from: isoDay(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      to: isoDay(new Date(now.getFullYear(), now.getMonth(), 0)),
+    };
+  const startYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1; // anno scolastico dal 1° settembre
+  return { from: `${startYear}-09-01`, to: isoDay(now) };
+}
 
 const field =
   "h-12 w-full rounded-2xl bg-ground px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500";
@@ -62,6 +81,8 @@ export const AdminSchoolsPanel = () => {
   const [codes, setCodes] = useState<{ cls: SchoolClassRow; list: Array<{ code: string; used: boolean }> } | null>(null);
   const [copied, setCopied] = useState(false);
   const [ranking, setRanking] = useState<{ period: "month" | "year"; rows: RankingRow[] } | null>(null);
+  const [reportForm, setReportForm] = useState<{ from: string; to: string } | null>(null);
+  const [print, setPrint] = useState<null | { kind: "codes" } | { kind: "report"; report: SchoolReport }>(null);
 
   const load = async () => {
     const t = await fetchSchoolTree();
@@ -92,7 +113,23 @@ export const AdminSchoolsPanel = () => {
   useEffect(() => {
     setCodes(null);
     setRanking(null);
+    setReportForm(null);
   }, [partnerId, schoolId]);
+
+  const makeReport = async () => {
+    if (!school || !reportForm) return;
+    if (!reportForm.from || !reportForm.to || reportForm.to < reportForm.from) {
+      setMsg({ ok: false, text: "Controlla le date: la fine deve venire dopo l'inizio." });
+      return;
+    }
+    setBusy("report");
+    const r = await fetchSchoolReport(school.id, reportForm.from, reportForm.to);
+    setBusy(null);
+    if (!r) setMsg({ ok: false, text: "Non sono riuscito a creare il report. Riprova." });
+    else setPrint({ kind: "report", report: r });
+  };
+
+  const unusedCodes = codes ? codes.list.filter((c) => !c.used).map((c) => c.code) : [];
 
   const partnerCodes = partner
     ? partner.schools.reduce((n, s) => n + s.classes.reduce((m, c) => m + c.codes, 0), 0)
@@ -482,12 +519,15 @@ export const AdminSchoolsPanel = () => {
           )}
 
           {school.classes.length > 0 && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <SmallButton onClick={() => openRanking("month")}>
                 <Trophy size={14} /> Classifica del mese
               </SmallButton>
               <SmallButton onClick={() => openRanking("year")}>
                 <Trophy size={14} /> Anno scolastico
+              </SmallButton>
+              <SmallButton tone="green" onClick={() => setReportForm(reportPeriod("year"))}>
+                <BarChart3 size={14} /> Report d'impatto
               </SmallButton>
             </div>
           )}
@@ -516,7 +556,18 @@ export const AdminSchoolsPanel = () => {
             >
               <Download size={14} /> Scarica elenco
             </SmallButton>
+            {unusedCodes.length > 0 && (
+              <SmallButton tone="green" onClick={() => setPrint({ kind: "codes" })}>
+                <Printer size={14} /> Stampa per le famiglie
+              </SmallButton>
+            )}
           </div>
+          {unusedCodes.length > 0 && (
+            <p className="text-xs text-muted">
+              La stampa prepara {unusedCodes.length} biglietti da ritagliare (8 per foglio A4), con il QR che apre l'app con il codice già
+              scritto. I codici già attivati non vengono stampati.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-1.5">
             {codes.list.map((c) => (
               <span
@@ -529,6 +580,71 @@ export const AdminSchoolsPanel = () => {
           </div>
           <p className="text-xs text-muted">I codici barrati sono già stati attivati.</p>
         </Box>
+      )}
+
+      {reportForm && school && (
+        <Box title="Report d'impatto">
+          <p className="text-[13px] text-muted">
+            Un foglio A4 da mandare a {partner?.name} e alla scuola: codici attivati, famiglie attive e classifica delle classi. Solo dati di
+            classe, mai di una famiglia.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <SmallButton onClick={() => setReportForm(reportPeriod("year"))}>Anno scolastico</SmallButton>
+            <SmallButton onClick={() => setReportForm(reportPeriod("month"))}>Questo mese</SmallButton>
+            <SmallButton onClick={() => setReportForm(reportPeriod("lastMonth"))}>Mese scorso</SmallButton>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="rep-from" className={label}>
+                Dal
+              </label>
+              <input
+                id="rep-from"
+                type="date"
+                className={field}
+                value={reportForm.from}
+                onChange={(e) => setReportForm({ ...reportForm, from: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="rep-to" className={label}>
+                Al
+              </label>
+              <input
+                id="rep-to"
+                type="date"
+                className={field}
+                value={reportForm.to}
+                onChange={(e) => setReportForm({ ...reportForm, to: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={makeReport}
+              disabled={busy === "report"}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {busy === "report" ? <Loader2 size={16} className="animate-spin" /> : <BarChart3 size={16} />} Crea il report
+            </button>
+            <button type="button" onClick={() => setReportForm(null)} className="h-11 rounded-2xl bg-ground px-4 text-sm font-bold text-ink">
+              Chiudi
+            </button>
+          </div>
+        </Box>
+      )}
+
+      {print?.kind === "codes" && codes && school && (
+        <PrintOverlay title={`Codici ${codes.cls.name} - ${school.name}`} onClose={() => setPrint(null)}>
+          <CodeCardsPrint codes={unusedCodes} className={codes.cls.name} school={school.name} partner={partner?.name ?? ""} />
+        </PrintOverlay>
+      )}
+
+      {print?.kind === "report" && (
+        <PrintOverlay title={`Report ${print.report.school} ${print.report.from} - ${print.report.to}`} onClose={() => setPrint(null)}>
+          <SchoolReportPrint report={print.report} />
+        </PrintOverlay>
       )}
 
       {ranking && school && (
