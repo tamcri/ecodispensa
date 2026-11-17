@@ -7,7 +7,7 @@
  * Un'unica funzione per restare nel limite di funzioni del piano Vercel gratuito.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getUserClient, isPremiumActive, logAiUsage, responseText } from "./_lib/openai.js";
+import { DAILY_LIMIT_MESSAGE, getUserClient, isPremiumActive, logAiUsage, responseText, withinDailyLimit } from "./_lib/openai.js";
 
 const CATEGORIES = ["Ortofrutta", "Latticini", "Carne & Pesce", "Dispensa", "Surgelati", "Casa", "Altro"];
 const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB di jpeg in base64
@@ -17,6 +17,7 @@ async function identifyHandler(req: VercelRequest, res: VercelResponse) {
   try {
     const auth = await getUserClient(req);
     if ("error" in auth) return res.status(auth.status).json({ error: auth.error });
+    if (!(await withinDailyLimit(auth.userId, "product_photo"))) return res.status(429).json({ error: "DAILY_LIMIT", message: DAILY_LIMIT_MESSAGE });
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
@@ -73,7 +74,7 @@ Rispondi con:
     });
 
     const data = await r.json();
-    if (r.ok) await logAiUsage(auth.supabase, "product_photo", model, data);
+    if (r.ok) await logAiUsage(auth.userId, "product_photo", model, data);
     if (!r.ok) {
       console.error("OpenAI identify error:", data);
       return res.status(502).json({ error: "IDENTIFY_FAILED" });
@@ -205,6 +206,7 @@ async function readDateHandler(req: VercelRequest, res: VercelResponse) {
   try {
     const auth = await getUserClient(req);
     if ("error" in auth) return res.status(auth.status).json({ error: auth.error });
+    if (!(await withinDailyLimit(auth.userId, "date_photo"))) return res.status(429).json({ error: "DAILY_LIMIT", message: DAILY_LIMIT_MESSAGE });
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
@@ -258,7 +260,7 @@ Ignora date di produzione, confezionamento e lotti (es. "PROD.", "CONF.", "L.").
     });
 
     const data = await r.json();
-    if (r.ok) await logAiUsage(auth.supabase, "date_photo", model, data);
+    if (r.ok) await logAiUsage(auth.userId, "date_photo", model, data);
     if (!r.ok) {
       console.error("OpenAI read date error:", data?.error?.message ?? r.status);
       return res.status(502).json({ error: "READ_FAILED" });
@@ -305,8 +307,12 @@ async function itemsHandler(req: VercelRequest, res: VercelResponse) {
       if (image.length > MAX_IMAGE_CHARS) return res.status(413).json({ error: "Image too large" });
       // la lettura dello scontrino è inclusa negli abbonamenti (la voce resta per tutti)
       if (!(await isPremiumActive(auth.supabase, auth.userId))) return res.status(402).json({ error: "PREMIUM_REQUIRED" });
+      if (!(await withinDailyLimit(auth.userId, "receipt"))) return res.status(429).json({ error: "DAILY_LIMIT", message: DAILY_LIMIT_MESSAGE });
     } else if (text.length < 2) {
       return res.status(400).json({ error: "Missing image or text" });
+    }
+    if (!image && !(await withinDailyLimit(auth.userId, "voice"))) {
+      return res.status(429).json({ error: "DAILY_LIMIT", message: DAILY_LIMIT_MESSAGE });
     }
 
     const rules = `Per ogni prodotto alimentare o per la casa rispondi con:
@@ -390,7 +396,7 @@ ${rules}`;
       });
       data = await r.json();
       if (r.ok) {
-        await logAiUsage(auth.supabase, image ? "receipt" : "voice", model, data);
+        await logAiUsage(auth.userId, image ? "receipt" : "voice", model, data);
         ok = true;
         break;
       }

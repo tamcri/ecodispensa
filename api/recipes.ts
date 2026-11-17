@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { reconcileWithPantry } from "./_lib/ingredients.js";
-import { logAiUsage } from "./_lib/openai.js";
+import { logAiUsage, refundGenerationFor } from "./_lib/openai.js";
 
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
@@ -416,16 +416,14 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
       });
 
       const data = await r.json();
-      if (r.ok) await logAiUsage(supabase, "recipes", model, data);
+      if (r.ok) await logAiUsage(user_id, "recipes", model, data);
 
       if (!r.ok) {
         console.error("OpenAI error:", data);
 
         const refundReason = `openai_error_${r.status}`;
-        const { data: refunded, error: refundErr } = await supabase.rpc("refund_eco_generation", {
-              p_consumed_credit: Boolean(creditUsage?.consumedCredit),
-              p_reason: refundReason,
-            });
+        const refunded = await refundGenerationFor(user_id, Boolean(creditUsage?.consumedCredit), refundReason);
+        const refundErr = !refunded.ok;
 
         return {
           error: "AI_UNAVAILABLE",
@@ -451,11 +449,8 @@ ${idea ? "- La ricetta deve essere solo quella richiesta dall'utente, senza alte
       }
 
       const refundGeneration = async (reason: string) => {
-        const { data: refunded } = await supabase.rpc("refund_eco_generation", {
-          p_consumed_credit: Boolean(creditUsage?.consumedCredit),
-          p_reason: reason,
-        });
-        return typeof (refunded as any)?.remainingCredits === "number" ? (refunded as any).remainingCredits : remainingAfterConsume ?? null;
+        const refunded = await refundGenerationFor(user_id, Boolean(creditUsage?.consumedCredit), reason);
+        return typeof refunded.remainingCredits === "number" ? refunded.remainingCredits : remainingAfterConsume ?? null;
       };
 
       if (!text) {

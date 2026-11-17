@@ -119,6 +119,10 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
   };
 
   const showRead = (read: Awaited<ReturnType<typeof readShoppingItems>>, source: 'receipt' | 'voice') => {
+    if (read === 'DAILY_LIMIT') {
+      setBulkNotice({ ok: false, text: 'Hai raggiunto il limite di oggi per questa funzione. Riprova domani, oppure aggiungi i prodotti a mano.' });
+      return;
+    }
     if (read === 'PREMIUM_REQUIRED') {
       setPremium(false);
       setPremiumAsk(true);

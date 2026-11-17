@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { logAiUsage } from "./_lib/openai.js";
+import { logAiUsage, refundCreditsFor } from "./_lib/openai.js";
 
 type CacheEntry = { ts: number; value: any };
 const TTL_MS = 60_000;
@@ -3686,14 +3686,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (refundedOnce) return refundedOnce;
       const consumptionId = creditUsage?.consumptionId;
       if (!consumptionId) return (refundedOnce = { remainingCredits: remainingAfterConsume, ok: false });
-      const { data, error } = await supabase.rpc("refund_eco_credits", {
-        p_consumption_id: consumptionId,
-        p_reason: reason,
-      });
+      const refunded = await refundCreditsFor(user_id, consumptionId, reason);
       refundedOnce = {
-        ok: !error,
-        remainingCredits:
-          typeof (data as any)?.remainingCredits === "number" ? (data as any).remainingCredits : remainingAfterConsume,
+        ok: refunded.ok,
+        remainingCredits: typeof refunded.remainingCredits === "number" ? refunded.remainingCredits : remainingAfterConsume,
       };
       return refundedOnce;
     };
@@ -4149,7 +4145,7 @@ Restituisci SOLO un JSON object valido, con questa struttura esatta:
       });
 
       const data = await r.json();
-      if (r.ok) await logAiUsage(supabase, "menu", model, data);
+      if (r.ok) await logAiUsage(user_id, "menu", model, data);
 
       if (!r.ok) {
         console.error("OpenAI meal-plan error:", data);
@@ -4320,7 +4316,7 @@ OUTPUT OBBLIGATORIO:
             );
 
             const repairData = await repairResponse.json();
-            if (repairResponse.ok) await logAiUsage(supabase, "menu_fix", model, repairData);
+            if (repairResponse.ok) await logAiUsage(user_id, "menu_fix", model, repairData);
 
             if (repairResponse.ok) {
               const repairText = extractOpenAIOutputText(repairData);
@@ -4566,7 +4562,7 @@ REGOLE OBBLIGATORIE:
 
               const calorieRepairData =
                 await calorieRepairResponse.json();
-              if (calorieRepairResponse.ok) await logAiUsage(supabase, "menu_fix", model, calorieRepairData);
+              if (calorieRepairResponse.ok) await logAiUsage(user_id, "menu_fix", model, calorieRepairData);
 
               if (calorieRepairResponse.ok) {
                 const calorieRepairText =

@@ -190,13 +190,14 @@ export type ShoppingRead = { store: string; date: string; total: number | null; 
 /** Tutta la spesa da una foto dello scontrino o da un elenco scritto/detto a voce. null = errore. */
 export async function readShoppingItems(
   input: { image: string } | { text: string }
-): Promise<ShoppingRead | "PREMIUM_REQUIRED" | null> {
+): Promise<ShoppingRead | "PREMIUM_REQUIRED" | "DAILY_LIMIT" | null> {
   try {
     const { ok, body } = await authFetch("/api/product", {
       method: "POST",
       body: JSON.stringify({ ...input, mode: "items" }),
     });
     if (body?.error === "PREMIUM_REQUIRED") return "PREMIUM_REQUIRED";
+    if (body?.error === "DAILY_LIMIT") return "DAILY_LIMIT";
     if (!ok || !Array.isArray(body?.items)) return null;
     return {
       store: typeof body.store === "string" ? body.store : "",
