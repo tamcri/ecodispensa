@@ -75,6 +75,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
     setVoiceBusy(true);
     try {
       const read = await readShoppingItems({ text });
+      if (read === 'DAILY_LIMIT') {
+        setVoiceNotice({ ok: false, text: 'Hai raggiunto il limite di oggi per la lista a voce. Riprova domani, oppure scrivi i prodotti qui sopra.' });
+        return;
+      }
       if (!read || read === 'PREMIUM_REQUIRED') {
         setVoiceNotice({ ok: false, text: 'Non sono riuscito a capire la lista. Controlla la connessione e riprova.' });
         return;

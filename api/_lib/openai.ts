@@ -65,13 +65,30 @@ export function responseText(data: any): string {
 export type AiKind = "recipes" | "menu" | "menu_fix" | "receipt" | "voice" | "product_photo" | "date_photo";
 
 /**
+ * Client Supabase con la chiave del server (service_role): serve per le operazioni che
+ * l'utente non deve poter fare da solo (rimborsi dei crediti, registro dei costi, limiti).
+ * Nelle anteprime senza la chiave restituisce null: quelle operazioni vengono saltate.
+ */
+let _service: SupabaseClient | null | undefined;
+export function serviceClient(): SupabaseClient | null {
+  if (_service !== undefined) return _service;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  _service = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  return _service;
+}
+
+/**
  * Registra quanto ha "consumato" una richiesta a OpenAI (token in entrata e in uscita),
  * per vedere i costi nella dashboard dell'amministratore. Non blocca mai la risposta.
  */
-export async function logAiUsage(supabase: SupabaseClient, kind: AiKind, model: string, data: any): Promise<void> {
+export async function logAiUsage(userId: string, kind: AiKind, model: string, data: any): Promise<void> {
   try {
+    const admin = serviceClient();
+    if (!admin) return;
     const usage = data?.usage ?? {};
-    await supabase.rpc("log_ai_usage", {
+    await admin.rpc("srv_log_ai_usage", {
+      p_user: userId,
       p_kind: kind,
       p_model: String(data?.model || model || "?"),
       p_input: Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0,
@@ -80,4 +97,63 @@ export async function logAiUsage(supabase: SupabaseClient, kind: AiKind, model: 
   } catch {
     /* il registro dei costi non deve fermare l'app */
   }
+}
+
+/** Limiti giornalieri (ultime 24 ore) delle funzioni gratuite che usano l'intelligenza artificiale */
+export const DAILY_LIMITS: Partial<Record<AiKind, number>> = {
+  voice: 40,
+  receipt: 25,
+  product_photo: 60,
+  date_photo: 60,
+};
+
+/** true se l'utente può ancora usare questa funzione oggi */
+export async function withinDailyLimit(userId: string, kind: AiKind): Promise<boolean> {
+  const limit = DAILY_LIMITS[kind];
+  const admin = serviceClient();
+  if (!limit || !admin) return true;
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { count, error } = await admin
+    .from("ai_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("kind", kind)
+    .gte("created_at", since);
+  if (error) return true; // in caso di dubbio non blocchiamo l'utente
+  return (count ?? 0) < limit;
+}
+
+export const DAILY_LIMIT_MESSAGE =
+  "Hai raggiunto il limite di oggi per questa funzione. Riprova domani, oppure inserisci i prodotti a mano.";
+
+/** Rimborso di una richiesta di ricette: lo fa solo il server */
+export async function refundGenerationFor(
+  userId: string,
+  consumedCredit: boolean,
+  reason: string
+): Promise<{ remainingCredits?: number; ok: boolean }> {
+  const admin = serviceClient();
+  if (!admin) return { ok: false };
+  const { data, error } = await admin.rpc("srv_refund_eco_generation", {
+    p_user: userId,
+    p_consumed_credit: consumedCredit,
+    p_reason: reason,
+  });
+  return { ok: !error, remainingCredits: typeof (data as any)?.remainingCredits === "number" ? (data as any).remainingCredits : undefined };
+}
+
+/** Rimborso dei crediti del menu settimanale: lo fa solo il server */
+export async function refundCreditsFor(
+  userId: string,
+  consumptionId: string,
+  reason: string
+): Promise<{ remainingCredits?: number; ok: boolean }> {
+  const admin = serviceClient();
+  if (!admin) return { ok: false };
+  const { data, error } = await admin.rpc("srv_refund_eco_credits", {
+    p_user: userId,
+    p_consumption_id: consumptionId,
+    p_reason: reason,
+  });
+  return { ok: !error, remainingCredits: typeof (data as any)?.remainingCredits === "number" ? (data as any).remainingCredits : undefined };
 }
