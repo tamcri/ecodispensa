@@ -9,7 +9,9 @@ import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
 import { findFoodGuide } from "../foodGuide";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { fetchSpending, formatEuro, Spending } from "../services/spending";
-import { fetchMyClass, MyClass } from "../services/schools";
+import { fetchMyClass, MyClass, setClassConsent } from "../services/schools";
+import { LEGAL } from "../legal/documents";
+import { SchoolConsentSheet } from "./LegalViews";
 import { ClassRankingSheet, MyClassRow } from "./ClassRanking";
 
 interface HomeViewProps {
@@ -54,6 +56,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [spending, setSpending] = useState<Spending | null>(null);
   const [myClass, setMyClass] = useState<MyClass | null>(null);
   const [rankingOpen, setRankingOpen] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const decideClass = async (accept: boolean) => {
+    const ok = await setClassConsent(accept, LEGAL.schoolConsentVersion);
+    if (!ok) return false;
+    setConsentOpen(false);
+    setRankingOpen(false);
+    setMyClass(await fetchMyClass("month"));
+    return true;
+  };
   useEffect(() => {
     fetchSpending().then(setSpending);
     fetchMyClass("month").then(setMyClass);
@@ -275,8 +286,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </button>
       </div>
 
-      {myClass && <MyClassRow info={myClass} onOpen={() => setRankingOpen(true)} />}
-      <ClassRankingSheet open={rankingOpen} onClose={() => setRankingOpen(false)} initial={myClass} />
+      {myClass && <MyClassRow info={myClass} onOpen={() => (myClass.needs_consent ? setConsentOpen(true) : setRankingOpen(true))} />}
+      <ClassRankingSheet
+        open={rankingOpen}
+        onClose={() => setRankingOpen(false)}
+        initial={myClass}
+        onLeave={() => decideClass(false)}
+      />
+      {myClass && (
+        <SchoolConsentSheet
+          open={consentOpen}
+          className={`${myClass.class_name} · ${myClass.school}`}
+          partner={myClass.partner}
+          onClose={() => setConsentOpen(false)}
+          onDecide={decideClass}
+        />
+      )}
 
       {onOpenSpending && (
         <button type="button" onClick={onOpenSpending} className="flex items-center gap-3 rounded-3xl bg-white p-4 text-left">

@@ -1,9 +1,19 @@
 {
+  "regions": [
+    "dub1"
+  ],
   "functions": {
-    "api/product.ts": { "maxDuration": 60 },
-    "api/cron-expiry.ts": { "maxDuration": 60 }
+    "api/product.ts": {
+      "maxDuration": 60
+    },
+    "api/cron-expiry.ts": {
+      "maxDuration": 60
+    }
   },
   "crons": [
-    { "path": "/api/cron-expiry", "schedule": "0 7 * * *" }
+    {
+      "path": "/api/cron-expiry",
+      "schedule": "0 7 * * *"
+    }
   ]
 }

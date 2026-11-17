@@ -48,7 +48,9 @@ export function redeemMessage(r: RedeemResult): string {
   if (!r.ok) return ERRORS[r.error ?? ""] ?? "Non sono riuscito a usare il codice. Riprova tra poco.";
   if (r.kind === "activation") {
     const by = r.label ? `, offerto da ${r.label}` : "";
-    const cls = r.class_name ? ` Sei nella classe ${r.class_name}: in Home trovi la classifica delle classi.` : "";
+    const cls = r.class_name
+      ? ` Il codice è della classe ${r.class_name}: in Home puoi scegliere se partecipare alla classifica delle classi.`
+      : "";
     return `Fatto! Hai EcoDispensa con 25 crediti al mese fino al ${dateIt(r.premium_until)}${by}. Nessun pagamento e nessun rinnovo automatico.${cls}`;
   }
   if (r.kind === "creator") {

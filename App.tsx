@@ -1,6 +1,8 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import { ComingSoonView, shouldShowComingSoon } from "./components/ComingSoonView";
+import { LegalPage } from "./components/LegalViews";
+import { legalDocFromUrl, LegalDocId } from "./legal/documents";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
@@ -28,6 +30,8 @@ const App = () => {
   // Sul dominio pubblico, finché siamo in prova: pagina "Presto online" con il pulsante Area riservata.
   // Va letto per primo, prima che i link di ricette e inviti vengano tolti dall'indirizzo.
   const [comingSoon, setComingSoon] = useState(shouldShowComingSoon);
+  // ?pagina=privacy|termini|cookie|scuola: documento legale pubblico, anche senza account
+  const [legalPage, setLegalPage] = useState<LegalDocId | null>(legalDocFromUrl);
   // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
   const [view, setView] = useState<ViewState>(() => {
     try {
@@ -754,6 +758,18 @@ const App = () => {
 
     setShoppingItems(items);
   };
+
+  if (legalPage) {
+    return (
+      <LegalPage
+        id={legalPage}
+        onBack={() => {
+          window.history.replaceState(null, "", window.location.pathname);
+          setLegalPage(null);
+        }}
+      />
+    );
+  }
 
   if (!authReady) {
     return (
