@@ -1,5 +1,6 @@
 import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
+import { ComingSoonView, shouldShowComingSoon } from "./components/ComingSoonView";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
 import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
@@ -24,6 +25,9 @@ const normalizeShoppingKey = (name: string, unit?: string | null) =>
   `${name.trim().toLowerCase()}__${(unit ?? "").trim().toLowerCase()}`;
 
 const App = () => {
+  // Sul dominio pubblico, finché siamo in prova: pagina "Presto online" con il pulsante Area riservata.
+  // Va letto per primo, prima che i link di ricette e inviti vengano tolti dall'indirizzo.
+  const [comingSoon, setComingSoon] = useState(shouldShowComingSoon);
   // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
   const [view, setView] = useState<ViewState>(() => {
     try {
@@ -772,6 +776,7 @@ const App = () => {
     );
   }
 
+  if (!session && comingSoon) return <ComingSoonView onEnter={() => setComingSoon(false)} />;
   if (!session) return <AuthView />;
 
   if (adminMode === null) {
