@@ -2,12 +2,12 @@
  *
  * - Pagine: prima la rete, se manca la connessione usa l'ultima versione salvata.
  * - File dell'app (/assets/*, hanno un nome che cambia a ogni build): dalla cache, poi rete.
- * - Icone, manifest, font Google: dalla cache aggiornandoli in background.
+ * - Icone, manifest, caratteri (/fonts/, sul nostro dominio): dalla cache aggiornandoli in background.
  * - NON tocca mai /api/*, Supabase, Stripe o richieste diverse da GET:
  *   dati personali e crediti passano sempre dalla rete.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `ecodispensa-shell-${VERSION}`;
 const ASSET_CACHE = `ecodispensa-assets-${VERSION}`;
 const FONT_CACHE = `ecodispensa-fonts-${VERSION}`;
@@ -46,12 +46,6 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(req.url);
 
-  // Font Google
-  if (url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com") {
-    event.respondWith(staleWhileRevalidate(req, FONT_CACHE));
-    return;
-  }
-
   // Tutto il resto fuori dal nostro dominio (Supabase, Stripe, ...) va diretto in rete
   if (url.origin !== self.location.origin) return;
 
@@ -61,6 +55,12 @@ self.addEventListener("fetch", (event) => {
   // Navigazione tra pagine
   if (req.mode === "navigate") {
     event.respondWith(networkFirstPage(req));
+    return;
+  }
+
+  // Caratteri, serviti dal nostro dominio (niente Google Fonts)
+  if (url.pathname.startsWith("/fonts/")) {
+    event.respondWith(staleWhileRevalidate(req, FONT_CACHE));
     return;
   }
 

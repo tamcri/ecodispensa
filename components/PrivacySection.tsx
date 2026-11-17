@@ -1,10 +1,13 @@
 import React, { useState } from "react";
-import { ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Loader2, Trash2 } from "lucide-react";
 import { deleteMyAccount } from "../services/account";
+import { LEGAL_DOCS, LegalDocId } from "../legal/documents";
+import { LegalSheet } from "./LegalViews";
 
 const DATA_WE_KEEP: Array<[string, string]> = [
   ["Account", "Username e password (cifrata). Nessuna email, nessun nome reale."],
   ["Dispensa e spesa", "I prodotti, le quantità, le scadenze e la lista della spesa della tua casa."],
+  ["Spese", "I prezzi e le spese che inserisci. Le foto degli scontrini servono solo a leggerli e non vengono conservate."],
   ["Ricette", "Le ricette salvate, i voti e le foto dei piatti che carichi tu."],
   ["Casa condivisa", "Con chi condividi dispensa e spesa (solo se inviti qualcuno)."],
   ["Crediti", "Il saldo crediti EcoChef e lo storico di utilizzo."],
@@ -17,6 +20,7 @@ export const PrivacySection = () => {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [doc, setDoc] = useState<LegalDocId | null>(null);
 
   const remove = async () => {
     setBusy(true);
@@ -29,6 +33,17 @@ export const PrivacySection = () => {
 
   return (
     <div className="flex flex-col gap-3 text-sm text-muted">
+      <div className="flex flex-col divide-y divide-black/5 rounded-xl bg-ground">
+        {(["privacy", "termini", "cookie", "scuola"] as LegalDocId[]).map((id) => (
+          <button key={id} type="button" onClick={() => setDoc(id)} className="flex min-h-11 items-center gap-3 px-3 text-left font-semibold text-ink">
+            <FileText size={16} className="shrink-0 text-[#4F6B4A]" />
+            <span className="flex-1">{LEGAL_DOCS[id].title}</span>
+            <ChevronRight size={16} className="text-muted" />
+          </button>
+        ))}
+      </div>
+      <LegalSheet id={doc} onClose={() => setDoc(null)} />
+
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center justify-between text-left font-semibold text-ink">
         Quali dati salviamo
         <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
@@ -43,7 +58,7 @@ export const PrivacySection = () => {
           ))}
           <p>
             I dati sono conservati su Supabase (server in Europa) e servono solo a far funzionare l'app: non li vendiamo e non facciamo
-            pubblicità. Per creare le ricette, a EcoChef inviamo solo i nomi dei prodotti, mai il tuo username.
+            pubblicità. All'intelligenza artificiale inviamo solo quello che serve (prodotti, foto o testo da leggere), mai il tuo username.
           </p>
           <p>Le ricette che condividi con un link sono visibili a chi riceve il link.</p>
         </div>

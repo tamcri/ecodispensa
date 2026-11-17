@@ -3,6 +3,8 @@ import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { resetPasswordWithCode } from "../services/account";
 import { codeFromUrl, savePendingCode } from "../services/codes";
+import { LEGAL, LegalDocId } from "../legal/documents";
+import { LegalLinks, LegalSheet } from "./LegalViews";
 
 type Mode = "login" | "signup";
 
@@ -29,8 +31,10 @@ export default function AuthView() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [legalOpen, setLegalOpen] = useState<LegalDocId | null>(null);
 
-  const canSubmit = username.trim().length >= 3 && password.length >= 6;
+  const canSubmit = username.trim().length >= 3 && password.length >= 6 && (mode === "login" || accepted);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,7 +51,12 @@ export default function AuthView() {
       }
 
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          // accettazione di termini e privacy, salvata con l'account
+          options: { data: { terms_version: LEGAL.termsVersion, terms_accepted_at: new Date().toISOString(), adult: true } },
+        });
         if (error) throw error;
 
         // Se l'utente esiste già, Supabase spesso ritorna user ma senza identity nuova
@@ -161,8 +170,10 @@ export default function AuthView() {
               Ho già un account
             </button>
             <p className="text-center text-xs text-[#3D4A3B]">Gratis nel periodo di prova · 5 crediti EcoChef in regalo</p>
+            <LegalLinks onOpen={setLegalOpen} className="justify-center text-xs text-[#3D4A3B]" />
           </div>
         </div>
+        <LegalSheet id={legalOpen} onClose={() => setLegalOpen(null)} />
       </div>
     );
   }
@@ -272,6 +283,28 @@ export default function AuthView() {
             </div>
           )}
 
+          {mode === "signup" && (
+            <label className="flex items-start gap-3 rounded-2xl bg-ground p-3 text-[13px] leading-snug text-[#3D4A3B]">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-600"
+              />
+              <span>
+                Ho almeno 18 anni e accetto i{" "}
+                <button type="button" onClick={() => setLegalOpen("termini")} className="font-bold text-emerald-700 underline">
+                  Termini d'uso
+                </button>
+                . Ho letto l'
+                <button type="button" onClick={() => setLegalOpen("privacy")} className="font-bold text-emerald-700 underline">
+                  Informativa sulla privacy
+                </button>
+                .
+              </span>
+            </label>
+          )}
+
           {msg && <div className="rounded-2xl bg-peach p-3 text-sm font-semibold text-[#8E3418]">{msg}</div>}
 
           <button
@@ -357,6 +390,8 @@ export default function AuthView() {
       <p className="px-1 pt-1 text-center text-xs text-muted">
         In Italia ogni persona butta in media 554 g di cibo a settimana (Waste Watcher 2026).
       </p>
+      <LegalLinks onOpen={setLegalOpen} className="justify-center text-xs text-muted" />
+      <LegalSheet id={legalOpen} onClose={() => setLegalOpen(null)} />
     </div>
   );
 }

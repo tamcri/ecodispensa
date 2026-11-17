@@ -83,7 +83,9 @@ export const RankingList = ({ rows, highlightId }: { rows: RankingRow[]; highlig
 export const MyClassRow = ({ info, onOpen }: { info: MyClass; onOpen: () => void }) => {
   const mine = info.ranking.find((r) => r.id === info.class_id);
   const ranked = info.ranking.filter((r) => r.qualified).length;
-  const line = mine?.qualified && mine.position
+  const line = info.needs_consent
+    ? 'Progetto Scuola: scegli se partecipare alla classifica'
+    : mine?.qualified && mine.position
     ? `${ordinal(mine.position)} su ${ranked} questo mese · ${pct(mine.waste_rate)} buttato`
     : 'Classifica: servono più famiglie attive';
   return (
@@ -102,8 +104,20 @@ export const MyClassRow = ({ info, onOpen }: { info: MyClass; onOpen: () => void
 };
 
 /** La classifica dell'istituto, per la famiglia */
-export const ClassRankingSheet = ({ open, onClose, initial }: { open: boolean; onClose: () => void; initial: MyClass | null }) => {
+export const ClassRankingSheet = ({
+  open,
+  onClose,
+  initial,
+  onLeave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  initial: MyClass | null;
+  /** ritira il consenso: la famiglia esce dalla classifica */
+  onLeave?: () => Promise<boolean>;
+}) => {
   const [period, setPeriod] = useState<'month' | 'year'>('month');
+  const [leaving, setLeaving] = useState<null | 'ask' | 'busy'>(null);
   const [info, setInfo] = useState<MyClass | null>(initial);
   const [loading, setLoading] = useState(false);
 
@@ -111,6 +125,7 @@ export const ClassRankingSheet = ({ open, onClose, initial }: { open: boolean; o
     if (!open) return;
     setPeriod('month');
     setInfo(initial);
+    setLeaving(null);
   }, [open]);
 
   const switchTo = async (p: 'month' | 'year') => {
@@ -170,6 +185,36 @@ export const ClassRankingSheet = ({ open, onClose, initial }: { open: boolean; o
             Qui si vedono solo i dati di ogni classe, mai quelli di una famiglia. I tuoi numeri li trovi in Home e in Le mie
             spese.
           </p>
+
+          {onLeave &&
+            (leaving === null ? (
+              <button type="button" onClick={() => setLeaving('ask')} className="self-center text-xs font-semibold text-muted underline">
+                Esci dalla classifica
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-2xl bg-white p-3 text-[13px] text-ink">
+                <p>
+                  La tua casa non conterà più per la classe {info.class_name}. Il regalo dei 12 mesi resta tuo. Vuoi uscire?
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setLeaving(null)} className="h-10 rounded-xl bg-ground font-bold">
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    disabled={leaving === 'busy'}
+                    onClick={async () => {
+                      setLeaving('busy');
+                      const ok = await onLeave();
+                      setLeaving(ok ? null : 'ask');
+                    }}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl bg-forest font-bold text-white disabled:opacity-60"
+                  >
+                    {leaving === 'busy' && <Loader2 size={14} className="animate-spin" />} Esci
+                  </button>
+                </div>
+              </div>
+            ))}
         </div>
       )}
     </Sheet>

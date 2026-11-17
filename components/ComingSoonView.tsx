@@ -95,7 +95,12 @@ export const ComingSoonView = ({ onEnter }: { onEnter: () => void }) => (
       </main>
 
       <footer className="flex items-center justify-between gap-3 border-t border-[#2F4A2C]/10 pt-4 text-xs text-[#4A5448]">
-        <span>© {new Date().getFullYear()} EcoDispensa</span>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>© {new Date().getFullYear()} EcoDispensa</span>
+          <a href="/?pagina=privacy" className="font-semibold hover:underline">Privacy</a>
+          <a href="/?pagina=termini" className="font-semibold hover:underline">Termini</a>
+          <a href="/?pagina=cookie" className="font-semibold hover:underline">Cookie</a>
+        </span>
         <button
           type="button"
           onClick={() => {

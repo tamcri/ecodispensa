@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Caratteri serviti dal nostro dominio: nessuna richiesta a Google (privacy) */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/plus-jakarta-sans.woff") format("woff");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/bricolage-grotesque.woff") format("woff");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   background-color: #FAF5EA;

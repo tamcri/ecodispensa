@@ -30,7 +30,9 @@ export type MyClass = {
   city: string | null;
   partner: string;
   partner_kind: "azienda" | "comune";
-  period: "month" | "year";
+  period?: "month" | "year";
+  /** la famiglia non ha ancora scelto se partecipare alla classifica */
+  needs_consent?: boolean;
   ranking: RankingRow[];
 };
 
@@ -125,3 +127,10 @@ export async function fetchMyClass(period: "month" | "year" = "month"): Promise<
 
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${Math.round(n * 100)}%`);
 export const ordinal = (n: number) => `${n}ª`;
+
+/** Consenso della famiglia alla classifica: sì = partecipa; no = esce dalla classe (il regalo resta) */
+export async function setClassConsent(accept: boolean, version: string): Promise<boolean> {
+  const { error } = await supabase.rpc("class_consent", { p_accept: accept, p_version: version });
+  if (error) console.error("class_consent error:", error);
+  return !error;
+}
