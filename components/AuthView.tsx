@@ -224,7 +224,7 @@ export default function AuthView() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className={inputClass}
-              placeholder="es. tammaro"
+              placeholder="username"
               autoCapitalize="none"
               autoCorrect="off"
               autoComplete="username"
