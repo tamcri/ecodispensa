@@ -787,9 +787,9 @@ const App = () => {
 
   const navItems: Array<{ id: ViewState; label: string; icon: React.ReactNode }> = [
     { id: "home", label: "Oggi", icon: <Home size={20} /> },
-    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={20} /> },
-    { id: "chef", label: "EcoChef", icon: <ChefHat size={24} /> },
     { id: "shopping", label: "Spesa", icon: <ShoppingCart size={20} /> },
+    { id: "chef", label: "EcoChef", icon: <ChefHat size={24} /> },
+    { id: "pantry", label: "Dispensa", icon: <Refrigerator size={20} /> },
     { id: "recipeBook", label: "Ricette", icon: <BookOpen size={20} /> },
   ];
 
