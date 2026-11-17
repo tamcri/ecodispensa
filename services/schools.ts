@@ -134,3 +134,41 @@ export async function setClassConsent(accept: boolean, version: string): Promise
   if (error) console.error("class_consent error:", error);
   return !error;
 }
+
+export type SchoolReportRow = {
+  name: string;
+  students: number;
+  codes: number;
+  activated: number;
+  consented: number;
+  active: number;
+  /** false: meno di 3 famiglie attive, i numeri restano nascosti */
+  shown: boolean;
+  position: number | null;
+  used: number | null;
+  wasted: number | null;
+  waste_rate: number | null;
+  used_value: number | null;
+  wasted_value: number | null;
+};
+
+export type SchoolReport = {
+  school: string;
+  city: string | null;
+  partner: string;
+  partner_kind: "azienda" | "comune";
+  from: string;
+  to: string;
+  classes: SchoolReportRow[];
+  totals: Omit<SchoolReportRow, "name" | "position"> & { classes: number };
+};
+
+/** Report d'impatto di un istituto in un periodo (date AAAA-MM-GG) */
+export async function fetchSchoolReport(schoolId: string, from: string, to: string): Promise<SchoolReport | null> {
+  const { data, error } = await supabase.rpc("admin_school_report", { p_school: schoolId, p_from: from, p_to: to });
+  if (error) {
+    console.error("admin_school_report error:", error);
+    return null;
+  }
+  return data as SchoolReport;
+}
