@@ -9,6 +9,8 @@ import { fetchMonthStats, Outcome, WasteStats } from "../services/household";
 import { findFoodGuide } from "../foodGuide";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { fetchSpending, formatEuro, Spending } from "../services/spending";
+import { fetchMyClass, MyClass } from "../services/schools";
+import { ClassRankingSheet, MyClassRow } from "./ClassRanking";
 
 interface HomeViewProps {
   pantryItems: PantryItem[];
@@ -50,8 +52,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenSpending,
 }) => {
   const [spending, setSpending] = useState<Spending | null>(null);
+  const [myClass, setMyClass] = useState<MyClass | null>(null);
+  const [rankingOpen, setRankingOpen] = useState(false);
   useEffect(() => {
     fetchSpending().then(setSpending);
+    fetchMyClass("month").then(setMyClass);
   }, [statsVersion]);
   const [recipes, setRecipes] = useState<SavedRecipe[] | null>(null);
   const [stats, setStats] = useState<WasteStats | null>(null);
@@ -269,6 +274,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <span className="text-xs text-muted">da comprare</span>
         </button>
       </div>
+
+      {myClass && <MyClassRow info={myClass} onOpen={() => setRankingOpen(true)} />}
+      <ClassRankingSheet open={rankingOpen} onClose={() => setRankingOpen(false)} initial={myClass} />
 
       {onOpenSpending && (
         <button type="button" onClick={onOpenSpending} className="flex items-center gap-3 rounded-3xl bg-white p-4 text-left">

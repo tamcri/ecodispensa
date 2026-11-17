@@ -17,7 +17,7 @@ const label = "mb-1.5 block text-xs font-bold text-muted";
 const dateIt = (iso: string) => new Date(iso).toLocaleDateString("it-IT");
 
 /** Scarica un elenco di codici come file CSV (si apre con Excel o Fogli Google) */
-function downloadCsv(name: string, codes: Array<{ code: string; used?: boolean }>) {
+export function downloadCsv(name: string, codes: Array<{ code: string; used?: boolean }>) {
   const rows = ["codice;usato", ...codes.map((c) => `${c.code};${c.used ? "sì" : "no"}`)];
   const blob = new Blob(["﻿" + rows.join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);

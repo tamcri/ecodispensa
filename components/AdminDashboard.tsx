@@ -12,8 +12,9 @@ import {
   giftCredits,
 } from "../services/codes";
 import { AdminCodesPanel } from "./AdminCodesPanel";
+import { AdminSchoolsPanel } from "./AdminSchoolsPanel";
 
-type Tab = "overview" | "subs" | "users" | "codes";
+type Tab = "overview" | "subs" | "users" | "codes" | "schools";
 
 const euro = (n: number) => Number(n || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 /** Importi piccoli (costi dell'intelligenza artificiale): più decimali sotto 1 € */
@@ -167,13 +168,14 @@ export const AdminDashboard = ({
           )}
         </div>
 
-        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-4 gap-1 rounded-2xl bg-stone p-1">
+        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-5 gap-1 rounded-2xl bg-stone p-1">
           {(
             [
               ["overview", "Panoramica"],
               ["subs", "Abbonati"],
               ["users", "Iscritti"],
               ["codes", "Codici"],
+              ["schools", "Scuole"],
             ] as Array<[Tab, string]>
           ).map(([id, label]) => (
             <button
@@ -182,7 +184,7 @@ export const AdminDashboard = ({
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`h-10 rounded-xl text-[12px] ${tab === id ? "bg-white font-extrabold text-ink shadow-sm" : "font-semibold text-[#4A5448]"}`}
+              className={`h-10 rounded-xl text-[11px] ${tab === id ? "bg-white font-extrabold text-ink shadow-sm" : "font-semibold text-[#4A5448]"}`}
             >
               {label}
             </button>
@@ -533,6 +535,7 @@ export const AdminDashboard = ({
         )}
 
         {tab === "codes" && <AdminCodesPanel embedded />}
+        {tab === "schools" && <AdminSchoolsPanel />}
       </div>
     </div>
   );
