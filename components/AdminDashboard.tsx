@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, Gift, LogOut, Loader2, RefreshCw, Search } from "lucide-react";
+import { BarChart3, ChevronLeft, CreditCard, Gift, LogOut, Loader2, RefreshCw, School, Search, Ticket, Users } from "lucide-react";
 import {
   AdminDashboard as Dash,
   AdminAiCosts,
@@ -39,6 +39,36 @@ const AI_KIND_LABEL: Record<string, string> = {
 const stripeFees = (gross: number, payments: number) => gross * 0.015 + payments * 0.25;
 const VAT = 1.22;
 
+const TABS: Array<[Tab, string, React.ComponentType<{ size?: number; className?: string }>]> = [
+  ["overview", "Panoramica", BarChart3],
+  ["subs", "Abbonati", CreditCard],
+  ["users", "Iscritti", Users],
+  ["codes", "Codici", Ticket],
+  ["schools", "Scuole", School],
+];
+
+/** Guadagno stimato: incassi − IVA − commissioni Stripe − intelligenza artificiale */
+const netEstimate = (gross: number, payments: number, aiEur: number) => {
+  const vat = gross - gross / VAT;
+  const fees = stripeFees(gross, payments);
+  return { vat, fees, net: gross - vat - fees - aiEur };
+};
+
+/** Un numero chiave nella riga in alto (solo sul computer) */
+const Kpi = ({ label, value, sub, tone = "plain" }: { label: string; value: React.ReactNode; sub?: string; tone?: "plain" | "good" | "bad" }) => (
+  <div className="flex flex-col gap-1 rounded-[22px] bg-white p-4">
+    <span className="text-xs font-bold uppercase tracking-[0.1em] text-muted">{label}</span>
+    <span
+      className={`font-display text-[30px] font-extrabold leading-none ${
+        tone === "good" ? "text-forest" : tone === "bad" ? "text-[#8E3418]" : "text-ink"
+      }`}
+    >
+      {value}
+    </span>
+    {sub && <span className="text-xs text-muted">{sub}</span>}
+  </div>
+);
+
 const dateIt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("it-IT") : "—");
 const pct = (a: number, b: number) => (a + b > 0 ? Math.round((a / (a + b)) * 100) : null);
 
@@ -57,8 +87,8 @@ const Stat = ({ value, label, strong = false }: { value: React.ReactNode; label:
   </div>
 );
 
-const Card = ({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) => (
-  <section className="flex flex-col gap-3 rounded-[24px] bg-white p-4">
+const Card = ({ title, children, note, className = "" }: { title: string; children: React.ReactNode; note?: string; className?: string }) => (
+  <section className={`flex flex-col gap-3 rounded-[24px] bg-white p-4 lg:p-5 ${className}`}>
     <h2 className="font-display text-lg font-extrabold text-ink">{title}</h2>
     {children}
     {note && <p className="text-[11px] leading-snug text-muted">{note}</p>}
@@ -132,8 +162,49 @@ export const AdminDashboard = ({
 
   return (
     <div className={standalone ? "min-h-screen bg-ground" : "fixed inset-0 z-[60] overflow-y-auto bg-ground"}>
-      <div className="mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 md:max-w-6xl md:px-8 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
-        <div className="flex items-center justify-between">
+      {/* Computer: menu laterale fisso */}
+      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r border-black/5 bg-white px-4 py-6 lg:flex">
+        <span className="flex items-center gap-2.5 px-2">
+          <img src="/icons/icon-192.png" alt="" className="h-10 w-10 rounded-xl" />
+          <span className="leading-tight">
+            <span className="block font-display text-lg font-extrabold text-ink">EcoDispensa</span>
+            <span className="block text-xs font-semibold text-muted">Amministrazione</span>
+          </span>
+        </span>
+        <nav aria-label="Sezioni" className="mt-8 flex flex-col gap-1">
+          {TABS.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              aria-current={tab === id ? "page" : undefined}
+              className={`flex h-11 items-center gap-3 rounded-xl px-3 text-left text-[15px] ${
+                tab === id ? "bg-mint font-extrabold text-forest" : "font-semibold text-[#4A5448] hover:bg-ground"
+              }`}
+            >
+              <Icon size={18} /> {label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto">
+          {standalone ? (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[15px] font-bold text-[#8E3418] hover:bg-peach"
+            >
+              <LogOut size={18} /> Esci
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[15px] font-bold text-ink hover:bg-ground">
+              <ChevronLeft size={18} /> Profilo
+            </button>
+          )}
+        </div>
+      </aside>
+
+      <div className="mx-auto flex max-w-md flex-col gap-4 px-5 pb-16 md:max-w-6xl md:px-8 lg:ml-60 lg:max-w-[1280px] lg:px-10 lg:pt-8 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+        <div className="flex items-center justify-between lg:hidden">
           {standalone ? (
             <span className="flex items-center gap-2">
               <img src="/icons/icon-192.png" alt="" className="h-9 w-9 rounded-xl" />
@@ -158,8 +229,16 @@ export const AdminDashboard = ({
         </div>
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight text-ink">Dashboard</h1>
-            <p className="text-[13px] text-muted">Account amministratore: qui hai il controllo di tutta l'app.</p>
+            <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight text-ink">
+              <span className="lg:hidden">Dashboard</span>
+              <span className="hidden lg:inline">{TABS.find(([id]) => id === tab)?.[1]}</span>
+            </h1>
+            <p className="text-[13px] text-muted">
+              <span className="lg:hidden">Account amministratore: qui hai il controllo di tutta l'app.</span>
+              <span className="hidden lg:inline">
+                {new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </p>
           </div>
           {tab === "overview" && (
             <button
@@ -173,7 +252,7 @@ export const AdminDashboard = ({
           )}
         </div>
 
-        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-5 gap-1 rounded-2xl bg-stone p-1">
+        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-5 gap-1 rounded-2xl bg-stone p-1 lg:hidden">
           {(
             [
               ["overview", "Panoramica"],
@@ -202,15 +281,38 @@ export const AdminDashboard = ({
           ) : !dash ? (
             <p className="rounded-2xl bg-peach p-4 text-sm text-[#8E3418]">Non riesco a caricare i numeri. Riprova.</p>
           ) : (
-            <div className="flex flex-col gap-4 md:block md:columns-2 md:gap-4 xl:columns-3 md:[&>*]:mb-4 [&>*]:break-inside-avoid">
-              <Card title="Iscritti">
+            <div className="flex flex-col gap-4 md:grid md:grid-cols-2 lg:grid-cols-12">
+              <div className="hidden lg:order-first lg:col-span-12 lg:grid lg:grid-cols-5 lg:gap-4">
+                <Kpi label="Iscritti" value={dash.users.total} sub={`+${dash.users.new_30d} negli ultimi 30 giorni`} />
+                <Kpi
+                  label="Abbonati attivi"
+                  value={dash.plans.monthly + dash.plans.yearly + dash.plans.gift}
+                  sub={`${dash.plans.monthly} mensili · ${dash.plans.yearly} annuali · ${dash.plans.gift} con codice`}
+                />
+                <Kpi label="Incassato nel mese" value={euro(dash.revenue.this_month)} sub="IVA inclusa" />
+                {ai ? (
+                  (() => {
+                    const { net } = netEstimate(dash.revenue.last_30d, dash.revenue.payments_30d, ai.period_usd * ai.usd_eur);
+                    return <Kpi label="Ti resta · 30 giorni" value={euro(net)} sub="tolti IVA, Stripe e AI" tone={net >= 0 ? "good" : "bad"} />;
+                  })()
+                ) : (
+                  <Kpi label="Ti resta · 30 giorni" value="—" />
+                )}
+                <Kpi
+                  label="Cibo salvato"
+                  value={savedPct === null ? "—" : `${savedPct}%`}
+                  sub={`${dash.waste.used_30d} usati · ${dash.waste.wasted_30d} buttati in 30 giorni`}
+                  tone="good"
+                />
+              </div>
+              <Card title="Iscritti" className="lg:order-1 lg:col-span-8">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={dash.users.total} label="in totale" strong />
                   <Stat value={`+${dash.users.new_7d}`} label="ultimi 7 giorni" />
                   <Stat value={`+${dash.users.new_30d}`} label="ultimi 30 giorni" />
                 </div>
                 <div>
-                  <div className="flex h-16 items-end gap-[3px]" aria-label="Nuovi iscritti negli ultimi 30 giorni">
+                  <div className="flex h-16 items-end gap-[3px] lg:h-28" aria-label="Nuovi iscritti negli ultimi 30 giorni">
                     {dash.users.by_day.map((d) => (
                       <div
                         key={d.day}
@@ -231,7 +333,7 @@ export const AdminDashboard = ({
                 </div>
               </Card>
 
-              <Card title="Abbonati" note="Con codice = abbonamenti regalati da Comuni, aziende o altri accordi.">
+              <Card title="Abbonati" className="lg:order-2 lg:col-span-4" note="Con codice = abbonamenti regalati da Comuni, aziende o altri accordi.">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={dash.plans.monthly} label="mensili" strong />
                   <Stat value={dash.plans.yearly} label="annuali" strong />
@@ -245,7 +347,7 @@ export const AdminDashboard = ({
                 )}
               </Card>
 
-              <Card title="Incassi" note="Importi IVA inclusa, prima delle commissioni Stripe. Finché Stripe è in modalità prova sono pagamenti di test.">
+              <Card title="Incassi" className="lg:order-3 lg:col-span-4" note="Importi IVA inclusa, prima delle commissioni Stripe. Finché Stripe è in modalità prova sono pagamenti di test.">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={euro(dash.revenue.this_month)} label="questo mese" strong />
                   <Stat value={euro(dash.revenue.last_30d)} label="ultimi 30 giorni" />
@@ -256,7 +358,7 @@ export const AdminDashboard = ({
                 </p>
               </Card>
 
-              <Card title="EcoChef · ultimi 30 giorni">
+              <Card title="EcoChef · ultimi 30 giorni" className="lg:order-6 lg:col-span-5">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={dash.usage.recipes_30d} label="richieste di ricette" />
                   <Stat value={dash.usage.menus_30d} label="menu settimanali" />
@@ -271,6 +373,7 @@ export const AdminDashboard = ({
 
               {ai && (
                 <Card
+                  className="lg:order-5 lg:col-span-4"
                   title="Costi dell'intelligenza artificiale · 30 giorni"
                   note={`Stima dal consumo di ogni richiesta a OpenAI, con il listino in dollari convertito a ${String(ai.usd_eur).replace(".", ",")} € per dollaro. Le foto dei piatti scattate dagli utenti non costano: sono solo salvate.${
                     ai.since ? ` Conteggio attivo dal ${dateIt(ai.since)}.` : " Il conteggio parte da adesso: le richieste di prima non sono registrate."
@@ -302,15 +405,14 @@ export const AdminDashboard = ({
 
               {ai && (
                 <Card
+                  className="lg:order-4 lg:col-span-4"
                   title="Guadagno stimato · 30 giorni"
                   note="Stima: dagli incassi si toglie l'IVA (22%), le commissioni Stripe (circa 1,5% + 0,25 € a pagamento) e l'intelligenza artificiale. Non comprende Vercel, Supabase e le altre spese fisse."
                 >
                   {(() => {
                     const gross = dash.revenue.last_30d;
-                    const vat = gross - gross / VAT;
-                    const fees = stripeFees(gross, dash.revenue.payments_30d);
                     const aiEur = ai.period_usd * ai.usd_eur;
-                    const net = gross - vat - fees - aiEur;
+                    const { vat, fees, net } = netEstimate(gross, dash.revenue.payments_30d, aiEur);
                     const rows: Array<[string, number]> = [
                       ["Incassi (IVA inclusa)", gross],
                       ["IVA da versare", -vat],
@@ -324,7 +426,11 @@ export const AdminDashboard = ({
                             <div key={label} className="flex justify-between border-b border-[#F1EBDD] py-2 text-sm last:border-b-0">
                               <span className="text-ink">{label}</span>
                               <span className={v < 0 ? "text-[#8E3418]" : "font-semibold text-ink"}>
-                                {v < 0 ? `− ${euroFine(-v)}` : euroFine(v)}
+                                {/* più decimali solo per i costi dell'AI, che sono frazioni di centesimo */}
+                                {(() => {
+                                  const fmt = label === "Intelligenza artificiale" ? euroFine : euro;
+                                  return v < 0 ? `− ${fmt(-v)}` : fmt(v);
+                                })()}
                               </span>
                             </div>
                           ))}
@@ -332,7 +438,7 @@ export const AdminDashboard = ({
                         <div className={`flex items-center justify-between rounded-2xl p-3 ${net >= 0 ? "bg-mint" : "bg-peach"}`}>
                           <span className="font-bold text-ink">Ti resta</span>
                           <span className={`font-display text-[24px] font-extrabold ${net >= 0 ? "text-forest" : "text-[#8E3418]"}`}>
-                            {net < 0 ? `− ${euroFine(-net)}` : euroFine(net)}
+                            {net < 0 ? `− ${euro(-net)}` : euro(net)}
                           </span>
                         </div>
                       </>
@@ -341,7 +447,7 @@ export const AdminDashboard = ({
                 </Card>
               )}
 
-              <Card title="Spreco · ultimi 30 giorni" note="Dai prodotti tolti dalla dispensa: «L'ho usato» o «L'ho buttato».">
+              <Card title="Spreco · ultimi 30 giorni" className="lg:order-7 lg:col-span-4" note="Dai prodotti tolti dalla dispensa: «L'ho usato» o «L'ho buttato».">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={savedPct === null ? "–" : `${savedPct}%`} label="salvato" strong />
                   <Stat value={dash.waste.used_30d} label="prodotti usati" />
@@ -362,7 +468,7 @@ export const AdminDashboard = ({
                 <p className="text-xs text-muted">{dash.waste.pantry_items} prodotti nelle dispense in questo momento.</p>
               </Card>
 
-              <Card title="Famiglie e avvisi">
+              <Card title="Famiglie e avvisi" className="lg:order-8 lg:col-span-3">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={dash.households.total} label="dispense" />
                   <Stat value={dash.households.shared} label="condivise in famiglia" />
@@ -378,7 +484,7 @@ export const AdminDashboard = ({
           ) : !subs ? (
             <Loader2 size={22} className="mx-auto mt-6 animate-spin text-muted" />
           ) : (
-            <div className="flex flex-col gap-4 md:block md:columns-2 md:gap-4 xl:columns-3 md:[&>*]:mb-4 [&>*]:break-inside-avoid">
+            <div className="flex flex-col gap-4 md:grid md:grid-cols-2 lg:grid-cols-3">
               <Card title="Abbonamenti attivi">
                 <div className="grid grid-cols-3 gap-2">
                   <Stat value={subs.active.monthly} label="mensili" strong />
@@ -410,7 +516,7 @@ export const AdminDashboard = ({
                 </div>
               </Card>
 
-              <Card title="Chi è abbonato">
+              <Card title="Chi è abbonato" className="md:col-span-2 lg:col-span-3">
                 {subs.list.length === 0 ? (
                   <p className="text-sm text-muted">Nessun abbonamento attivo.</p>
                 ) : (
