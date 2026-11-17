@@ -4,6 +4,7 @@ import { Category, CookResult, IngredientUsage, Recipe } from "../types";
 import { RecipeMeta, RecipeStatus, updateRecipe, uploadRecipePhoto } from "../services/api";
 import { shareRecipe, ShareOutcome } from "../services/share";
 import { findFoodGuide } from "../foodGuide";
+import { toShoppingItem } from "../services/shoppingItem";
 import { RecipePhoto } from "./RecipePhoto";
 import { RecipeContent } from "./RecipeContent";
 import { Sheet } from "./ui";
@@ -46,8 +47,6 @@ export const Stars = ({
     })}
   </div>
 );
-
-const missingName = (m: any) => (typeof m === "string" ? m : m?.name ?? String(m));
 
 const SHARE_FEEDBACK: Record<ShareOutcome, string | null> = {
   shared: null,
@@ -121,8 +120,8 @@ export const RecipeDetailSheet = ({
     if (!onAddShoppingItems || !missing.length) return;
     await onAddShoppingItems(
       missing.map((m) => {
-        const name = missingName(m);
-        return { name, category: findFoodGuide(name)?.category ?? Category.PANTRY };
+        const item = toShoppingItem(m);
+        return { ...item, category: findFoodGuide(item.name)?.category ?? Category.PANTRY };
       })
     );
     setMissingAdded(true);
