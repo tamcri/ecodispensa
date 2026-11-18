@@ -48,6 +48,8 @@ export interface Recipe {
   ingredientsUsed: IngredientUsage[];
   missingIngredients: string[];
   steps: string[];
+  /** porzioni per cui sono calcolate le quantità */
+  servings?: number | null;
 }
 
 export type ViewState = 'home' | 'pantry' | 'shopping' | 'chef' | 'recipeBook';

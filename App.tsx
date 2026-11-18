@@ -370,15 +370,26 @@ const App = () => {
 
   /** Converte una quantità nell'unità del prodotto in dispensa (null se le unità non sono confrontabili). */
   const convertQuantity = (qty: number, from: string, to: string): number | null => {
-    const f = (from || "").trim().toLowerCase();
-    const t = (to || "").trim().toLowerCase();
-    if (!f || f === t) return qty;
-    if (t === "kg" && f === "g") return qty / 1000;
-    if (t === "g" && f === "kg") return qty * 1000;
-    if (t === "l" && f === "ml") return qty / 1000;
-    if (t === "ml" && f === "l") return qty * 1000;
-    if (t === "l" && f === "cl") return qty / 100;
-    return null;
+    // "gr", "grammi", "litri", "pezzi"… → la forma breve; senza unità = pezzi
+    const unit = (u: string) => {
+      const k = (u || "").trim().toLowerCase().replace(/\.$/, "");
+      if (["g", "gr", "grammo", "grammi"].includes(k)) return "g";
+      if (["kg", "chilo", "chili", "chilogrammi"].includes(k)) return "kg";
+      if (["ml", "millilitri"].includes(k)) return "ml";
+      if (["cl", "centilitri"].includes(k)) return "cl";
+      if (["l", "lt", "litro", "litri"].includes(k)) return "l";
+      if (["", "pz", "pezzo", "pezzi", "n"].includes(k)) return "pz";
+      return k;
+    };
+    const f = unit(from);
+    const t = unit(to);
+    if (f === t) return qty;
+    // tutto in grammi o millilitri, poi nell'unità della dispensa
+    const base: Record<string, [string, number]> = { g: ["w", 1], kg: ["w", 1000], ml: ["v", 1], cl: ["v", 10], l: ["v", 1000] };
+    const bf = base[f];
+    const bt = base[t];
+    if (!bf || !bt || bf[0] !== bt[0]) return null;
+    return (qty * bf[1]) / bt[1];
   };
 
   /**

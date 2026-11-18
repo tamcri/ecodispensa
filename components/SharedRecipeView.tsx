@@ -14,6 +14,7 @@ const toRecipe = (r: SharedRecipe): Recipe => ({
   ingredientsUsed: Array.isArray(r.ingredients_used) ? r.ingredients_used : [],
   missingIngredients: Array.isArray(r.missing_ingredients) ? r.missing_ingredients : [],
   steps: Array.isArray(r.steps) ? r.steps : [],
+  servings: Number((r as { servings?: unknown }).servings) || null,
 });
 
 /**
