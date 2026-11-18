@@ -67,18 +67,24 @@ const GIFTS = [
   {
     icon: Landmark,
     who: "Comuni",
+    to: "partner" as const,
+    hash: "comuni",
     title: "Un regalo ai cittadini",
     text: "Un anno di EcoDispensa alle famiglie del territorio: meno rifiuti da smaltire e un passo concreto verso l'obiettivo europeo di −30% di spreco.",
   },
   {
     icon: Building2,
     who: "Aziende",
+    to: "partner" as const,
+    hash: "aziende",
     title: "Un benefit per chi lavora con voi",
     text: "Un abbonamento per ogni dipendente: un welfare utile tutti i giorni, che fa risparmiare le famiglie e racconta il vostro impegno.",
   },
   {
     icon: GraduationCap,
     who: "Scuole",
+    to: "scuola" as const,
+    hash: undefined,
     title: "La gara a chi spreca meno",
     text: "Con il Progetto Scuola le famiglie degli alunni ricevono l'app e le classi si sfidano: vince chi butta meno cibo.",
   },
@@ -249,13 +255,16 @@ export const SiteHome = () => (
           voi date il regalo.
         </p>
         <ul className="mt-12 grid gap-px overflow-hidden rounded-[28px] bg-[#14231A]/15 md:grid-cols-3">
-          {GIFTS.map(({ icon: Icon, who, title, text }) => (
-            <li key={who} id={who === "Scuole" ? "scuola" : undefined} className="flex scroll-mt-16 flex-col gap-3 bg-[#FBEA9A] p-7">
+          {GIFTS.map(({ icon: Icon, who, title, text, to, hash }) => (
+            <li key={who} className="flex flex-col gap-3 bg-[#FBEA9A] p-7">
               <span className="flex items-center gap-2 text-[15px] font-bold text-[#2F7D3A]">
                 <Icon size={20} /> {who}
               </span>
               <h3 className="font-display text-[24px] font-extrabold leading-tight text-[#14231A]">{title}</h3>
               <p className="text-[16px] leading-relaxed text-[#2E3A1E]">{text}</p>
+              <SiteLink to={to} hash={hash} className="mt-auto inline-flex items-center gap-1.5 pt-2 font-bold text-[#14231A] underline-offset-4 hover:underline">
+                {who === "Scuole" ? "Scopri il Progetto Scuola" : "Scopri di più"} <ArrowRight size={17} />
+              </SiteLink>
             </li>
           ))}
         </ul>

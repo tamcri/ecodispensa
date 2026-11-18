@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Building2, Check, GraduationCap, Landmark, Loader2, ShieldCheck } from "lucide-react";
+import { Building2, Check, Landmark, Loader2, ShieldCheck } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
 import { LEGAL } from "../../legal/documents";
 import { H2, Section } from "./SiteHome";
@@ -21,25 +21,17 @@ const OFFERS = [
     text: "Un abbonamento per ogni persona che lavora con voi: un welfare che si usa tutti i giorni e fa risparmiare davvero sulla spesa.",
     points: ["Un regalo utile, non l'ennesimo gadget", "Un progetto di sostenibilità da raccontare nel bilancio e sui social", "Il nome dell'azienda nel messaggio che accoglie chi attiva il regalo"],
   },
-  {
-    id: "scuole",
-    icon: GraduationCap,
-    who: "Scuole",
-    title: "Il Progetto Scuola",
-    text: "Un'azienda o il Comune offre l'app alle famiglie degli alunni e le classi fanno una gara: vince quella che butta meno cibo.",
-    points: ["Biglietti con QR pronti da consegnare, un codice per ogni alunno", "Classifica delle classi e premiazione finale", "Report d'impatto per la scuola e per chi ha offerto il progetto"],
-  },
 ];
 
 const HOW = [
-  { t: "Ci raccontate chi volete coinvolgere", d: "Cittadini, dipendenti o le classi di una scuola, e quante persone sono." },
+  { t: "Ci raccontate chi volete coinvolgere", d: "Cittadini o dipendenti, e quante persone sono." },
   { t: "Vi mandiamo una proposta", d: "Su misura per numero di persone e durata." },
   { t: "Creiamo i codici", d: "Uno per persona, da consegnare con un link o con biglietti stampabili con QR." },
   { t: "Le persone attivano il regalo", d: "Si iscrivono in un minuto, senza email e senza carta: 12 mesi di Premium." },
-  { t: "Vedete i risultati", d: "Quante persone l'hanno attivato e, per le scuole, la classifica e il report d'impatto." },
+  { t: "Vedete i risultati", d: "Quante persone hanno attivato il regalo." },
 ];
 
-type Kind = "comune" | "azienda" | "scuola" | "altro";
+export type Kind = "comune" | "azienda" | "scuola" | "altro";
 
 const KINDS: Array<[Kind, string]> = [
   ["comune", "Comune"],
@@ -52,7 +44,7 @@ const KINDS: Array<[Kind, string]> = [
 const FIELDS: Record<Kind, { org: string; orgHint: string; city: string | null; count: string; countHint: string; role: string }> = {
   comune: { org: "Nome del Comune", orgHint: "es. Sperlonga", city: null, count: "Quante famiglie vorreste coinvolgere, circa", countHint: "es. 500", role: "es. Assessore all'ambiente" },
   azienda: { org: "Nome dell'azienda", orgHint: "", city: "Città della sede", count: "Quanti dipendenti, circa", countHint: "es. 80", role: "es. Responsabile risorse umane" },
-  scuola: { org: "Nome dell'istituto", orgHint: "es. Istituto comprensivo Pacinotti", city: "Città", count: "Quanti alunni, circa", countHint: "es. 300", role: "es. Dirigente, docente" },
+  scuola: { org: "Nome dell'istituto", orgHint: "es. Istituto Pacinotti", city: "Città", count: "Quanti alunni, circa", countHint: "es. 300", role: "es. Dirigente, docente" },
   altro: { org: "Nome dell'ente", orgHint: "", city: "Città", count: "Quante persone, circa", countHint: "es. 100", role: "" },
 };
 
@@ -68,8 +60,8 @@ const field =
   "h-12 w-full rounded-2xl border border-[#2F4A2C]/15 bg-white px-4 text-[15px] text-ink outline-none focus:border-[#2F7D3A] focus:ring-2 focus:ring-[#2F7D3A]/30";
 const label = "mb-1.5 block text-sm font-bold text-ink";
 
-const PartnerForm = () => {
-  const [kind, setKind] = useState<Kind>("comune");
+export const PartnerForm = ({ initialKind = "comune" }: { initialKind?: Kind }) => {
+  const [kind, setKind] = useState<Kind>(initialKind);
   const [form, setForm] = useState({ organization: "", contact: "", role: "", email: "", phone: "", city: "", families: "", message: "" });
   const [privacy, setPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -269,7 +261,7 @@ export const SitePartner = () => (
           Regalate un anno senza sprechi.
         </h1>
         <p className="max-w-2xl text-[18px] leading-relaxed text-[#CFE0C9] md:text-[20px]">
-          Comuni, aziende e scuole possono offrire EcoDispensa a cittadini, dipendenti e famiglie. Noi pensiamo ai codici e
+          Comuni e aziende possono offrire EcoDispensa a cittadini e dipendenti. Noi pensiamo ai codici e
           all'app, voi date il regalo.
         </p>
         <nav aria-label="Proposte" className="flex flex-wrap gap-3">
@@ -333,7 +325,7 @@ export const SitePartner = () => (
       <p className="mt-12 flex max-w-3xl items-start gap-3 text-[15px] leading-relaxed text-[#2E3A1E]">
         <ShieldCheck size={20} className="mt-0.5 shrink-0" />
         Privacy al primo posto: ogni persona ha il proprio account, voi vedete solo numeri complessivi e mai cosa c'è nella dispensa
-        di qualcuno. Nel Progetto Scuola non raccogliamo dati degli alunni.
+        di qualcuno.
       </p>
     </Section>
 

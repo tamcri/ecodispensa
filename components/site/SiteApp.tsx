@@ -6,6 +6,7 @@ import { LegalDocBody } from "../LegalViews";
 import { SiteHome } from "./SiteHome";
 import { SitePartner } from "./SitePartner";
 import { SiteGuide } from "./SiteGuide";
+import { SiteSchool } from "./SiteSchool";
 
 /** Apre l'app (pagina nuova: l'app ha il suo caricamento) */
 export const openApp = (params = "") => window.location.assign(`/app${params}`);
@@ -15,11 +16,12 @@ export const NavContext = React.createContext<Nav>(() => undefined);
 
 const TITLES: Record<SitePage, string> = {
   home: "EcoDispensa · L'app contro lo spreco alimentare",
-  partner: "Per Comuni, aziende e scuole · EcoDispensa",
+  partner: "Per Comuni e Aziende · EcoDispensa",
+  scuola: "Progetto Scuola · EcoDispensa",
   guida: "Guida all'app · EcoDispensa",
 };
 
-const PATHS: Record<SitePage, string> = { home: "/", partner: "/partner", guida: "/guida" };
+const PATHS: Record<SitePage, string> = { home: "/", partner: "/partner", scuola: "/scuola", guida: "/guida" };
 
 /** Link interno del sito: cambia pagina senza ricaricare */
 export const SiteLink = ({
@@ -76,7 +78,8 @@ const MENU: Array<{ label: string; to: SitePage; hash?: string }> = [
   { label: "Come funziona", to: "home", hash: "come-funziona" },
   { label: "Prezzi", to: "home", hash: "prezzi" },
   { label: "Guida", to: "guida" },
-  { label: "Per Comuni e aziende", to: "partner" },
+  { label: "Per Comuni e Aziende", to: "partner" },
+  { label: "Progetto Scuola", to: "scuola" },
 ];
 
 const Header = ({ page }: { page: SitePage }) => {
@@ -157,25 +160,32 @@ const Footer = ({ onLegal }: { onLegal: (id: LegalDocId) => void }) => (
           {LEGAL.email}
         </a>
       </div>
-      <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-sm">
-        <SiteLink to="home" hash="come-funziona" className="font-semibold text-white hover:underline">
-          Come funziona
-        </SiteLink>
-        <button type="button" onClick={() => onLegal("privacy")} className="text-left font-semibold text-white hover:underline">
-          Privacy
-        </button>
-        <SiteLink to="guida" className="font-semibold text-white hover:underline">
-          Guida
-        </SiteLink>
-        <button type="button" onClick={() => onLegal("termini")} className="text-left font-semibold text-white hover:underline">
-          Termini d'uso
-        </button>
-        <SiteLink to="partner" className="font-semibold text-white hover:underline">
-          Comuni e aziende
-        </SiteLink>
-        <button type="button" onClick={() => onLegal("cookie")} className="text-left font-semibold text-white hover:underline">
-          Cookie
-        </button>
+      <div className="flex gap-12 text-sm">
+        <nav aria-label="Sito" className="flex flex-col gap-2">
+          <SiteLink to="home" hash="come-funziona" className="font-semibold text-white hover:underline">
+            Come funziona
+          </SiteLink>
+          <SiteLink to="guida" className="font-semibold text-white hover:underline">
+            Guida
+          </SiteLink>
+          <SiteLink to="partner" className="font-semibold text-white hover:underline">
+            Per Comuni e Aziende
+          </SiteLink>
+          <SiteLink to="scuola" className="font-semibold text-white hover:underline">
+            Progetto Scuola
+          </SiteLink>
+        </nav>
+        <nav aria-label="Documenti" className="flex flex-col items-start gap-2">
+          <button type="button" onClick={() => onLegal("privacy")} className="font-semibold text-white hover:underline">
+            Privacy
+          </button>
+          <button type="button" onClick={() => onLegal("termini")} className="font-semibold text-white hover:underline">
+            Termini d'uso
+          </button>
+          <button type="button" onClick={() => onLegal("cookie")} className="font-semibold text-white hover:underline">
+            Cookie
+          </button>
+        </nav>
       </div>
     </div>
     <p className="mx-auto max-w-6xl px-5 pb-8 text-xs md:px-8">© {new Date().getFullYear()} EcoDispensa</p>
@@ -249,6 +259,8 @@ export const SiteApp = () => {
           <LegalSection id={legal} onBack={() => nav(page)} />
         ) : page === "partner" ? (
           <SitePartner />
+        ) : page === "scuola" ? (
+          <SiteSchool />
         ) : page === "guida" ? (
           <SiteGuide />
         ) : (
