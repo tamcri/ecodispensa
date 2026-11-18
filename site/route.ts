@@ -2,7 +2,7 @@
  * Sito pubblico o app?
  *
  * - ecodispensa.it/app (e tutto sotto /app) → l'app
- * - ecodispensa.it, /partner, /guida → il sito, quando è visibile
+ * - ecodispensa.it, /partner, /scuola, /guida → il sito, quando è visibile
  * - link con ?codice, ?ricetta, ?accesso, ?checkout → l'app (anche quelli vecchi senza /app)
  * - app installata sul telefono → l'app
  *
@@ -17,7 +17,7 @@ const PREVIEW_KEY = "eco-anteprima-sito";
 const PUBLIC_HOSTS = ["ecodispensa.it", "www.ecodispensa.it", "ecodispensa.app", "www.ecodispensa.app"];
 const APP_PARAMS = ["codice", "ricetta", "accesso", "checkout", "sfida", "view"];
 
-export type SitePage = "home" | "partner" | "guida";
+export type SitePage = "home" | "partner" | "scuola" | "guida";
 
 const remember = () => {
   try {
@@ -55,6 +55,7 @@ export function pageFromPath(path: string): SitePage | null {
   if (p === "/") return "home";
   if (p === "/partner") return "partner";
   if (p === "/guida") return "guida";
+  if (p === "/scuola") return "scuola";
   return null;
 }
 
