@@ -48,6 +48,14 @@ const KINDS: Array<[Kind, string]> = [
   ["altro", "Altro"],
 ];
 
+/** Le domande cambiano in base a chi compila */
+const FIELDS: Record<Kind, { org: string; orgHint: string; city: string | null; count: string; countHint: string; role: string }> = {
+  comune: { org: "Nome del Comune", orgHint: "es. Sperlonga", city: null, count: "Quante famiglie vorreste coinvolgere, circa", countHint: "es. 500", role: "es. Assessore all'ambiente" },
+  azienda: { org: "Nome dell'azienda", orgHint: "", city: "Città della sede", count: "Quanti dipendenti, circa", countHint: "es. 80", role: "es. Responsabile risorse umane" },
+  scuola: { org: "Nome dell'istituto", orgHint: "es. Istituto comprensivo Pacinotti", city: "Città", count: "Quanti alunni, circa", countHint: "es. 300", role: "es. Dirigente, docente" },
+  altro: { org: "Nome dell'ente", orgHint: "", city: "Città", count: "Quante persone, circa", countHint: "es. 100", role: "" },
+};
+
 const ERRORS: Record<string, string> = {
   BAD_EMAIL: "Controlla l'indirizzo email.",
   MISSING_FIELDS: "Compila i campi obbligatori.",
@@ -88,7 +96,8 @@ const PartnerForm = () => {
       p_role: form.role,
       p_email: form.email,
       p_phone: form.phone,
-      p_city: form.city,
+      // per un Comune la città è il Comune stesso
+      p_city: kind === "comune" ? form.organization : form.city,
       p_families: Number.isFinite(families) ? families : null,
       p_message: form.message,
       p_privacy_version: LEGAL.termsVersion,
@@ -148,18 +157,28 @@ const PartnerForm = () => {
       </fieldset>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
+        <div className={FIELDS[kind].city ? "" : "md:col-span-2"}>
           <label htmlFor="p-org" className={label}>
-            {kind === "comune" ? "Comune" : kind === "scuola" ? "Nome dell'istituto" : "Nome dell'ente o dell'azienda"} *
+            {FIELDS[kind].org} *
           </label>
-          <input id="p-org" required className={field} value={form.organization} onChange={set("organization")} autoComplete="organization" />
+          <input
+            id="p-org"
+            required
+            className={field}
+            value={form.organization}
+            onChange={set("organization")}
+            autoComplete="organization"
+            placeholder={FIELDS[kind].orgHint}
+          />
         </div>
-        <div>
-          <label htmlFor="p-city" className={label}>
-            Città *
-          </label>
-          <input id="p-city" required className={field} value={form.city} onChange={set("city")} autoComplete="address-level2" />
-        </div>
+        {FIELDS[kind].city && (
+          <div>
+            <label htmlFor="p-city" className={label}>
+              {FIELDS[kind].city} *
+            </label>
+            <input id="p-city" required className={field} value={form.city} onChange={set("city")} autoComplete="address-level2" />
+          </div>
+        )}
         <div>
           <label htmlFor="p-name" className={label}>
             Nome e cognome *
@@ -175,7 +194,7 @@ const PartnerForm = () => {
             className={field}
             value={form.role}
             onChange={set("role")}
-            placeholder={kind === "scuola" ? "es. Dirigente, docente" : kind === "comune" ? "es. Assessore all'ambiente" : "es. Responsabile CSR"}
+            placeholder={FIELDS[kind].role}
           />
         </div>
         <div>
@@ -192,9 +211,9 @@ const PartnerForm = () => {
         </div>
         <div>
           <label htmlFor="p-fam" className={label}>
-            Quante famiglie o alunni, circa
+            {FIELDS[kind].count}
           </label>
-          <input id="p-fam" inputMode="numeric" className={field} value={form.families} onChange={set("families")} placeholder="es. 300" />
+          <input id="p-fam" inputMode="numeric" className={field} value={form.families} onChange={set("families")} placeholder={FIELDS[kind].countHint} />
         </div>
       </div>
 

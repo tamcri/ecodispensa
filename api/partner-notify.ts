@@ -10,7 +10,9 @@ import { serviceClient } from "./_lib/openai.js";
 const TO = "info@ecodispensa.it";
 const FROM = "EcoDispensa <notifiche@ecodispensa.it>";
 
-const KIND: Record<string, string> = { comune: "Comune", azienda: "Azienda", scuola: "Scuola", altro: "Altro" };
+/** Come si chiamano l'ente e il numero, in base a chi ha compilato */
+const ORG: Record<string, string> = { comune: "Comune", azienda: "Azienda", scuola: "Istituto", altro: "Ente" };
+const COUNT: Record<string, string> = { comune: "famiglie", azienda: "dipendenti", scuola: "alunni", altro: "persone" };
 
 const esc = (s: unknown) =>
   String(s ?? "")
@@ -54,15 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .select("id");
   if (!claimed?.length) return res.status(200).json({ ok: true, sent: false });
 
+  const sameCity = String(r.city).trim().toLowerCase() === String(r.organization).trim().toLowerCase();
+  const who = r.kind === "comune" ? `Comune di ${r.organization}` : String(r.organization);
   const rows: Array<[string, unknown]> = [
-    ["Tipo", KIND[r.kind] ?? r.kind],
-    ["Ente o azienda", r.organization],
-    ["Città", r.city],
-    ["Referente", r.contact_name],
-    ["Ruolo", r.role],
+    [ORG[r.kind] ?? "Ente", r.organization],
+    ["Città", r.kind === "comune" || sameCity ? null : r.city],
+    ["Da coinvolgere", r.families ? `circa ${Number(r.families).toLocaleString("it-IT")} ${COUNT[r.kind] ?? "persone"}` : null],
+    ["Referente", r.role ? `${r.contact_name}, ${r.role}` : r.contact_name],
     ["Email", r.email],
     ["Telefono", r.phone],
-    ["Famiglie o alunni", r.families],
   ];
   const table = rows
     .filter(([, v]) => v !== null && v !== undefined && v !== "")
@@ -76,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     : "";
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;max-width:560px">
 <p style="margin:0 0 4px;color:#6F8F66;font-weight:700;text-transform:uppercase;letter-spacing:1px;font-size:12px">EcoDispensa · Diventa partner</p>
-<h1 style="margin:0 0 16px;font-size:22px;color:#2F4A2C">Nuova richiesta da ${esc(r.organization)}</h1>
+<h1 style="margin:0 0 16px;font-size:22px;color:#2F4A2C">Nuova richiesta: ${esc(who)}</h1>
 <table style="border-collapse:collapse">${table}</table>
 ${message}
 <p style="margin:20px 0 0;color:#5F6A5C;font-size:13px">Rispondi a questa email per scrivere direttamente a ${esc(r.contact_name)}. La richiesta è anche nella dashboard admin, sezione Richieste.</p>
@@ -90,7 +92,7 @@ ${message}
         from: FROM,
         to: [TO],
         reply_to: r.email,
-        subject: `Nuova richiesta partner: ${String(r.organization).slice(0, 80)} (${KIND[r.kind] ?? r.kind}, ${String(r.city).slice(0, 40)})`,
+        subject: `Nuova richiesta: ${who.slice(0, 90)}${r.families ? ` · ${r.families} ${COUNT[r.kind] ?? "persone"}` : ""}`,
         html,
       }),
     });
