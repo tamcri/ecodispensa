@@ -18,6 +18,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/save-recipe",
+      "destination": "/api/saved-recipes"
+    },
+    {
       "source": "/((?!api/|assets/|fonts/|icons/|brand/|.*\\..*).*)",
       "destination": "/index.html"
     }

@@ -168,7 +168,7 @@ async function saveRecipe(
   if (!token) return null;
 
   try {
-    const r = await fetch("/api/save-recipe", {
+    const r = await fetch("/api/saved-recipes", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
