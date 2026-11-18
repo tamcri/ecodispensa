@@ -40,6 +40,7 @@ function toRecipe(r: SavedRecipe): Recipe {
     ingredientsUsed: Array.isArray(j.ingredientsUsed) ? j.ingredientsUsed : [],
     missingIngredients: Array.isArray(j.missingIngredients) ? j.missingIngredients : [],
     steps: Array.isArray(j.steps) ? j.steps : [],
+    servings: Number(j.servings ?? r.servings) || null,
   };
 }
 

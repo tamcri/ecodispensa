@@ -1,6 +1,7 @@
 import React from "react";
-import { BarChart, CheckCircle2, Clock, ShoppingCart } from "lucide-react";
+import { BarChart, CheckCircle2, Clock, ListChecks, ShoppingCart, Users } from "lucide-react";
 import { Recipe } from "../types";
+import { pantryName, recipeIngredientRows, shoppingName } from "../services/recipeIngredients";
 
 export const RecipeContent = ({
   recipe,
@@ -9,7 +10,10 @@ export const RecipeContent = ({
   recipe: Recipe;
   /** Pulsante sotto "Da comprare", es. "Aggiungi alla lista della spesa" */
   missingAction?: React.ReactNode;
-}) => (
+}) => {
+  const rows = recipeIngredientRows(recipe);
+  const servings = Number(recipe.servings) > 0 ? Number(recipe.servings) : null;
+  return (
   <div className="flex flex-col gap-6">
     <div className="flex flex-wrap gap-2 text-[13px] font-bold text-ink">
       {recipe.time && (
@@ -22,9 +26,35 @@ export const RecipeContent = ({
           <BarChart size={15} /> {recipe.difficulty}
         </span>
       )}
+      {servings && (
+        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5">
+          <Users size={15} /> {servings === 1 ? "1 persona" : `${servings} persone`}
+        </span>
+      )}
     </div>
 
     {recipe.description && <p className="text-[15px] leading-relaxed text-[#3D4A3B]">{recipe.description}</p>}
+
+    {rows.length > 0 && (
+      <div>
+        <h4 className="mb-3 flex items-center gap-2 font-display text-xl font-bold text-ink">
+          <ListChecks size={20} className="text-emerald-700" /> Ingredienti
+          {servings && (
+            <span className="font-sans text-sm font-semibold text-muted">
+              · per {servings === 1 ? "1 persona" : `${servings} persone`}
+            </span>
+          )}
+        </h4>
+        <ul className="flex flex-col divide-y divide-black/5 rounded-2xl bg-white px-4">
+          {rows.map((r, i) => (
+            <li key={`${r.name}-${i}`} className="flex items-baseline gap-3 py-2.5 text-[15px]">
+              <span className="w-24 shrink-0 font-bold text-ink">{r.amount}</span>
+              <span className="flex-1 text-[#3D4A3B]">{r.name}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
 
     <div className="flex flex-col gap-4">
       <div>
@@ -34,12 +64,7 @@ export const RecipeContent = ({
         <div className="flex flex-wrap gap-2">
           {(recipe.ingredientsUsed ?? []).map((ing, i) => (
             <span key={`${ing.name}-${i}`} className="rounded-xl bg-mint px-3 py-1.5 text-sm text-[#2F4A2C]">
-              {(ing.quantity || ing.unit) && (
-                <span className="font-bold">
-                  {ing.quantity} {ing.unit}{" "}
-                </span>
-              )}
-              {ing.name}
+              {pantryName(ing)}
             </span>
           ))}
           {(recipe.ingredientsUsed ?? []).length === 0 && (
@@ -55,7 +80,7 @@ export const RecipeContent = ({
         <div className="flex flex-wrap gap-2">
           {(recipe.missingIngredients ?? []).map((ing: any, i) => (
             <span key={`${String(ing)}-${i}`} className="rounded-xl bg-peach px-3 py-1.5 text-sm text-[#8E3418]">
-              {typeof ing === "string" ? ing : ing?.name ?? String(ing)}
+              {shoppingName(ing)}
             </span>
           ))}
           {(recipe.missingIngredients ?? []).length === 0 && (
@@ -84,4 +109,5 @@ export const RecipeContent = ({
       )}
     </div>
   </div>
-);
+  );
+};

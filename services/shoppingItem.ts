@@ -7,7 +7,7 @@
  * - Le quantità da negozio (grammi, litri, pezzi) restano, per esempio "Farina 00 · 300 g".
  */
 
-const KITCHEN_UNITS = [
+export const KITCHEN_UNITS = [
   "cucchiai", "cucchiaio", "cucchiaini", "cucchiaino", "cucchiaiate", "cucchiaiata",
   "spicchi", "spicchio", "pizzichi", "pizzico", "prese", "presa", "foglie", "foglia",
   "rametti", "rametto", "ciuffi", "ciuffo", "mazzetti", "mazzetto", "manciate", "manciata",
@@ -15,7 +15,7 @@ const KITCHEN_UNITS = [
   "fili", "filo", "noci", "noce", "fette", "fetta", "fettine", "fettina", "q.b.", "qb", "q.b",
 ];
 
-const SHOP_UNITS: Record<string, string> = {
+export const SHOP_UNITS: Record<string, string> = {
   g: "g", gr: "g", grammi: "g", grammo: "g",
   kg: "kg", chili: "kg", chilo: "kg",
   ml: "ml", cl: "cl", l: "l", litri: "l", litro: "l",
