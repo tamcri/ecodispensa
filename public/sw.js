@@ -7,7 +7,7 @@
  *   dati personali e crediti passano sempre dalla rete.
  */
 
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL_CACHE = `ecodispensa-shell-${VERSION}`;
 const ASSET_CACHE = `ecodispensa-assets-${VERSION}`;
 const FONT_CACHE = `ecodispensa-fonts-${VERSION}`;
@@ -136,14 +136,14 @@ self.addEventListener("push", (event) => {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: data.tag || "ecodispensa-expiry",
-      data: { url: data.url || "/" },
+      data: { url: data.url || "/app" },
     })
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/";
+  const target = (event.notification.data && event.notification.data.url) || "/app";
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

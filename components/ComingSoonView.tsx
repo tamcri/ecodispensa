@@ -1,5 +1,6 @@
 import React from 'react';
 import { Bell, ChefHat, Lock, Receipt } from 'lucide-react';
+import { SITE_LIVE } from '../site/route';
 
 /** Il sito pubblico mostra questa pagina finché siamo in prova: si entra nell'app da "Area riservata" */
 export const PUBLIC_HOSTS = ['ecodispensa.it', 'www.ecodispensa.it', 'ecodispensa.app', 'www.ecodispensa.app'];
@@ -16,6 +17,8 @@ export function shouldShowComingSoon(): boolean {
     }
     // ?anteprima=presto mostra sempre la pagina, per vederla anche dopo essere entrati
     if (params.get('anteprima') === 'presto') return true;
+    // dopo il lancio il sito è pubblico: niente più "Presto online"
+    if (SITE_LIVE) return false;
     if (localStorage.getItem(ACCESS_KEY) === '1') return false;
     return PUBLIC_HOSTS.includes(window.location.hostname);
   } catch {

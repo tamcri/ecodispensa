@@ -13,7 +13,7 @@ export const LEGAL = {
   /** Partita IVA o codice fiscale, se presente */
   taxId: "[Partita IVA / codice fiscale]",
   /** Email per privacy e assistenza */
-  email: "[email di contatto]",
+  email: "info@ecodispensa.it",
   /** Data dell'ultima modifica, mostrata in fondo ai documenti */
   updated: "17 novembre 2026",
   /** Versioni salvate quando l'utente accetta */
@@ -149,7 +149,14 @@ const PRIVACY: LegalDoc = {
       ],
     },
     {
-      title: "11. Modifiche",
+      title: "11. Modulo «Diventa partner» del sito",
+      blocks: [
+        "Se compili il modulo per diventare partner (Comuni, aziende, scuole), trattiamo i dati che inserisci: ente, nome e cognome, ruolo, email, telefono, città, numero indicativo di famiglie e messaggio.",
+        "Li usiamo solo per risponderti e valutare insieme il progetto (misure precontrattuali, art. 6.1.b GDPR), non per newsletter o pubblicità. Li conserviamo per 24 mesi dall'ultimo contatto, salvo che nasca un accordo.",
+      ],
+    },
+    {
+      title: "12. Modifiche",
       blocks: [
         "Se cambiamo questa informativa in modo importante te lo diremo nell'app. La data dell'ultima modifica è in fondo alla pagina.",
       ],

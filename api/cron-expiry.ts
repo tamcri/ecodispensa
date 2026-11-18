@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        JSON.stringify({ title, body, url: "/?view=chef", tag: `expiry-${today}` }),
+        JSON.stringify({ title, body, url: "/app?view=chef", tag: `expiry-${today}` }),
         { TTL: 12 * 3600, urgency: "normal" }
       );
       sent++;

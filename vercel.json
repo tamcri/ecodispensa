@@ -15,5 +15,11 @@
       "path": "/api/cron-expiry",
       "schedule": "0 7 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/|fonts/|icons/|brand/|.*\\..*).*)",
+      "destination": "/index.html"
+    }
   ]
 }

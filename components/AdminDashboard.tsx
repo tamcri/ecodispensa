@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { BarChart3, ChevronLeft, CreditCard, Gift, LogOut, Loader2, RefreshCw, School, Search, Ticket, Users } from "lucide-react";
+import { BarChart3, ChevronLeft, CreditCard, Gift, Inbox, LogOut, Loader2, RefreshCw, School, Search, Ticket, Users } from "lucide-react";
 import {
   AdminDashboard as Dash,
   AdminAiCosts,
@@ -13,8 +13,9 @@ import {
 } from "../services/codes";
 import { AdminCodesPanel } from "./AdminCodesPanel";
 import { AdminSchoolsPanel } from "./AdminSchoolsPanel";
+import { AdminPartnerRequests } from "./AdminPartnerRequests";
 
-type Tab = "overview" | "subs" | "users" | "codes" | "schools";
+type Tab = "overview" | "subs" | "users" | "codes" | "schools" | "requests";
 
 const euro = (n: number) => Number(n || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 /** Importi piccoli (costi dell'intelligenza artificiale): più decimali sotto 1 € */
@@ -45,6 +46,7 @@ const TABS: Array<[Tab, string, React.ComponentType<{ size?: number; className?:
   ["users", "Iscritti", Users],
   ["codes", "Codici", Ticket],
   ["schools", "Scuole", School],
+  ["requests", "Richieste", Inbox],
 ];
 
 /** Guadagno stimato: incassi − IVA − commissioni Stripe − intelligenza artificiale */
@@ -252,7 +254,7 @@ export const AdminDashboard = ({
           )}
         </div>
 
-        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-5 gap-1 rounded-2xl bg-stone p-1 lg:hidden">
+        <div role="tablist" aria-label="Sezioni" className="grid grid-cols-3 gap-1 rounded-2xl bg-stone p-1 sm:grid-cols-6 lg:hidden">
           {(
             [
               ["overview", "Panoramica"],
@@ -260,6 +262,7 @@ export const AdminDashboard = ({
               ["users", "Iscritti"],
               ["codes", "Codici"],
               ["schools", "Scuole"],
+              ["requests", "Richieste"],
             ] as Array<[Tab, string]>
           ).map(([id, label]) => (
             <button
@@ -655,6 +658,11 @@ export const AdminDashboard = ({
         {tab === "schools" && (
           <div className="md:mx-auto md:w-full md:max-w-3xl">
             <AdminSchoolsPanel />
+          </div>
+        )}
+        {tab === "requests" && (
+          <div className="md:mx-auto md:w-full md:max-w-3xl">
+            <AdminPartnerRequests />
           </div>
         )}
       </div>
