@@ -1,5 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeCourse } from "./_lib/course.js";
+
+/**
+ * Ricettario dell'utente.
+ * GET  → le ricette salvate
+ * POST → salva una ricetta (prima era /api/save-recipe, ora unito qui: il piano gratuito di Vercel ha al massimo 12 funzioni)
+ */
 
 function getBearerToken(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -10,81 +17,72 @@ function getBearerToken(req: VercelRequest): string | null {
   return m ? m[1].trim() : null;
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
-) {
-  if (req.method !== "GET") {
-    return res.status(405).json({
-      error: "Method not allowed",
-    });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "GET" && req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
     const token = getBearerToken(req);
-
     if (!token) {
-      return res.status(401).json({
-        error: "Missing Authorization Bearer token",
-      });
+      return res.status(401).json({ error: "Missing Authorization Bearer token" });
     }
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
     if (!supabaseUrl || !supabaseAnonKey) {
-      return res.status(500).json({
-        error: "Missing Supabase environment variables",
-      });
+      return res.status(500).json({ error: "Missing Supabase environment variables" });
     }
 
-    const supabase = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      }
-    );
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
 
-    const {
-      data: userData,
-      error: userError,
-    } = await supabase.auth.getUser();
-
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user) {
-      return res.status(401).json({
-        error: "Invalid session",
-      });
+      return res.status(401).json({ error: "Invalid session" });
     }
-
     const userId = userData.user.id;
 
-    const { data, error } = await supabase
-      .from("recipes_saved")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", {
-        ascending: false,
-      });
-
-    if (error) {
-      return res.status(500).json({
-        error: error.message,
-      });
+    if (req.method === "GET") {
+      const { data, error } = await supabase
+        .from("recipes_saved")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ recipes: data ?? [] });
     }
 
-    return res.status(200).json({
-      recipes: data ?? [],
-    });
+    const { source, recipe, imageUrl = null } = req.body ?? {};
+    if (!source || !recipe) {
+      return res.status(400).json({ error: "Missing source or recipe" });
+    }
+
+    const { data: inserted, error } = await supabase
+      .from("recipes_saved")
+      .insert({
+        user_id: userId,
+        source,
+        title: recipe.title,
+        course: normalizeCourse(recipe.course, recipe.title),
+        difficulty: recipe.difficulty ?? null,
+        time: recipe.time ?? null,
+        servings: recipe.servings ?? null,
+        description: recipe.description ?? null,
+        ingredients_used: recipe.ingredientsUsed ?? [],
+        missing_ingredients: recipe.missingIngredients ?? [],
+        steps: recipe.steps ?? [],
+        recipe_json: recipe,
+        image_url: imageUrl,
+      })
+      .select("id")
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true, id: inserted?.id ?? null });
   } catch (e: any) {
     console.error("saved recipes error:", e);
-
-    return res.status(500).json({
-      error: e?.message ?? "Server error",
-    });
+    return res.status(500).json({ error: e?.message ?? "Server error" });
   }
 }

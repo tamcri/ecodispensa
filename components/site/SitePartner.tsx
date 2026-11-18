@@ -79,7 +79,7 @@ const PartnerForm = () => {
     }
     setBusy(true);
     const families = parseInt(form.families.replace(/\D/g, ""), 10);
-    const { error: err } = await supabase.rpc("submit_partner_request", {
+    const { data: requestId, error: err } = await supabase.rpc("submit_partner_request", {
       p_kind: kind,
       p_organization: form.organization,
       p_contact_name: form.contact,
@@ -96,6 +96,14 @@ const PartnerForm = () => {
       const code = Object.keys(ERRORS).find((k) => err.message?.includes(k));
       setError(code ? ERRORS[code] : `Invio non riuscito. Riprova o scrivici a ${LEGAL.email}.`);
       return;
+    }
+    // avviso email a info@ecodispensa.it: se non parte, la richiesta è comunque salvata
+    if (typeof requestId === "string") {
+      fetch("/api/partner-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: requestId }),
+      }).catch(() => undefined);
     }
     setSent(true);
   };
