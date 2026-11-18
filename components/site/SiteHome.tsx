@@ -171,7 +171,7 @@ export const SiteHome = () => (
           <Phone className="absolute inset-0">
             <HomeScreen animate />
           </Phone>
-          <PaperReceipt className="absolute -left-24 top-24 hidden sm:block md:-left-40" />
+          <PaperReceipt className="absolute -left-56 top-28 hidden md:block" />
         </div>
       </div>
     </section>
