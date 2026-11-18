@@ -1,40 +1,42 @@
 import React, { useState } from "react";
-import { Building2, Check, BarChart3, GraduationCap, Landmark, Loader2, Megaphone, QrCode, ShieldCheck, Trophy } from "lucide-react";
+import { Building2, Check, GraduationCap, Landmark, Loader2, ShieldCheck } from "lucide-react";
 import { supabase } from "../../services/supabaseClient";
 import { LEGAL } from "../../legal/documents";
-import { Eyebrow, H2, Section } from "./SiteHome";
+import { H2, Section } from "./SiteHome";
 
-const WHO = [
+const OFFERS = [
   {
+    id: "comuni",
     icon: Landmark,
-    title: "Comuni",
-    text: "Meno rifiuti da smaltire e un progetto concreto verso l'obiettivo europeo di −30% di spreco entro il 2030.",
+    who: "Comuni",
+    title: "Regalate EcoDispensa ai cittadini",
+    text: "Un anno di app completa alle famiglie del territorio, per esempio a chi fa bene la raccolta differenziata o ai nuovi residenti.",
+    points: ["Meno rifiuti alimentari da raccogliere e smaltire", "Un'azione concreta verso il −30% di spreco chiesto dall'Europa entro il 2030", "Il nome del Comune nel messaggio che accoglie chi attiva il regalo"],
   },
   {
+    id: "aziende",
     icon: Building2,
-    title: "Aziende",
-    text: "Un progetto di responsabilità sociale visibile e misurabile, vicino alle famiglie del territorio.",
+    who: "Aziende",
+    title: "Un benefit per i dipendenti",
+    text: "Un abbonamento per ogni persona che lavora con voi: un welfare che si usa tutti i giorni e fa risparmiare davvero sulla spesa.",
+    points: ["Un regalo utile, non l'ennesimo gadget", "Un progetto di sostenibilità da raccontare nel bilancio e sui social", "Il nome dell'azienda nel messaggio che accoglie chi attiva il regalo"],
   },
   {
+    id: "scuole",
     icon: GraduationCap,
-    title: "Scuole",
-    text: "Un percorso di educazione alimentare e civica già pronto, che coinvolge anche i genitori.",
+    who: "Scuole",
+    title: "Il Progetto Scuola",
+    text: "Un'azienda o il Comune offre l'app alle famiglie degli alunni e le classi fanno una gara: vince quella che butta meno cibo.",
+    points: ["Biglietti con QR pronti da consegnare, un codice per ogni alunno", "Classifica delle classi e premiazione finale", "Report d'impatto per la scuola e per chi ha offerto il progetto"],
   },
 ];
 
 const HOW = [
-  { t: "Scegliete insieme a noi la scuola", d: "Istituto e classi, con il numero di alunni." },
-  { t: "Creiamo un codice per ogni alunno", d: "Ogni codice vale 12 mesi di EcoDispensa completa." },
-  { t: "La scuola consegna i biglietti", d: "Pronti da stampare, con il QR: il genitore lo inquadra e si iscrive." },
-  { t: "Le famiglie usano l'app", d: "E, se lo vogliono, partecipano alla classifica della classe." },
-  { t: "Ricevete il report d'impatto", d: "Famiglie attive, cibo salvato, classe vincitrice, da usare nella comunicazione." },
-];
-
-const GETS = [
-  { icon: Megaphone, t: "«Offerto da» con il vostro nome nell'app di ogni famiglia, per 12 mesi" },
-  { icon: BarChart3, t: "Un report d'impatto per periodo, pronto da condividere" },
-  { icon: Trophy, t: "La premiazione della classe che ha sprecato meno" },
-  { icon: QrCode, t: "Biglietti con QR pronti da stampare, nessun lavoro per la scuola" },
+  { t: "Ci raccontate chi volete coinvolgere", d: "Cittadini, dipendenti o le classi di una scuola, e quante persone sono." },
+  { t: "Vi mandiamo una proposta", d: "Su misura per numero di persone e durata." },
+  { t: "Creiamo i codici", d: "Uno per persona, da consegnare con un link o con biglietti stampabili con QR." },
+  { t: "Le persone attivano il regalo", d: "Si iscrivono in un minuto, senza email e senza carta: 12 mesi di Premium." },
+  { t: "Vedete i risultati", d: "Quante persone l'hanno attivato e, per le scuole, la classifica e il report d'impatto." },
 ];
 
 type Kind = "comune" | "azienda" | "scuola" | "altro";
@@ -55,7 +57,7 @@ const ERRORS: Record<string, string> = {
 };
 
 const field =
-  "h-12 w-full rounded-2xl border border-[#2F4A2C]/15 bg-white px-4 text-[15px] text-ink outline-none focus:border-[#6F8F66] focus:ring-2 focus:ring-[#6F8F66]/30";
+  "h-12 w-full rounded-2xl border border-[#2F4A2C]/15 bg-white px-4 text-[15px] text-ink outline-none focus:border-[#2F7D3A] focus:ring-2 focus:ring-[#2F7D3A]/30";
 const label = "mb-1.5 block text-sm font-bold text-ink";
 
 const PartnerForm = () => {
@@ -110,14 +112,14 @@ const PartnerForm = () => {
 
   if (sent) {
     return (
-      <div className="flex flex-col items-start gap-3 rounded-[28px] bg-[#E3EBDB] p-6 md:p-8">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-forest text-white">
+      <div className="flex flex-col items-start gap-3 rounded-[28px] bg-[#F3F6EE] p-6 md:p-8">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#2F7D3A] text-white">
           <Check size={24} />
         </span>
-        <h3 className="font-display text-[26px] font-extrabold text-forest">Grazie, richiesta ricevuta!</h3>
+        <h3 className="font-display text-[26px] font-extrabold text-[#2F7D3A]">Grazie, richiesta ricevuta!</h3>
         <p className="text-[15px] leading-relaxed text-[#3D4A3B]">
           Ti ricontattiamo entro pochi giorni all'indirizzo email che ci hai lasciato. Per qualsiasi cosa puoi scriverci a{" "}
-          <a href={`mailto:${LEGAL.email}`} className="font-bold text-forest underline">
+          <a href={`mailto:${LEGAL.email}`} className="font-bold text-[#2F7D3A] underline">
             {LEGAL.email}
           </a>
           .
@@ -127,7 +129,7 @@ const PartnerForm = () => {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5 rounded-[28px] bg-white p-5 md:p-8" noValidate>
+    <form onSubmit={submit} className="flex flex-col gap-5 rounded-[28px] border-2 border-[#14231A]/10 bg-white p-5 md:p-8" noValidate>
       <fieldset>
         <legend className={label}>Chi siete</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -137,7 +139,7 @@ const PartnerForm = () => {
               type="button"
               aria-pressed={kind === k}
               onClick={() => setKind(k)}
-              className={`h-11 rounded-2xl text-sm font-bold ${kind === k ? "bg-forest text-white" : "bg-[#FAF5EA] text-ink ring-1 ring-[#2F4A2C]/10"}`}
+              className={`h-11 rounded-2xl text-sm font-bold ${kind === k ? "bg-[#16301B] text-white" : "bg-[#F3F6EE] text-[#14231A] ring-1 ring-[#14231A]/10"}`}
             >
               {l}
             </button>
@@ -219,7 +221,7 @@ const PartnerForm = () => {
         />
         <span>
           Ho letto l'
-          <a href="/?pagina=privacy" target="_blank" rel="noreferrer" className="font-bold text-forest underline">
+          <a href="/?pagina=privacy" target="_blank" rel="noreferrer" className="font-bold text-[#2F7D3A] underline">
             informativa sulla privacy
           </a>
           : i dati servono solo a ricontattarmi per questa richiesta. *
@@ -231,7 +233,7 @@ const PartnerForm = () => {
       <button
         type="submit"
         disabled={busy}
-        className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-forest text-[15px] font-bold text-white disabled:opacity-60"
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#2F7D3A] text-[15px] font-bold text-white hover:bg-[#276B31] disabled:opacity-60"
       >
         {busy && <Loader2 size={18} className="animate-spin" />} Invia la richiesta
       </button>
@@ -242,99 +244,90 @@ const PartnerForm = () => {
 
 export const SitePartner = () => (
   <main>
-    <section className="bg-forest">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-14 md:px-8 md:py-20">
-        <Eyebrow light>Diventa partner</Eyebrow>
-        <h1 className="max-w-4xl font-display text-[40px] font-extrabold leading-[1.04] tracking-tight text-[#FAF5EA] [text-wrap:balance] md:text-[58px]">
-          Regala alle famiglie della tua città un anno senza sprechi.
+    <section className="bg-[#16301B] text-white">
+      <div className="mx-auto flex max-w-6xl flex-col gap-7 px-5 py-16 md:px-8 md:py-24">
+        <h1 className="max-w-4xl font-display text-[46px] font-extrabold leading-[0.97] tracking-[-0.03em] [text-wrap:balance] md:text-[76px]">
+          Regalate un anno senza sprechi.
         </h1>
-        <p className="max-w-2xl text-[17px] leading-relaxed text-[#D6E2CF] md:text-[19px]">
-          Con il Progetto Scuola offrite EcoDispensa alle famiglie degli alunni e misurate quanto cibo salvano, classe per
-          classe.
+        <p className="max-w-2xl text-[18px] leading-relaxed text-[#CFE0C9] md:text-[20px]">
+          Comuni, aziende e scuole possono offrire EcoDispensa a cittadini, dipendenti e famiglie. Noi pensiamo ai codici e
+          all'app, voi date il regalo.
         </p>
-        <a
-          href="#contatti"
-          className="inline-flex h-12 items-center self-start rounded-2xl bg-[#F6DC8E] px-6 text-[15px] font-bold text-ink hover:bg-[#FBEBC4]"
-        >
-          Chiedi informazioni
-        </a>
+        <nav aria-label="Proposte" className="flex flex-wrap gap-3">
+          {OFFERS.map(({ id, icon: Icon, who }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="inline-flex h-12 items-center gap-2 rounded-2xl bg-white/10 px-5 font-bold text-white hover:bg-white/20"
+            >
+              <Icon size={19} className="text-[#F5D547]" /> {who}
+            </a>
+          ))}
+          <a href="#contatti" className="inline-flex h-12 items-center rounded-2xl bg-[#F5D547] px-6 font-bold text-[#14231A] hover:bg-[#FFE36B]">
+            Chiedici una proposta
+          </a>
+        </nav>
       </div>
     </section>
 
-    <Section>
-      <div className="flex flex-col gap-10">
-        <div className="flex max-w-3xl flex-col gap-4">
-          <Eyebrow>Per chi è</Eyebrow>
-          <H2>Un progetto, tre modi di partecipare.</H2>
+    {OFFERS.map(({ id, icon: Icon, who, title, text, points }, i) => (
+      <section key={id} id={id} className={`scroll-mt-16 ${i % 2 ? "bg-[#F3F6EE]" : "bg-white"}`}>
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 md:grid-cols-[1fr_1.2fr] md:gap-16 md:px-8 md:py-20">
+          <div className="flex flex-col gap-4">
+            <span className="flex items-center gap-2 text-[16px] font-bold text-[#2F7D3A]">
+              <Icon size={22} /> {who}
+            </span>
+            <H2>{title}</H2>
+          </div>
+          <div className="flex flex-col gap-5">
+            <p className="text-[18px] leading-relaxed text-[#2E3A30]">{text}</p>
+            <ul className="flex flex-col gap-3">
+              {points.map((p) => (
+                <li key={p} className="flex items-start gap-3 text-[16px] leading-snug text-[#14231A]">
+                  <Check size={20} className="mt-0.5 shrink-0 text-[#2F7D3A]" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-        <ul className="grid gap-4 md:grid-cols-3">
-          {WHO.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex flex-col gap-3 rounded-[28px] bg-white p-6">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E3EBDB] text-forest">
-                <Icon size={24} />
+      </section>
+    ))}
+
+    <Section className="bg-[#F5D547]">
+      <div className="grid gap-10 md:grid-cols-[1fr_1.3fr]">
+        <H2>Come funziona</H2>
+        <ol className="flex flex-col gap-6">
+          {HOW.map((s, i) => (
+            <li key={s.t} className="flex gap-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#14231A] font-display font-extrabold text-[#F5D547]">
+                {i + 1}
               </span>
-              <h3 className="font-display text-[22px] font-extrabold text-forest">{title}</h3>
-              <p className="text-[15px] leading-relaxed text-[#3D4A3B]">{text}</p>
+              <span>
+                <span className="block font-display text-[20px] font-bold text-[#14231A]">{s.t}</span>
+                <span className="block text-[16px] leading-snug text-[#2E3A1E]">{s.d}</span>
+              </span>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
+      <p className="mt-12 flex max-w-3xl items-start gap-3 text-[15px] leading-relaxed text-[#2E3A1E]">
+        <ShieldCheck size={20} className="mt-0.5 shrink-0" />
+        Privacy al primo posto: ogni persona ha il proprio account, voi vedete solo numeri complessivi e mai cosa c'è nella dispensa
+        di qualcuno. Nel Progetto Scuola non raccogliamo dati degli alunni.
+      </p>
     </Section>
 
-    <Section className="bg-white">
-      <div className="grid gap-12 md:grid-cols-2">
-        <div className="flex flex-col gap-6">
-          <Eyebrow>Come funziona</Eyebrow>
-          <H2>Cinque passi, e la scuola non deve fare quasi niente.</H2>
-          <ol className="flex flex-col gap-4">
-            {HOW.map((s, i) => (
-              <li key={s.t} className="flex gap-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F6DC8E] font-display font-extrabold text-ink">
-                  {i + 1}
-                </span>
-                <span>
-                  <span className="block font-bold text-ink">{s.t}</span>
-                  <span className="block text-[15px] leading-snug text-[#4A5448]">{s.d}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="flex flex-col gap-6">
-          <Eyebrow>Cosa ottenete</Eyebrow>
-          <ul className="flex flex-col gap-3">
-            {GETS.map(({ icon: Icon, t }) => (
-              <li key={t} className="flex items-start gap-3 rounded-[22px] bg-[#FAF5EA] p-4 text-[15px] leading-snug text-ink">
-                <Icon size={20} className="mt-0.5 shrink-0 text-[#4F6B4A]" />
-                {t}
-              </li>
-            ))}
-          </ul>
-          <div className="flex flex-col gap-2 rounded-[28px] bg-forest p-6 text-white">
-            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F6DC8E]">Quanto costa</p>
-            <p className="font-display text-[44px] font-extrabold leading-none text-[#F6DC8E]">20 €</p>
-            <p className="text-[15px] text-[#D6E2CF]">a famiglia, per 12 mesi di app completa. Un istituto di 300 alunni: 6.000 €.</p>
-          </div>
-          <p className="flex items-start gap-2 text-[14px] leading-snug text-[#4A5448]">
-            <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#4F6B4A]" />
-            Privacy al primo posto: l'account è del genitore, non raccogliamo dati degli alunni e partner e scuola vedono solo
-            dati di classe.
-          </p>
-        </div>
-      </div>
-    </Section>
-
-    <Section id="contatti">
+    <Section id="contatti" className="bg-white">
       <div className="grid gap-10 md:grid-cols-[1fr_1.4fr]">
-        <div className="flex flex-col gap-4">
-          <Eyebrow>Contatti</Eyebrow>
-          <H2>Parliamone.</H2>
-          <p className="text-[17px] leading-relaxed text-[#3D4A3B]">
-            Lasciaci i tuoi riferimenti: ti ricontattiamo per capire insieme quale scuola coinvolgere e quando partire.
+        <div className="flex flex-col gap-5">
+          <H2>Chiedici una proposta.</H2>
+          <p className="text-[17px] leading-relaxed text-[#3B4A3E]">
+            Lasciaci i tuoi riferimenti: ti ricontattiamo con una proposta su misura per il numero di persone che volete coinvolgere.
           </p>
-          <p className="text-[15px] text-[#3D4A3B]">
+          <p className="text-[16px] text-[#3B4A3E]">
             Preferisci l'email? Scrivi a{" "}
-            <a href={`mailto:${LEGAL.email}`} className="font-bold text-forest underline">
+            <a href={`mailto:${LEGAL.email}`} className="font-bold text-[#2F7D3A] underline">
               {LEGAL.email}
             </a>
           </p>

@@ -3,81 +3,85 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
+  Building2,
   Check,
   ChefHat,
   ChevronDown,
   GraduationCap,
+  Landmark,
   Mic,
   Receipt,
   Refrigerator,
   ShoppingCart,
-  Trophy,
   Users,
   Wallet,
 } from "lucide-react";
 import { openApp, PrimaryButton, SiteLink } from "./SiteApp";
+import { HomeScreen, PantryScreen, PaperReceipt, Phone, ReceiptScreen, RecipeScreen } from "./PhoneMockups";
 
-export const Section = ({
-  id,
-  className = "",
-  children,
-}: {
-  id?: string;
-  className?: string;
-  children: React.ReactNode;
-}) => (
-  <section id={id} className={`scroll-mt-20 ${className}`}>
-    <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">{children}</div>
+/** Colori del sito: più decisi dell'app, stessa famiglia */
+export const C = {
+  night: "#16301B",
+  basil: "#2F7D3A",
+  tomato: "#E2542C",
+  lemon: "#F5D547",
+  milk: "#F3F6EE",
+  ink: "#14231A",
+};
+
+export const Section = ({ id, className = "", children }: { id?: string; className?: string; children: React.ReactNode }) => (
+  <section id={id} className={`scroll-mt-16 ${className}`}>
+    <div className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">{children}</div>
   </section>
 );
 
-export const Eyebrow = ({ children, light = false }: { children: React.ReactNode; light?: boolean }) => (
-  <p className={`text-sm font-bold uppercase tracking-[0.16em] ${light ? "text-[#F6DC8E]" : "text-[#6F8F66]"}`}>{children}</p>
-);
-
-export const H2 = ({ children, light = false }: { children: React.ReactNode; light?: boolean }) => (
+export const H2 = ({ children, light = false, className = "" }: { children: React.ReactNode; light?: boolean; className?: string }) => (
   <h2
-    className={`font-display text-[32px] font-extrabold leading-[1.06] tracking-tight [text-wrap:balance] md:text-[44px] ${
-      light ? "text-[#FAF5EA]" : "text-forest"
-    }`}
+    className={`font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.02em] [text-wrap:balance] md:text-[56px] ${
+      light ? "text-white" : "text-[#14231A]"
+    } ${className}`}
   >
     {children}
   </h2>
 );
 
-const STATS = [
-  { value: "554 g", label: "di cibo buttato da ogni persona, ogni settimana" },
-  { value: "7,4 mld €", label: "il valore del cibo che le famiglie italiane buttano in un anno" },
-  { value: "799 g", label: "a settimana per i più giovani, più del doppio dei più anziani (352 g)" },
-];
-
 const STEPS = [
-  {
-    icon: Receipt,
-    title: "Fai la spesa",
-    text: "Fotografi lo scontrino o detti la spesa a voce: i prodotti entrano in dispensa con le loro scadenze.",
-  },
-  {
-    icon: Bell,
-    title: "Ricevi gli avvisi",
-    text: "Ogni mattina sai cosa scade: niente più yogurt dimenticati in fondo al frigo.",
-  },
-  {
-    icon: ChefHat,
-    title: "Cucina con EcoChef",
-    text: "Ti propone ricette con quello che hai, partendo da ciò che scade prima.",
-  },
+  { title: "Fotografi lo scontrino", text: "O detti la spesa a voce. I prodotti entrano in dispensa con prezzo e scadenza.", screen: <ReceiptScreen /> },
+  { title: "Vedi cosa scade", text: "Ogni prodotto ha i suoi giorni. La mattina ti arriva l'avviso di cosa usare.", screen: <PantryScreen /> },
+  { title: "Cucini quello che hai", text: "EcoChef propone ricette partendo da ciò che scade prima, per le persone che vuoi.", screen: <RecipeScreen /> },
 ];
 
 const FEATURES = [
-  { icon: Refrigerator, title: "Dispensa e scadenze", text: "Tutto quello che hai in casa, diviso per reparto, con i giorni che mancano alla scadenza." },
-  { icon: ShoppingCart, title: "Lista della spesa", text: "Si scrive anche a voce e si condivide con chi vive con te." },
-  { icon: Receipt, title: "Scontrino in un attimo", text: "Una foto e la spesa entra in dispensa, con i prezzi." },
-  { icon: ChefHat, title: "EcoChef", text: "Ricette e menu della settimana con quello che hai, per le persone che vuoi." },
-  { icon: BookOpen, title: "Ricettario", text: "Le tue ricette salvate, i voti, le foto dei piatti da condividere." },
-  { icon: Wallet, title: "Le mie spese", text: "Quanto spendi ogni mese e quanto vale il cibo che finisce nel bidone." },
-  { icon: Mic, title: "Inserimento a voce", text: "«Latte, sei uova e due etti di prosciutto»: fatto." },
-  { icon: Users, title: "Casa condivisa", text: "Famiglia o coinquilini vedono la stessa dispensa e la stessa lista." },
+  { icon: Refrigerator, title: "Dispensa e scadenze", text: "Frigo, dispensa e freezer, con i giorni che mancano." },
+  { icon: Receipt, title: "Scontrino in una foto", text: "La spesa entra da sola, con i prezzi." },
+  { icon: Mic, title: "Spesa a voce", text: "«Latte, sei uova e due etti di prosciutto»." },
+  { icon: Bell, title: "Avvisi del mattino", text: "Cosa usare oggi, prima che si rovini." },
+  { icon: ChefHat, title: "EcoChef", text: "Ricette e menu della settimana con quello che hai." },
+  { icon: ShoppingCart, title: "Lista della spesa", text: "Una per tutta la casa, anche a voce." },
+  { icon: BookOpen, title: "Ricettario", text: "Le ricette salvate, con voti e foto dei piatti." },
+  { icon: Wallet, title: "Le mie spese", text: "Quanto spendi e quanto vale il cibo buttato." },
+  { icon: Users, title: "Casa condivisa", text: "Famiglia o coinquilini, stessa dispensa." },
+];
+
+const GIFTS = [
+  {
+    icon: Landmark,
+    who: "Comuni",
+    title: "Un regalo ai cittadini",
+    text: "Un anno di EcoDispensa alle famiglie del territorio: meno rifiuti da smaltire e un passo concreto verso l'obiettivo europeo di −30% di spreco.",
+  },
+  {
+    icon: Building2,
+    who: "Aziende",
+    title: "Un benefit per chi lavora con voi",
+    text: "Un abbonamento per ogni dipendente: un welfare utile tutti i giorni, che fa risparmiare le famiglie e racconta il vostro impegno.",
+  },
+  {
+    icon: GraduationCap,
+    who: "Scuole",
+    title: "La gara a chi spreca meno",
+    text: "Con il Progetto Scuola le famiglie degli alunni ricevono l'app e le classi si sfidano: vince chi butta meno cibo.",
+  },
 ];
 
 const PLANS = [
@@ -86,63 +90,48 @@ const PLANS = [
     price: "0 €",
     note: "per sempre",
     items: ["Dispensa con avvisi di scadenza", "Lista della spesa, anche a voce", "Ricettario", "5 crediti EcoChef in regalo"],
-    dark: false,
+    strong: false,
   },
   {
-    name: "Premium mensile",
+    name: "Premium",
     price: "4,99 €",
     note: "al mese, disdici quando vuoi",
     items: ["Tutto quello del piano gratis", "25 crediti EcoChef ogni mese", "Lettura dello scontrino"],
-    dark: true,
+    strong: true,
   },
   {
     name: "Premium annuale",
     price: "41,99 €",
     note: "all'anno, come 3,50 € al mese",
     items: ["Tutto il Premium", "Paghi una volta sola", "Risparmi più di 17 € l'anno"],
-    dark: false,
+    strong: false,
   },
 ];
 
 const FAQ = [
-  {
-    q: "Serve l'email per iscriversi?",
-    a: "No. Bastano un username e una password. Ti consigliamo di salvare il codice di recupero che trovi nel Profilo.",
-  },
-  {
-    q: "Funziona su iPhone e Android?",
-    a: "Sì. EcoDispensa si apre dal browser e si installa sulla schermata Home come una normale app, senza passare dagli store.",
-  },
-  {
-    q: "Cosa sono i crediti EcoChef?",
-    a: "Sono la moneta di EcoChef: ogni 4 richieste di ricette usi 1 credito, il menu della settimana ne usa 4. Se qualcosa va storto, i crediti tornano indietro.",
-  },
-  {
-    q: "Dove finiscono i miei dati?",
-    a: "Su server in Europa. Non vendiamo dati, non mostriamo pubblicità e all'intelligenza artificiale non inviamo mai il tuo username.",
-  },
-  {
-    q: "Cos'è il Progetto Scuola?",
-    a: "Un'azienda o un Comune regala un anno di EcoDispensa alle famiglie di una scuola, e le classi fanno una gara a chi spreca meno.",
-  },
+  { q: "Serve l'email per iscriversi?", a: "No. Bastano un username e una password. Nel Profilo trovi un codice di recupero: salvalo, serve se dimentichi la password." },
+  { q: "Funziona su iPhone e Android?", a: "Sì. EcoDispensa si apre dal browser e si installa sulla schermata Home come una normale app, senza passare dagli store." },
+  { q: "Cosa sono i crediti EcoChef?", a: "Sono la moneta di EcoChef: ogni 4 richieste di ricette usi 1 credito, il menu della settimana ne usa 4. Se qualcosa va storto, i crediti tornano indietro." },
+  { q: "Dove finiscono i miei dati?", a: "Su server in Europa. Non vendiamo dati, non mostriamo pubblicità e all'intelligenza artificiale non inviamo mai il tuo username." },
+  { q: "Posso ricevere EcoDispensa in regalo?", a: "Sì, se il tuo Comune, la tua azienda o la scuola dei tuoi figli aderisce: ricevi un codice e hai un anno di Premium senza pagare." },
 ];
 
 const Faq = () => {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <ul className="flex flex-col divide-y divide-[#2F4A2C]/10 rounded-[28px] bg-white px-5 md:px-8">
+    <ul className="divide-y divide-[#14231A]/10 border-y border-[#14231A]/10">
       {FAQ.map((f, i) => (
         <li key={f.q}>
           <button
             type="button"
             aria-expanded={open === i}
             onClick={() => setOpen(open === i ? null : i)}
-            className="flex w-full items-center justify-between gap-4 py-5 text-left font-display text-[18px] font-bold text-ink"
+            className="flex w-full items-center justify-between gap-4 py-5 text-left font-display text-[19px] font-bold text-[#14231A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#2F7D3A]"
           >
             {f.q}
-            <ChevronDown size={20} className={`shrink-0 text-[#6F8F66] transition-transform ${open === i ? "rotate-180" : ""}`} />
+            <ChevronDown size={22} className={`shrink-0 text-[#2F7D3A] transition-transform ${open === i ? "rotate-180" : ""}`} />
           </button>
-          {open === i && <p className="-mt-1 pb-5 text-[15px] leading-relaxed text-[#3D4A3B]">{f.a}</p>}
+          {open === i && <p className="max-w-2xl pb-6 text-[16px] leading-relaxed text-[#3B4A3E]">{f.a}</p>}
         </li>
       ))}
     </ul>
@@ -151,209 +140,178 @@ const Faq = () => {
 
 export const SiteHome = () => (
   <main>
-    {/* ---------- Apertura ---------- */}
-    <section className="bg-[#F7EBD3]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 pb-16 pt-10 md:flex-row md:items-center md:gap-14 md:px-8 md:pb-24 md:pt-16">
-        <div className="flex flex-col gap-6 md:flex-1">
-          <Eyebrow>L'app contro lo spreco alimentare</Eyebrow>
-          <h1 className="font-display text-[42px] font-extrabold leading-[1.02] tracking-tight [text-wrap:balance] md:text-[64px]">
-            Smetti di buttare il cibo. <span className="text-[#4F6B4A]">E i soldi.</span>
+    {/* ---------- Apertura: lo scontrino diventa dispensa ---------- */}
+    <section className="relative overflow-hidden bg-[#16301B] text-white">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 md:grid-cols-[1.05fr_1fr] md:px-8 md:pb-28 md:pt-20">
+        <div className="flex flex-col gap-7">
+          <h1 className="font-display text-[50px] font-extrabold leading-[0.95] tracking-[-0.03em] [text-wrap:balance] md:text-[84px]">
+            Smetti di buttare il cibo. E i soldi.
           </h1>
-          <p className="max-w-[34rem] text-[17px] leading-relaxed text-[#3D4A3B] md:text-[19px]">
-            EcoDispensa tiene d'occhio la tua dispensa, ti avvisa prima che il cibo scada e ti propone ricette con quello che hai
-            in casa.
+          <p className="max-w-[30rem] text-[18px] leading-relaxed text-[#CFE0C9] md:text-[20px]">
+            Fotografi lo scontrino, EcoDispensa ti dice cosa scade e cosa cucinare con quello che hai già in casa.
           </p>
-          <div className="flex flex-wrap gap-3">
-            <PrimaryButton onClick={() => openApp()}>
-              Prova gratis <ArrowRight size={18} />
-            </PrimaryButton>
-            <SiteLink
-              to="home"
-              hash="come-funziona"
-              className="inline-flex h-12 items-center rounded-2xl bg-white/80 px-5 text-[15px] font-bold text-forest hover:bg-white"
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => openApp()}
+              className="inline-flex h-14 items-center gap-2 rounded-2xl bg-[#F5D547] px-7 text-[16px] font-bold text-[#14231A] transition hover:bg-[#FFE36B] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Come funziona
+              Prova gratis <ArrowRight size={19} />
+            </button>
+            <SiteLink to="home" hash="come-funziona" className="inline-flex h-14 items-center px-3 text-[16px] font-bold text-white underline-offset-4 hover:underline">
+              Guarda come funziona
             </SiteLink>
           </div>
-          <p className="flex items-center gap-2 text-sm text-[#4A5448]">
-            <Check size={16} className="text-[#4F6B4A]" /> Gratis, senza email e senza carta di credito
+          <p className="flex items-center gap-2 text-[15px] text-[#CFE0C9]">
+            <Check size={18} className="text-[#F5D547]" /> Gratis, senza email e senza carta di credito
           </p>
         </div>
-        <div className="md:w-[46%]">
-          <img
-            src="/brand/benvenuto-famiglia.jpg"
-            alt="Una famiglia sorridente cucina insieme con gli ingredienti che ha in casa"
-            className="aspect-[4/3] w-full rounded-[28px] object-cover object-[center_37%] shadow-[0_24px_60px_rgba(47,74,44,0.18)] md:aspect-[4/5]"
-          />
+
+        <div className="relative mx-auto h-[600px] w-[300px] md:mr-0 md:h-[640px] md:w-[320px]">
+          <Phone className="absolute inset-0">
+            <HomeScreen animate />
+          </Phone>
+          <PaperReceipt className="absolute -left-56 top-28 hidden md:block" />
         </div>
       </div>
     </section>
 
-    {/* ---------- Il problema ---------- */}
-    <Section>
-      <div className="flex flex-col gap-10">
-        <div className="flex max-w-3xl flex-col gap-4">
-          <Eyebrow>Il problema</Eyebrow>
-          <H2>In Italia buttiamo mezzo chilo di cibo a testa, ogni settimana.</H2>
-          <p className="text-[17px] leading-relaxed text-[#3D4A3B]">
-            Quasi sempre per dimenticanza: un prodotto in fondo al frigo, una spesa fatta senza sapere cosa c'era già. È cibo, ma
-            sono anche soldi.
+    {/* ---------- Il problema: il numero è la notizia ---------- */}
+    <section className="bg-white">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-20 md:grid-cols-[1.2fr_1fr] md:items-end md:px-8 md:py-28">
+        <div>
+          <p className="font-display text-[120px] font-extrabold leading-[0.85] tracking-[-0.05em] text-[#E2542C] md:text-[200px]">554 g</p>
+          <p className="mt-4 max-w-md font-display text-[26px] font-bold leading-tight text-[#14231A] md:text-[32px]">
+            di cibo buttato da ognuno di noi, ogni settimana.
           </p>
         </div>
-        <ul className="grid gap-4 md:grid-cols-3">
-          {STATS.map((s) => (
-            <li key={s.value} className="flex flex-col gap-2 rounded-[28px] bg-[#E3EBDB] p-6">
-              <span className="font-display text-[44px] font-extrabold leading-none text-forest">{s.value}</span>
-              <span className="text-[15px] leading-snug text-[#3D4A3B]">{s.label}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-[#4A5448]">Fonte: Osservatorio Waste Watcher International, «Il caso Italia 2026».</p>
-      </div>
-    </Section>
-
-    {/* ---------- Come funziona ---------- */}
-    <Section id="come-funziona" className="bg-white">
-      <div className="flex flex-col gap-10">
-        <div className="flex max-w-3xl flex-col gap-4">
-          <Eyebrow>Come funziona</Eyebrow>
-          <H2>Tre gesti, e il cibo non si spreca più.</H2>
+        <div className="flex flex-col gap-6 text-[17px] leading-relaxed text-[#3B4A3E]">
+          <p>
+            Quasi sempre per dimenticanza: un prodotto in fondo al frigo, una spesa fatta senza sapere cosa c'era già. In un anno le
+            famiglie italiane buttano cibo per <b className="text-[#14231A]">7,4 miliardi di euro</b>.
+          </p>
+          <p>
+            I più giovani sprecano più del doppio dei più anziani: <b className="text-[#14231A]">799 g</b> a settimana contro 352 g.
+          </p>
+          <p className="text-[13px] text-[#6B776C]">Fonte: Osservatorio Waste Watcher International, «Il caso Italia 2026».</p>
         </div>
-        <ol className="grid gap-4 md:grid-cols-3">
-          {STEPS.map(({ icon: Icon, title, text }, i) => (
-            <li key={title} className="flex flex-col gap-4 rounded-[28px] bg-[#FAF5EA] p-6">
-              <span className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F6DC8E] font-display text-lg font-extrabold text-ink">
-                  {i + 1}
-                </span>
-                <Icon size={22} className="text-[#4F6B4A]" />
-              </span>
-              <h3 className="font-display text-[22px] font-extrabold text-forest">{title}</h3>
-              <p className="text-[15px] leading-relaxed text-[#3D4A3B]">{text}</p>
-            </li>
-          ))}
-        </ol>
       </div>
+    </section>
+
+    {/* ---------- Come funziona: tre schermate vere ---------- */}
+    <Section id="come-funziona" className="bg-[#F3F6EE]">
+      <H2 className="max-w-3xl">Dalla borsa della spesa al piatto, in tre passi.</H2>
+      <ol className="mt-14 grid gap-14 md:grid-cols-3 md:gap-8">
+        {STEPS.map((s, i) => (
+          <li key={s.title} className="flex flex-col items-center gap-6 md:items-start">
+            <Phone className="h-[500px] w-[250px]">{s.screen}</Phone>
+            <div className="max-w-[18rem]">
+              <p className="flex items-center gap-3 font-display text-[22px] font-extrabold text-[#14231A]">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2F7D3A] text-[16px] text-white">{i + 1}</span>
+                {s.title}
+              </p>
+              <p className="mt-2 text-[16px] leading-relaxed text-[#3B4A3E]">{s.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
     </Section>
 
     {/* ---------- Funzioni ---------- */}
-    <Section>
-      <div className="flex flex-col gap-10">
-        <div className="flex max-w-3xl flex-col gap-4">
-          <Eyebrow>Cosa puoi fare</Eyebrow>
-          <H2>Tutto quello che serve in cucina, in un'app sola.</H2>
+    <Section className="bg-white">
+      <div className="grid gap-12 md:grid-cols-[1fr_1.6fr]">
+        <div className="flex flex-col gap-5">
+          <H2>Tutto quello che serve in cucina.</H2>
+          <SiteLink to="guida" className="inline-flex items-center gap-1.5 self-start text-[16px] font-bold text-[#2F7D3A] hover:underline">
+            Leggi la guida passo per passo <ArrowRight size={17} />
+          </SiteLink>
         </div>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex flex-col gap-3 rounded-[24px] bg-white p-5">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E3EBDB] text-forest">
-                <Icon size={22} />
+            <li key={title} className="flex gap-3">
+              <Icon size={24} className="mt-0.5 shrink-0 text-[#2F7D3A]" />
+              <span>
+                <span className="block font-bold text-[#14231A]">{title}</span>
+                <span className="block text-[15px] leading-snug text-[#5A675C]">{text}</span>
               </span>
-              <h3 className="font-bold text-ink">{title}</h3>
-              <p className="text-[14px] leading-snug text-[#4A5448]">{text}</p>
             </li>
           ))}
         </ul>
-        <SiteLink to="guida" className="inline-flex items-center gap-1.5 self-start font-bold text-forest hover:underline">
-          Leggi la guida passo per passo <ArrowRight size={16} />
-        </SiteLink>
       </div>
     </Section>
 
-    {/* ---------- Progetto Scuola ---------- */}
-    <section id="scuola" className="scroll-mt-20 bg-forest">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-16 md:flex-row md:items-center md:gap-14 md:px-8 md:py-24">
-        <div className="flex flex-col gap-5 md:flex-1">
-          <Eyebrow light>Progetto Scuola</Eyebrow>
-          <H2 light>Le abitudini che salvano il cibo si imparano da piccoli.</H2>
-          <p className="text-[17px] leading-relaxed text-[#D6E2CF]">
-            Sono i più giovani a sprecare di più. Con il Progetto Scuola un'azienda o un Comune regala un anno di EcoDispensa alle
-            famiglie degli alunni, e le classi si sfidano a chi butta meno.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <SiteLink
-              to="partner"
-              className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[#F6DC8E] px-6 text-[15px] font-bold text-ink hover:bg-[#FBEBC4]"
-            >
-              Porta il progetto nella tua scuola <ArrowRight size={18} />
-            </SiteLink>
-          </div>
-        </div>
-        <ul className="grid gap-3 md:w-[46%]">
-          {[
-            { icon: GraduationCap, t: "Un anno di app completa per ogni famiglia, offerto dal partner" },
-            { icon: Trophy, t: "Classifica delle classi: vince chi butta meno cibo, in percentuale" },
-            { icon: Users, t: "Solo dati di classe: nessun dato degli alunni, nessuna famiglia riconoscibile" },
-            { icon: Check, t: "Un report d'impatto per la scuola e per il partner" },
-          ].map(({ icon: Icon, t }) => (
-            <li key={t} className="flex items-start gap-3 rounded-[22px] bg-[#3A5836] p-4 text-[15px] leading-snug text-[#FAF5EA]">
-              <Icon size={20} className="mt-0.5 shrink-0 text-[#F6DC8E]" />
-              {t}
+    {/* ---------- Regala EcoDispensa: Comuni, aziende, scuole ---------- */}
+    <section id="regala" className="scroll-mt-16 bg-[#F5D547]">
+      <div className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
+        <H2 className="max-w-3xl">Regala EcoDispensa a chi vuoi far risparmiare.</H2>
+        <p className="mt-5 max-w-2xl text-[18px] leading-relaxed text-[#2E3A1E]">
+          Comuni, aziende e scuole possono offrire un anno di app completa a cittadini, dipendenti e famiglie. Noi pensiamo ai codici,
+          voi date il regalo.
+        </p>
+        <ul className="mt-12 grid gap-px overflow-hidden rounded-[28px] bg-[#14231A]/15 md:grid-cols-3">
+          {GIFTS.map(({ icon: Icon, who, title, text }) => (
+            <li key={who} id={who === "Scuole" ? "scuola" : undefined} className="flex scroll-mt-16 flex-col gap-3 bg-[#FBEA9A] p-7">
+              <span className="flex items-center gap-2 text-[15px] font-bold text-[#2F7D3A]">
+                <Icon size={20} /> {who}
+              </span>
+              <h3 className="font-display text-[24px] font-extrabold leading-tight text-[#14231A]">{title}</h3>
+              <p className="text-[16px] leading-relaxed text-[#2E3A1E]">{text}</p>
             </li>
           ))}
         </ul>
+        <SiteLink
+          to="partner"
+          className="mt-10 inline-flex h-14 items-center gap-2 rounded-2xl bg-[#14231A] px-7 text-[16px] font-bold text-white hover:bg-[#16301B]"
+        >
+          Chiedici una proposta <ArrowRight size={19} />
+        </SiteLink>
       </div>
     </section>
 
     {/* ---------- Prezzi ---------- */}
-    <Section id="prezzi">
-      <div className="flex flex-col gap-10">
-        <div className="flex max-w-3xl flex-col gap-4">
-          <Eyebrow>Prezzi</Eyebrow>
-          <H2>Inizi gratis. Passi a Premium solo se ti serve.</H2>
-        </div>
-        <ul className="grid gap-4 md:grid-cols-3">
-          {PLANS.map((p) => (
-            <li
-              key={p.name}
-              className={`flex flex-col gap-4 rounded-[28px] p-6 ${p.dark ? "bg-forest text-white" : "bg-white text-ink"}`}
-            >
-              <p className={`text-sm font-bold uppercase tracking-[0.14em] ${p.dark ? "text-[#F6DC8E]" : "text-[#6F8F66]"}`}>{p.name}</p>
-              <p className="flex items-baseline gap-2">
-                <span className={`font-display text-[44px] font-extrabold leading-none ${p.dark ? "text-[#F6DC8E]" : "text-forest"}`}>
-                  {p.price}
-                </span>
-              </p>
-              <p className={`text-sm ${p.dark ? "text-[#D6E2CF]" : "text-[#4A5448]"}`}>{p.note}</p>
-              <ul className="flex flex-col gap-2">
-                {p.items.map((it) => (
-                  <li key={it} className="flex items-start gap-2 text-[15px]">
-                    <Check size={18} className={`mt-0.5 shrink-0 ${p.dark ? "text-[#F6DC8E]" : "text-[#4F6B4A]"}`} />
-                    {it}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-[#4A5448]">Prezzi IVA inclusa. Ricariche di crediti EcoChef disponibili nell'app.</p>
-      </div>
+    <Section id="prezzi" className="bg-white">
+      <H2 className="max-w-3xl">Inizi gratis. Passi a Premium solo se ti serve.</H2>
+      <ul className="mt-12 grid gap-5 md:grid-cols-3">
+        {PLANS.map((p) => (
+          <li
+            key={p.name}
+            className={`flex flex-col gap-4 rounded-[28px] p-7 ${p.strong ? "bg-[#16301B] text-white" : "border-2 border-[#14231A]/10 text-[#14231A]"}`}
+          >
+            <p className={`font-bold ${p.strong ? "text-[#F5D547]" : "text-[#2F7D3A]"}`}>{p.name}</p>
+            <p className="font-display text-[52px] font-extrabold leading-none tracking-[-0.02em]">{p.price}</p>
+            <p className={`text-[15px] ${p.strong ? "text-[#CFE0C9]" : "text-[#5A675C]"}`}>{p.note}</p>
+            <ul className="flex flex-col gap-2.5 pt-2">
+              {p.items.map((it) => (
+                <li key={it} className="flex items-start gap-2 text-[16px]">
+                  <Check size={19} className={`mt-0.5 shrink-0 ${p.strong ? "text-[#F5D547]" : "text-[#2F7D3A]"}`} />
+                  {it}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-6 text-[14px] text-[#5A675C]">Prezzi IVA inclusa. Ricariche di crediti EcoChef disponibili nell'app.</p>
     </Section>
 
     {/* ---------- Domande ---------- */}
-    <Section className="bg-white">
-      <div className="mx-auto flex max-w-3xl flex-col gap-8">
-        <div className="flex flex-col gap-4">
-          <Eyebrow>Domande frequenti</Eyebrow>
-          <H2>Le risposte veloci.</H2>
-        </div>
+    <Section className="bg-[#F3F6EE]">
+      <div className="grid gap-10 md:grid-cols-[1fr_1.6fr]">
+        <H2>Domande frequenti</H2>
         <Faq />
       </div>
     </Section>
 
     {/* ---------- Chiusura ---------- */}
-    <Section className="bg-[#F6DC8E]">
-      <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-        <div className="flex max-w-2xl flex-col gap-3">
-          <h2 className="font-display text-[32px] font-extrabold leading-tight tracking-tight text-ink md:text-[40px]">
-            Il prossimo cibo che salvi è già nel tuo frigo.
-          </h2>
-          <p className="text-[17px] text-[#3D3A1F]">Iscriviti in un minuto e fai la tua prima spesa con EcoDispensa.</p>
-        </div>
-        <PrimaryButton onClick={() => openApp()}>
-          Prova gratis <ArrowRight size={18} />
+    <section className="bg-[#16301B]">
+      <div className="mx-auto flex max-w-6xl flex-col items-start gap-8 px-5 py-20 md:flex-row md:items-center md:justify-between md:px-8">
+        <h2 className="max-w-2xl font-display text-[38px] font-extrabold leading-[1.02] tracking-[-0.02em] text-white md:text-[52px]">
+          Il prossimo cibo che salvi è già nel tuo frigo.
+        </h2>
+        <PrimaryButton onClick={() => openApp()} className="!h-14 !bg-[#F5D547] !px-7 !text-[16px] !text-[#14231A] hover:!bg-[#FFE36B]">
+          Prova gratis <ArrowRight size={19} />
         </PrimaryButton>
       </div>
-    </Section>
+    </section>
   </main>
 );
