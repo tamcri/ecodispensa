@@ -1,7 +1,6 @@
 import React from "react";
 import { ArrowRight, BookOpen, ChefHat, Home, Refrigerator, ShoppingCart, Smartphone, UserRound } from "lucide-react";
 import { openApp } from "./SiteApp";
-import { Eyebrow } from "./SiteHome";
 
 type Chapter = {
   id: string;
@@ -102,18 +101,17 @@ const CHAPTERS: Chapter[] = [
 
 export const SiteGuide = () => (
   <main>
-    <section className="bg-[#F7EBD3]">
+    <section className="bg-[#16301B] text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-14 md:px-8 md:py-20">
-        <Eyebrow>Guida</Eyebrow>
-        <h1 className="max-w-3xl font-display text-[40px] font-extrabold leading-[1.04] tracking-tight text-forest [text-wrap:balance] md:text-[56px]">
+        <h1 className="max-w-3xl font-display text-[46px] font-extrabold leading-[0.97] tracking-[-0.03em] [text-wrap:balance] md:text-[76px]">
           EcoDispensa in sette passi.
         </h1>
-        <p className="max-w-2xl text-[17px] leading-relaxed text-[#3D4A3B]">
+        <p className="max-w-2xl text-[18px] leading-relaxed text-[#CFE0C9]">
           Dall'installazione alla prima ricetta: tutto quello che serve per non buttare più il cibo che compri.
         </p>
         <nav aria-label="Capitoli della guida" className="flex flex-wrap gap-2 pt-2">
           {CHAPTERS.map((c, i) => (
-            <a key={c.id} href={`#${c.id}`} className="rounded-full bg-white/80 px-3.5 py-2 text-sm font-semibold text-forest hover:bg-white">
+            <a key={c.id} href={`#${c.id}`} className="rounded-full bg-white/10 px-3.5 py-2 text-sm font-semibold text-white hover:bg-white/20">
               {i + 1}. {c.title}
             </a>
           ))}
@@ -123,37 +121,37 @@ export const SiteGuide = () => (
 
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-5 py-14 md:px-8">
       {CHAPTERS.map(({ id, icon: Icon, title, lead, steps, tip }, i) => (
-        <section key={id} id={id} className="scroll-mt-20 rounded-[28px] bg-white p-6 md:p-8">
+        <section key={id} id={id} className="scroll-mt-20 rounded-[28px] border-2 border-[#14231A]/10 bg-white p-6 md:p-8">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E3EBDB] text-forest">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F6EE] text-[#2F7D3A]">
               <Icon size={24} />
             </span>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#6F8F66]">Passo {i + 1}</p>
-              <h2 className="font-display text-[26px] font-extrabold leading-tight text-forest">{title}</h2>
+              <p className="text-sm font-bold text-[#2F7D3A]">Passo {i + 1}</p>
+              <h2 className="font-display text-[26px] font-extrabold leading-tight text-[#14231A]">{title}</h2>
             </div>
           </div>
           <p className="mt-4 text-[16px] leading-relaxed text-[#3D4A3B]">{lead}</p>
           <ol className="mt-4 flex flex-col gap-3">
             {steps.map((s, n) => (
               <li key={s} className="flex gap-3 text-[15px] leading-relaxed text-ink">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#F6DC8E] text-sm font-extrabold">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#F5D547] text-sm font-extrabold">
                   {n + 1}
                 </span>
                 <span>{s}</span>
               </li>
             ))}
           </ol>
-          {tip && <p className="mt-5 rounded-2xl bg-[#FAF5EA] p-4 text-[14px] leading-relaxed text-[#3D4A3B]">{tip}</p>}
+          {tip && <p className="mt-5 rounded-2xl bg-[#F3F6EE] p-4 text-[14px] leading-relaxed text-[#3D4A3B]">{tip}</p>}
         </section>
       ))}
 
-      <div className="flex flex-col items-start gap-4 rounded-[28px] bg-forest p-6 text-white md:flex-row md:items-center md:justify-between md:p-8">
+      <div className="flex flex-col items-start gap-4 rounded-[28px] bg-[#16301B] p-6 text-white md:flex-row md:items-center md:justify-between md:p-8">
         <p className="font-display text-[24px] font-extrabold leading-tight">Pronto a provarla?</p>
         <button
           type="button"
           onClick={() => openApp()}
-          className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[#F6DC8E] px-6 text-[15px] font-bold text-ink hover:bg-[#FBEBC4]"
+          className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[#F5D547] px-6 text-[15px] font-bold text-[#14231A] hover:bg-[#FFE36B]"
         >
           Apri EcoDispensa <ArrowRight size={18} />
         </button>
