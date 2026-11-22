@@ -337,11 +337,22 @@ function parsePart(raw: string): Said | null {
     amount = parseFloat(m[1].replace(",", "."));
     s = s.slice(m[0].length);
   } else {
-    const w = s.split(" ")[0];
-    if (w in WORD_NUM && !(["un", "uno", "una", "un'"].includes(w) && !s.split(" ")[1])) {
-      amount = WORD_NUM[w];
-      s = s.slice(w.length).trim();
-      // "un etto e mezzo" non lo gestiamo; "mezzo chilo" sì
+    // numeri a parole, anche staccati: "cinque cento" = 500, "trecento cinquanta" = 350, "due mila" = 2000
+    const words = s.split(" ");
+    const first = words[0];
+    if (first in WORD_NUM && !(["un", "uno", "una", "un'"].includes(first) && !words[1])) {
+      let total = 0;
+      let used = 0;
+      for (const w of words) {
+        if (w === "cento" && total > 0 && total < 10) total *= 100;
+        else if ((w === "mila" || w === "mille") && total > 0) total *= 1000;
+        else if (w in WORD_NUM && (used === 0 || WORD_NUM[w] >= 1)) total += WORD_NUM[w];
+        else break;
+        used++;
+        if (["un", "uno", "una", "un'", "mezzo", "mezza"].includes(w) && used === 1) break;
+      }
+      amount = total;
+      s = words.slice(used).join(" ").trim();
     }
   }
   const u = s.split(" ")[0];
@@ -696,10 +707,11 @@ async function skill(req: Request) {
   const first = (member.display_name ?? "").trim().split(/\s+/)[0] ?? "";
   const firstName = first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
 
-  // aperta con "apri eco dispensa": dopo ogni risposta resto in ascolto; frase unica ("chiedi a…"): chiudo
+  // aperta con "apri la mia dispensa": dopo ogni risposta resto in ascolto; frase unica ("chiedi a…"): chiudo
   const inSession = ev?.session?.new === false;
   const more = (o: Out): Out => (inSession && o.end !== false ? { ...o, text: `${o.text} Altro?`, reprompt: "Vuoi fare altro? Puoi dire: stop.", end: false } : o);
   const slot = (name: string) => (ev.request.intent?.slots?.[name]?.value as string | undefined)?.trim() ?? "";
+  if (intent) console.log("alexa intent:", intent);
 
   try {
     if (type === "LaunchRequest") {
