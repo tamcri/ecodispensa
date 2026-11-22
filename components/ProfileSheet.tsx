@@ -24,7 +24,9 @@ import {
   Gift,
   Receipt,
   KeyRound,
+  Mic,
 } from "lucide-react";
+import { AlexaSection } from "./AlexaSection";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { PrivacySection } from "./PrivacySection";
 import { PlansPanel, type PlanProduct } from "./PlansPanel";
@@ -34,7 +36,7 @@ import { displayNameFromEmail } from "../services/household";
 type Diet = "omnivore" | "veg" | "vegan";
 
 /** Pagine del Profilo: la principale a righe raggruppate, ogni riga apre la sua */
-type Page = "home" | "piano" | "codici" | "acquisti" | "famiglia" | "preferenze" | "password" | "recupero" | "privacy";
+type Page = "home" | "piano" | "codici" | "acquisti" | "famiglia" | "preferenze" | "alexa" | "password" | "recupero" | "privacy";
 
 const PAGE_TITLE: Record<Exclude<Page, "home">, string> = {
   piano: "Piano e crediti",
@@ -42,6 +44,7 @@ const PAGE_TITLE: Record<Exclude<Page, "home">, string> = {
   acquisti: "Storico acquisti",
   famiglia: "Famiglia",
   preferenze: "Preferenze di EcoChef",
+  alexa: "Alexa",
   password: "Cambia password",
   recupero: "Codice di recupero",
   privacy: "Privacy e i miei dati",
@@ -759,6 +762,7 @@ const getPurchaseTitle = (purchase: Purchase) => {
               <Group title="La mia cucina">
                 <Row icon={<Users size={18} />} title="Famiglia" value="dispensa condivisa" onClick={() => go("famiglia")} />
                 <Row icon={<ChefHat size={18} />} title="Preferenze di EcoChef" value="dieta, allergie" onClick={() => go("preferenze")} />
+                <Row icon={<Mic size={18} />} title="Alexa" value="usa la voce" onClick={() => go("alexa")} />
                 <div className="flex min-h-[54px] items-center gap-3 px-3.5 py-2">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-mint text-forest">
                     {pushActive ? <Bell size={18} /> : <BellOff size={18} />}
@@ -1287,6 +1291,8 @@ const getPurchaseTitle = (purchase: Purchase) => {
           )}
 
           {page === "recupero" && <RecoveryCodeCard />}
+
+          {page === "alexa" && <AlexaSection isPremium={isPremiumActive} onOpenPlans={openPlans} />}
 
           {page === "privacy" && (
             <div className="rounded-2xl bg-white p-4">
