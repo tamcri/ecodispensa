@@ -73,7 +73,6 @@
             "ho consumato {prodotto}",
             "ho finito {prodotto}",
             "ho mangiato {prodotto}",
-            "ho preso {prodotto}",
             "togli {prodotto}",
             "togli dalla dispensa {prodotto}",
             "rimuovi {prodotto}",
@@ -642,6 +641,90 @@
             "elencali tutti",
             "tutta la dispensa",
             "tutti quanti"
+          ]
+        },
+        {
+          "name": "ReadListIntent",
+          "samples": [
+            "leggimi la lista",
+            "leggimi la lista della spesa",
+            "leggi la lista",
+            "leggi la lista della spesa",
+            "cosa c'è nella lista",
+            "cosa c'è nella lista della spesa",
+            "cosa devo comprare",
+            "cosa devo prendere",
+            "cosa c'è da comprare",
+            "cosa manca da comprare",
+            "dimmi la lista",
+            "dimmi la lista della spesa",
+            "cosa ho in lista",
+            "cosa ho nella lista della spesa",
+            "com'è la lista della spesa",
+            "qual è la lista della spesa",
+            "che cosa devo comprare"
+          ]
+        },
+        {
+          "name": "RemoveShoppingIntent",
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "togli {prodotto} dalla lista",
+            "togli {prodotto} dalla lista della spesa",
+            "toglimi {prodotto} dalla lista",
+            "rimuovi {prodotto} dalla lista",
+            "rimuovi {prodotto} dalla lista della spesa",
+            "cancella {prodotto} dalla lista",
+            "cancella {prodotto} dalla lista della spesa",
+            "elimina {prodotto} dalla lista",
+            "elimina {prodotto} dalla lista della spesa",
+            "leva {prodotto} dalla lista",
+            "non mi serve più {prodotto}",
+            "dalla lista togli {prodotto}"
+          ]
+        },
+        {
+          "name": "BoughtIntent",
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "ho preso {prodotto}",
+            "abbiamo preso {prodotto}",
+            "ho messo nel carrello {prodotto}",
+            "metti nel carrello {prodotto}",
+            "spunta {prodotto}",
+            "segna come preso {prodotto}",
+            "segna come comprato {prodotto}",
+            "preso anche {prodotto}",
+            "nel carrello {prodotto}"
+          ]
+        },
+        {
+          "name": "BoughtAllIntent",
+          "samples": [
+            "ho comprato tutto",
+            "abbiamo comprato tutto",
+            "ho preso tutto",
+            "abbiamo preso tutto",
+            "ho fatto la spesa",
+            "abbiamo fatto la spesa",
+            "spesa fatta",
+            "ho comprato tutta la lista",
+            "ho preso tutta la lista",
+            "segna tutto come preso",
+            "segna tutto come comprato",
+            "spunta tutto",
+            "metti tutto nel carrello",
+            "ho finito la spesa"
           ]
         }
       ],
