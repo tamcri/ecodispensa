@@ -333,7 +333,13 @@
             "cosa mi consiglia lo chef",
             "cosa facciamo da mangiare",
             "cosa possiamo cucinare oggi",
-            "cosa cuciniamo oggi"
+            "cosa cuciniamo oggi",
+            "menu di oggi",
+            "qual è il menu di oggi",
+            "cosa cucino stasera",
+            "cosa faccio per cena",
+            "cosa mangiamo stasera",
+            "proponimi un menu"
           ],
           "slots": []
         },
@@ -726,6 +732,119 @@
             "metti tutto nel carrello",
             "ho finito la spesa"
           ]
+        },
+        {
+          "name": "ReadRecipeIntent",
+          "slots": [
+            {
+              "name": "ricetta",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "leggimi la ricetta {ricetta}",
+            "leggimi la ricetta di {ricetta}",
+            "leggimi la ricetta del {ricetta}",
+            "leggimi la ricetta della {ricetta}",
+            "leggimi la ricetta dei {ricetta}",
+            "leggimi la ricetta delle {ricetta}",
+            "leggi la ricetta {ricetta}",
+            "come si fa {ricetta}",
+            "come si fanno {ricetta}",
+            "come si prepara {ricetta}",
+            "come si preparano {ricetta}",
+            "come si cucina {ricetta}",
+            "come si cucinano {ricetta}",
+            "spiegami come si fa {ricetta}",
+            "dimmi la ricetta {ricetta}",
+            "dimmi la ricetta di {ricetta}",
+            "dimmi la ricetta della {ricetta}",
+            "dimmi la ricetta del {ricetta}",
+            "insegnami a fare {ricetta}",
+            "voglio cucinare {ricetta}",
+            "cuciniamo {ricetta}",
+            "prepariamo insieme {ricetta}",
+            "leggimi la ricetta",
+            "leggi la ricetta",
+            "leggimi la ricetta passo passo",
+            "leggimi il procedimento",
+            "iniziamo a cucinare",
+            "cominciamo a cucinare",
+            "cominciamo la ricetta",
+            "iniziamo la ricetta",
+            "guidami nella ricetta"
+          ]
+        },
+        {
+          "name": "NextStepIntent",
+          "samples": [
+            "avanti",
+            "vai avanti",
+            "prossimo passaggio",
+            "il prossimo passaggio",
+            "passaggio successivo",
+            "continua",
+            "e poi",
+            "e adesso",
+            "poi cosa faccio",
+            "fatto",
+            "ho fatto",
+            "pronto",
+            "sono pronto",
+            "sono pronta",
+            "andiamo avanti",
+            "dimmi il prossimo passaggio",
+            "qual è il prossimo passaggio"
+          ]
+        },
+        {
+          "name": "PrevStepIntent",
+          "samples": [
+            "indietro",
+            "torna indietro",
+            "passaggio precedente",
+            "il passaggio precedente",
+            "torna al passaggio prima",
+            "rileggi il passaggio prima"
+          ]
+        },
+        {
+          "name": "RecipeIngredientsIntent",
+          "samples": [
+            "quali sono gli ingredienti",
+            "dimmi gli ingredienti",
+            "ripeti gli ingredienti",
+            "cosa mi serve per la ricetta",
+            "che ingredienti servono",
+            "leggimi gli ingredienti"
+          ]
+        },
+        {
+          "name": "CookWithIntent",
+          "slots": [
+            {
+              "name": "ingrediente",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "cosa posso cucinare con {ingrediente}",
+            "cosa posso fare con {ingrediente}",
+            "cosa cucino con {ingrediente}",
+            "cosa faccio con {ingrediente}",
+            "una ricetta con {ingrediente}",
+            "dammi una ricetta con {ingrediente}",
+            "proponimi una ricetta con {ingrediente}",
+            "proponimi qualcosa con {ingrediente}",
+            "ricette con {ingrediente}",
+            "come posso usare {ingrediente}",
+            "come uso {ingrediente}",
+            "cosa preparo con {ingrediente}"
+          ]
+        },
+        {
+          "name": "AMAZON.RepeatIntent",
+          "samples": []
         }
       ],
       "types": [
