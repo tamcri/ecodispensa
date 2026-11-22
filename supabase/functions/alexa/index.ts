@@ -101,6 +101,120 @@ async function tokenEndpoint(req: Request) {
   return json({ error: "unsupported_grant_type" }, 400);
 }
 
+// ---------------------------------------------------------------- collegamento in un tocco dall'app (app-to-app)
+//
+//  POST /alexa/collega/start   (con il token di accesso di EcoDispensa) → indirizzi di Alexa / Amazon per il consenso
+//  POST /alexa/collega/finish  { code, state } → abilita la skill e collega l'account
+//
+// Segreti: ALEXA_A2A_CLIENT_ID e ALEXA_A2A_CLIENT_SECRET (console Alexa → Account Linking → collegamento dall'app)
+
+const A2A_REDIRECT = "https://ecodispensa.it/app/alexa-collega";
+const SKILL_STAGE = Deno.env.get("ALEXA_SKILL_STAGE") || "development";
+const ALEXA_HOSTS = ["https://api.eu.amazonalexa.com", "https://api.amazonalexa.com", "https://api.fe.amazonalexa.com"];
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const cors = (body: unknown, status = 200) => json(body, status, CORS);
+
+const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+async function linkStart(req: Request) {
+  const clientId = Deno.env.get("ALEXA_A2A_CLIENT_ID");
+  if (!clientId) return cors({ error: "NOT_CONFIGURED" }, 503);
+  const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const { data: u } = await db.auth.getUser(jwt);
+  if (!u?.user) return cors({ error: "UNAUTHORIZED" }, 401);
+
+  const state = randomToken();
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  await db.from("alexa_link_states").delete().lt("created_at", new Date(Date.now() - 3600_000).toISOString());
+  const { error } = await db.from("alexa_link_states").insert({ state_hash: await sha256(state), user_id: u.user.id, verifier });
+  if (error) return cors({ error: "SERVER_ERROR" }, 500);
+
+  const common = {
+    client_id: clientId,
+    scope: "alexa::skills:account_linking",
+    response_type: "code",
+    redirect_uri: A2A_REDIRECT,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  };
+  const alexaUrl = `https://alexa.amazon.com/spa/skill-account-linking-consent?${new URLSearchParams({
+    fragment: "skill-account-linking-consent",
+    ...common,
+    skill_stage: SKILL_STAGE,
+  })}`;
+  const lwaUrl = `https://www.amazon.com/ap/oa?${new URLSearchParams(common)}`;
+  return cors({ alexaUrl, lwaUrl });
+}
+
+async function linkFinish(req: Request) {
+  const clientId = Deno.env.get("ALEXA_A2A_CLIENT_ID");
+  const clientSecret = Deno.env.get("ALEXA_A2A_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return cors({ error: "NOT_CONFIGURED" }, 503);
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    /* corpo non valido */
+  }
+  const amazonCode = typeof body?.code === "string" ? body.code : "";
+  const state = typeof body?.state === "string" ? body.state : "";
+  if (!amazonCode || !state) return cors({ error: "BAD_REQUEST" }, 400);
+
+  // lo "state" segreto e monouso dice chi ha iniziato il collegamento (anche se il ritorno si apre in un altro browser)
+  const { data: st } = await db
+    .from("alexa_link_states")
+    .delete()
+    .eq("state_hash", await sha256(state))
+    .select("user_id, verifier, created_at")
+    .maybeSingle();
+  if (!st || Date.parse(st.created_at) < Date.now() - 30 * 60_000) return cors({ error: "EXPIRED" }, 400);
+
+  // 1. il codice di Amazon diventa un token di Amazon per questo utente
+  const tr = await fetch("https://api.amazon.com/auth/o2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code: amazonCode,
+      redirect_uri: A2A_REDIRECT,
+      client_id: clientId,
+      client_secret: clientSecret,
+      code_verifier: st.verifier,
+    }),
+  });
+  const tok = await tr.json().catch(() => null);
+  if (!tr.ok || !tok?.access_token) {
+    console.error("alexa collega: token Amazon", tr.status, tok?.error ?? "");
+    return cors({ error: "AMAZON_TOKEN" }, 502);
+  }
+
+  // 2. un nostro codice monouso per lo stesso utente, che Alexa scambierà con /alexa/token
+  const ourCode = randomToken();
+  const { error: ce } = await db.from("alexa_auth_codes").insert({ code_hash: await sha256(ourCode), user_id: st.user_id, redirect_uri: A2A_REDIRECT });
+  if (ce) return cors({ error: "SERVER_ERROR" }, 500);
+
+  // 3. abilitazione della skill e collegamento: si prova la regione dell'utente (prima l'Europa)
+  const payload = JSON.stringify({ stage: SKILL_STAGE, accountLinkRequest: { redirectUri: A2A_REDIRECT, authCode: ourCode, type: "AUTH_CODE" } });
+  for (const host of ALEXA_HOSTS) {
+    const r = await fetch(`${host}/v1/users/~current/skills/${SKILL_ID}/enablement`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tok.access_token}`, "Content-Type": "application/json" },
+      body: payload,
+    });
+    if (r.status === 201 || r.status === 200) return cors({ ok: true });
+    const t = await r.text().catch(() => "");
+    console.error("alexa collega: abilitazione", host, r.status, t.slice(0, 300));
+  }
+  return cors({ error: "ENABLE_FAILED" }, 502);
+}
+
 // ---------------------------------------------------------------- firma delle richieste di Amazon
 
 const certCache = new Map<string, { leaf: x509.X509Certificate; key: CryptoKey; until: number }>();
@@ -1229,8 +1343,19 @@ async function skill(req: Request) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("EcoDispensa per Alexa", { status: 200 });
   const path = new URL(req.url).pathname;
+  if (path.includes("/collega/")) {
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+    try {
+      if (path.endsWith("/collega/start")) return await linkStart(req);
+      if (path.endsWith("/collega/finish")) return await linkFinish(req);
+    } catch (e) {
+      console.error("alexa collega:", e);
+      return cors({ error: "SERVER_ERROR" }, 500);
+    }
+    return cors({ error: "NOT_FOUND" }, 404);
+  }
+  if (req.method !== "POST") return new Response("EcoDispensa per Alexa", { status: 200 });
   if (path.endsWith("/token")) return tokenEndpoint(req);
   return skill(req);
 });

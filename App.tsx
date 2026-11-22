@@ -2,7 +2,7 @@ import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import { ComingSoonView, shouldShowComingSoon } from "./components/ComingSoonView";
 import { LegalPage } from "./components/LegalViews";
-import { AlexaLinkView, alexaLinkFromUrl } from "./components/AlexaLinkView";
+import { AlexaLinkView, AlexaReturnView, alexaLinkFromUrl, alexaReturnFromUrl } from "./components/AlexaLinkView";
 import { legalDocFromUrl, LegalDocId } from "./legal/documents";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
@@ -33,7 +33,9 @@ const App = () => {
   // Va letto per primo, prima che i link di ricette e inviti vengano tolti dall'indirizzo.
   // Collegamento con Alexa (ecodispensa.it/app/alexa?…): si entra e si conferma, senza "Presto online"
   const [alexaLink] = useState(alexaLinkFromUrl);
-  const [comingSoon, setComingSoon] = useState(() => !alexaLink && shouldShowComingSoon());
+  // ritorno dal collegamento in un tocco (Profilo → Alexa → Collega)
+  const [alexaReturn, setAlexaReturn] = useState(alexaReturnFromUrl);
+  const [comingSoon, setComingSoon] = useState(() => !alexaLink && !alexaReturn && shouldShowComingSoon());
   // ?pagina=privacy|termini|cookie|scuola: documento legale pubblico, anche senza account
   const [legalPage, setLegalPage] = useState<LegalDocId | null>(legalDocFromUrl);
   // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
@@ -823,6 +825,18 @@ const App = () => {
         <img src="/icons/icon-192.png" alt="" className="h-16 w-16 rounded-2xl animate-pulse" />
         <div className="text-sm font-semibold text-muted">Caricamento…</div>
       </div>
+    );
+  }
+
+  if (alexaReturn) {
+    return (
+      <AlexaReturnView
+        ret={alexaReturn}
+        onDone={() => {
+          window.history.replaceState(null, "", "/app");
+          setAlexaReturn(null);
+        }}
+      />
     );
   }
 
