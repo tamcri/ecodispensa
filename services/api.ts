@@ -211,6 +211,37 @@ export async function readShoppingItems(
   }
 }
 
+export type UsageRead = {
+  items: Array<{
+    index: number;
+    mode: "all" | "fraction" | "amount";
+    fraction: number;
+    quantity: number;
+    unit: string;
+    outcome: "consumed" | "wasted";
+  }>;
+  notFound: string[];
+};
+
+/** Scarico a voce: cosa ho usato o buttato, confrontato con la dispensa */
+export async function readPantryUsage(
+  text: string,
+  pantry: Array<{ name: string; quantity: number; unit: string }>
+): Promise<UsageRead | "DAILY_LIMIT" | null> {
+  try {
+    const { ok, body } = await authFetch("/api/product", {
+      method: "POST",
+      body: JSON.stringify({ mode: "consume", text, pantry }),
+    });
+    if (body?.error === "DAILY_LIMIT") return "DAILY_LIMIT";
+    if (!ok || !Array.isArray(body?.items)) return null;
+    return { items: body.items, notFound: Array.isArray(body.notFound) ? body.notFound : [] };
+  } catch (e) {
+    console.error("read pantry usage error:", e);
+    return null;
+  }
+}
+
 /** Riduce la foto scattata dall'utente a max 1280px in jpeg, per caricarla velocemente. */
 async function resizeImage(file: File, maxSide = 1280): Promise<Blob> {
   const url = URL.createObjectURL(file);

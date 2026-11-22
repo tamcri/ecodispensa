@@ -24,6 +24,13 @@ export interface PantryItem {
   priceQty?: number | null;
 }
 
+/** Una parte di prodotto usata o buttata: used è nell'unità del prodotto in dispensa */
+export interface PantryUse {
+  id: string;
+  used: number;
+  outcome: "consumed" | "wasted";
+}
+
 export interface ShoppingItem {
   id: string;
   name: string;

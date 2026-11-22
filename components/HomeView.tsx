@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChefHat, ChevronRight, Lightbulb, Plus, Wallet } from "lucide-react";
-import { PantryItem, ShoppingItem, ViewState } from "../types";
+import { ChefHat, ChevronRight, Lightbulb, Mic, Plus, Wallet } from "lucide-react";
+import { PantryItem, PantryUse, ShoppingItem, ViewState } from "../types";
+import { VoiceUseFlow } from "./QuickUse";
+import { portionOf } from "../services/quantity";
 import { daysUntil, expiryLabel, expiryTone, EXPIRY_TONE_CLASS } from "../constants";
 import { Monogram, ProfileButton } from "./ui";
 import { fetchSavedRecipes, SavedRecipe } from "../services/api";
@@ -24,6 +26,8 @@ interface HomeViewProps {
   onOpenRecipe?: (id: string) => void;
   onResolveExpired?: (id: string, outcome: Outcome) => void;
   onPostpone?: (id: string, days: number) => void;
+  /** Scarico veloce: Finito / Metà / Buttato e "Cosa hai usato?" a voce */
+  onUse?: (uses: PantryUse[]) => Promise<boolean>;
   statsVersion?: number;
   onOpenSpending?: () => void;
 }
@@ -50,6 +54,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenRecipe,
   onResolveExpired,
   onPostpone,
+  onUse,
   statsVersion = 0,
   onOpenSpending,
 }) => {
@@ -57,6 +62,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [myClass, setMyClass] = useState<MyClass | null>(null);
   const [rankingOpen, setRankingOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
+  const [useOpen, setUseOpen] = useState(false);
+  const [useNotice, setUseNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const quickUse = async (item: PantryItem, fraction: number, outcome: Outcome) => {
+    if (!onUse) return;
+    const ok = await onUse([{ id: item.id, used: portionOf(item, fraction), outcome }]);
+    if (!ok) setUseNotice({ ok: false, text: "Non sono riuscito a salvare. Riprova tra poco." });
+  };
   const decideClass = async (accept: boolean) => {
     const ok = await setClassConsent(accept, LEGAL.schoolConsentVersion);
     if (!ok) return false;
@@ -185,12 +197,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </h2>
             <div className="flex flex-col gap-2">
               {shown.map(({ item, days }) => (
-                <div key={item.id} className="flex items-center gap-3">
-                  <Monogram name={item.name} category={item.category} />
-                  <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">{item.name}</span>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
-                    {expiryLabel(days)}
-                  </span>
+                <div key={item.id} className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    <Monogram name={item.name} category={item.category} />
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">{item.name}</span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${EXPIRY_TONE_CLASS[expiryTone(days)]}`}>
+                      {expiryLabel(days)}
+                    </span>
+                  </div>
+                  {onUse && (
+                    <div className="grid grid-cols-3 gap-1.5 pl-[52px]" role="group" aria-label={`Cosa hai fatto con ${item.name}`}>
+                      <button
+                        type="button"
+                        onClick={() => quickUse(item, 1, "consumed")}
+                        className="h-8 rounded-xl bg-mint text-[12px] font-bold text-[#2F4A2C]"
+                      >
+                        Finito
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quickUse(item, 0.5, "consumed")}
+                        className="h-8 rounded-xl bg-ground text-[12px] font-bold text-ink"
+                      >
+                        Usato metà
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quickUse(item, 1, "wasted")}
+                        className="h-8 rounded-xl bg-[#F3D3D3] text-[12px] font-bold text-[#8A1F2B]"
+                      >
+                        Buttato
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -205,6 +244,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </>
         )}
       </section>
+
+      {pantryItems.length > 0 && onUse && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              setUseNotice(null);
+              setUseOpen(true);
+            }}
+            className="flex items-center gap-3 rounded-[22px] bg-mint p-3.5 text-left text-forest active:scale-[0.99]"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-forest text-white">
+              <Mic size={20} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[17px] font-bold leading-tight">Cosa hai usato?</span>
+              <span className="block text-[13px] font-semibold opacity-80">«Ho usato 300 g di pasta e due uova»: aggiorno io la dispensa</span>
+            </span>
+            <ChevronRight size={20} className="shrink-0 opacity-60" />
+          </button>
+          {useNotice && (
+            <p
+              role="status"
+              className={`-mt-2 rounded-2xl px-4 py-3 text-sm font-semibold ${useNotice.ok ? "bg-mint text-forest" : "bg-peach text-[#8E3418]"}`}
+            >
+              {useNotice.text}
+            </p>
+          )}
+          <VoiceUseFlow open={useOpen} onClose={() => setUseOpen(false)} items={pantryItems} onApply={onUse} onDone={setUseNotice} />
+        </>
+      )}
 
       {expired.length > 0 && onResolveExpired && (
         <section className="flex flex-col gap-3 rounded-4xl bg-white p-4">

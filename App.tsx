@@ -5,7 +5,7 @@ import { LegalPage } from "./components/LegalViews";
 import { legalDocFromUrl, LegalDocId } from "./legal/documents";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
-import { PantryItem, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
+import { PantryItem, PantryUse, ShoppingItem, ViewState, Category, IngredientUsage, CookResult } from "./types";
 import { PantryView } from "./components/PantryView";
 import { ShoppingListView } from "./components/ShoppingListView";
 import { ChefView } from "./components/ChefView";
@@ -18,6 +18,7 @@ import { ProfileButtonContext } from "./components/ui";
 import { isAdmin, redeemCode, redeemMessage, takePendingCode } from "./services/codes";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { displayNameFromEmail, ensureHousehold, logPantryEvents, Outcome } from "./services/household";
+import { convertQuantity } from "./services/quantity";
 import { SpendingSheet } from "./components/SpendingSheet";
 import { addGroceries, GroceriesInput, setItemPrice, wastedValueCents } from "./services/spending";
 import { enablePush, isPushSupported, PUSH_MESSAGES, refreshPushSubscription } from "./services/push";
@@ -368,28 +369,59 @@ const App = () => {
     }
   };
 
-  /** Converte una quantità nell'unità del prodotto in dispensa (null se le unità non sono confrontabili). */
-  const convertQuantity = (qty: number, from: string, to: string): number | null => {
-    // "gr", "grammi", "litri", "pezzi"… → la forma breve; senza unità = pezzi
-    const unit = (u: string) => {
-      const k = (u || "").trim().toLowerCase().replace(/\.$/, "");
-      if (["g", "gr", "grammo", "grammi"].includes(k)) return "g";
-      if (["kg", "chilo", "chili", "chilogrammi"].includes(k)) return "kg";
-      if (["ml", "millilitri"].includes(k)) return "ml";
-      if (["cl", "centilitri"].includes(k)) return "cl";
-      if (["l", "lt", "litro", "litri"].includes(k)) return "l";
-      if (["", "pz", "pezzo", "pezzi", "n"].includes(k)) return "pz";
-      return k;
-    };
-    const f = unit(from);
-    const t = unit(to);
-    if (f === t) return qty;
-    // tutto in grammi o millilitri, poi nell'unità della dispensa
-    const base: Record<string, [string, number]> = { g: ["w", 1], kg: ["w", 1000], ml: ["v", 1], cl: ["v", 10], l: ["v", 1000] };
-    const bf = base[f];
-    const bt = base[t];
-    if (!bf || !bt || bf[0] !== bt[0]) return null;
-    return (qty * bf[1]) / bt[1];
+  /**
+   * Scarico veloce (a voce, "ne ho usato metà", "Finito" dalla Home): toglie dalla dispensa la parte usata
+   * o buttata e la registra nelle statistiche. used è nell'unità del prodotto; i prodotti finiti vengono tolti.
+   */
+  const takeFromPantry = async (uses: PantryUse[]): Promise<boolean> => {
+    const rows = uses
+      .map((u) => {
+        const item = pantryItems.find((i) => i.id === u.id);
+        if (!item || !(u.used > 0)) return null;
+        const used = Math.min(item.quantity, u.used);
+        const left = parseFloat((item.quantity - used).toFixed(3));
+        return { item, used, left: left > 0.0001 ? left : 0, outcome: u.outcome };
+      })
+      .filter((r): r is NonNullable<typeof r> => !!r);
+    if (rows.length === 0) return true;
+
+    setPantryItems((prev) =>
+      prev
+        .filter((p) => !rows.some((r) => r.item.id === p.id && r.left === 0))
+        .map((p) => {
+          const r = rows.find((x) => x.item.id === p.id);
+          return r ? { ...p, quantity: r.left } : p;
+        })
+    );
+
+    let failed = false;
+    const finished = rows.filter((r) => r.left === 0).map((r) => r.item.id);
+    if (finished.length) {
+      const { error } = await supabase.from("pantry_items").delete().in("id", finished);
+      if (error) failed = true;
+    }
+    for (const r of rows.filter((x) => x.left > 0)) {
+      const { error } = await supabase.from("pantry_items").update({ quantity: r.left }).eq("id", r.item.id);
+      if (error) failed = true;
+    }
+    if (failed) {
+      console.error("Scarico dalla dispensa non riuscito");
+      await loadPantryFromSupabase();
+      return false;
+    }
+
+    await logPantryEvents(
+      rows.map((r) => ({
+        name: r.item.name,
+        category: r.item.category,
+        quantity: r.used,
+        unit: r.item.unit,
+        outcome: r.outcome,
+        valueCents: wastedValueCents(r.item.priceCents, r.item.priceQty, r.used),
+      }))
+    );
+    setStatsVersion((v) => v + 1);
+    return true;
   };
 
   /**
@@ -860,6 +892,7 @@ const App = () => {
               goTo("recipeBook");
             }}
             onResolveExpired={removePantryItem}
+            onUse={takeFromPantry}
             onPostpone={(id, days) => updatePantryItem(id, { expiryDate: dateInDays(days) })}
             statsVersion={statsVersion}
             onOpenSpending={() => setSpendingOpen(true)}
@@ -869,7 +902,7 @@ const App = () => {
           <PantryView items={pantryItems} onAdd={addPantryItem} onAddGroceries={addGroceriesToPantry} onSetPrice={setPantryItemPrice} onOpenPlans={() => {
             setProfilePage("piano");
             setProfileOpen(true);
-          }} onUpdate={updatePantryItem} onRemove={removePantryItem} />
+          }} onUpdate={updatePantryItem} onRemove={removePantryItem} onUse={takeFromPantry} />
         )}
         {view === "shopping" && (
           <ShoppingListView

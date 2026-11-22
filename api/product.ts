@@ -437,9 +437,128 @@ ${rules}`;
   }
 }
 
+const MAX_PANTRY = 200;
+
+/**
+ * Scarico a voce: "ho usato 300 grammi di pasta e due uova, il latte è finito, ho buttato l'insalata".
+ * Riceve anche l'elenco della dispensa e risponde con quali prodotti sono stati usati e quanto.
+ * Non consuma crediti (come la spesa a voce).
+ */
+async function consumeHandler(req: VercelRequest, res: VercelResponse) {
+  try {
+    const auth = await getUserClient(req);
+    if ("error" in auth) return res.status(auth.status).json({ error: auth.error });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+
+    const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, MAX_TEXT_CHARS) : "";
+    const pantry = (Array.isArray(req.body?.pantry) ? req.body.pantry : [])
+      .slice(0, MAX_PANTRY)
+      .map((p: any) => ({
+        name: typeof p?.name === "string" ? p.name.replace(/[«»\n]/g, " ").trim().slice(0, 60) : "",
+        quantity: Number.isFinite(p?.quantity) ? p.quantity : 1,
+        unit: typeof p?.unit === "string" ? p.unit.slice(0, 6) : "pz",
+      }));
+    if (text.length < 2) return res.status(400).json({ error: "Missing text" });
+    if (pantry.length === 0) return res.status(200).json({ items: [], notFound: [] });
+    if (!(await withinDailyLimit(auth.userId, "voice"))) {
+      return res.status(429).json({ error: "DAILY_LIMIT", message: DAILY_LIMIT_MESSAGE });
+    }
+
+    const list = pantry.map((p: any, i: number) => `${i}. ${p.name} (${p.quantity} ${p.unit})`).join("\n");
+    const prompt = `Questa è la dispensa dell'utente (numero. prodotto (quantità che ha)):
+${list}
+
+L'utente ha detto o scritto cosa ha usato, finito o buttato: «${text.replace(/[«»]/g, "")}».
+
+Per ogni prodotto nominato trova il numero giusto nella dispensa (anche se lo chiama in modo diverso: "spaghetti" può essere "Pasta spaghetti", "le uova" è "Uova"). Se ci sono più prodotti simili scegli quello più adatto. Rispondi con:
+- index: il numero del prodotto nella dispensa.
+- mode: "all" se l'ha finito o buttato tutto ("ho finito il latte", "ho buttato l'insalata", oppure ha usato una quantità uguale o maggiore di quella che ha); "fraction" se dice una parte ("metà del latte", "un quarto della torta", "quasi tutto" = 0.8); "amount" se dice una quantità precisa ("300 grammi di pasta", "due uova", "mezzo litro di latte").
+- fraction: la parte usata tra 0 e 1 se mode è "fraction", altrimenti 0.
+- quantity e unit: la quantità detta se mode è "amount" (unit tra g, kg, ml, cl, l, pz: "due uova" → 2 pz, "un etto" → 100 g, "mezzo chilo" → 0.5 kg, "un bicchiere di latte" → 200 ml, "un cucchiaio d'olio" → 10 ml); altrimenti 0 e "pz".
+- outcome: "wasted" se l'ha buttato, scaduto o andato a male; altrimenti "consumed".
+Se un prodotto nominato non c'è nella dispensa, mettilo in notFound con il nome che ha detto l'utente. Non inventare prodotti che l'utente non ha nominato.`;
+
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "pantry_usage",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["items", "notFound"],
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["index", "mode", "fraction", "quantity", "unit", "outcome"],
+                    properties: {
+                      index: { type: "integer" },
+                      mode: { type: "string", enum: ["all", "fraction", "amount"] },
+                      fraction: { type: "number" },
+                      quantity: { type: "number" },
+                      unit: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz"] },
+                      outcome: { type: "string", enum: ["consumed", "wasted"] },
+                    },
+                  },
+                },
+                notFound: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+        },
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      console.error("OpenAI consume error:", data?.error?.message ?? r.status);
+      return res.status(502).json({ error: "READ_FAILED" });
+    }
+    await logAiUsage(auth.userId, "voice", model, data);
+
+    let out: any = null;
+    try {
+      out = JSON.parse(responseText(data));
+    } catch {
+      out = null;
+    }
+    const seen = new Set<number>();
+    const items = (Array.isArray(out?.items) ? out.items : [])
+      .filter((i: any) => Number.isInteger(i?.index) && i.index >= 0 && i.index < pantry.length && !seen.has(i.index) && seen.add(i.index))
+      .map((i: any) => ({
+        index: i.index,
+        mode: ["all", "fraction", "amount"].includes(i.mode) ? i.mode : "all",
+        fraction: Number.isFinite(i.fraction) ? Math.max(0, Math.min(1, i.fraction)) : 0,
+        quantity: Number.isFinite(i.quantity) && i.quantity > 0 ? Math.round(i.quantity * 1000) / 1000 : 0,
+        unit: ["g", "kg", "ml", "cl", "l", "pz"].includes(i.unit) ? i.unit : "pz",
+        outcome: i.outcome === "wasted" ? "wasted" : "consumed",
+      }));
+    const notFound = (Array.isArray(out?.notFound) ? out.notFound : [])
+      .filter((n: any) => typeof n === "string" && n.trim().length >= 2)
+      .slice(0, 10)
+      .map((n: string) => n.trim().slice(0, 60));
+    return res.status(200).json({ items, notFound });
+  } catch (e: any) {
+    console.error("consume error:", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST" && req.body?.mode === "date") return readDateHandler(req, res);
   if (req.method === "POST" && req.body?.mode === "items") return itemsHandler(req, res);
+  if (req.method === "POST" && req.body?.mode === "consume") return consumeHandler(req, res);
   if (req.method === "POST") return identifyHandler(req, res);
   if (req.method === "GET") return barcodeHandler(req, res);
   return res.status(405).json({ error: "Method not allowed" });

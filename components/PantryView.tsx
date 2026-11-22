@@ -8,6 +8,9 @@ import { BulkMeta, BulkReviewSheet, BulkRow, VoiceSheet, toBulkMeta, toBulkRows,
 import { GroceriesInput, centsToInput, parseEuroInput } from '../services/spending';
 import { findFoodGuide, guideSummary, suggestedExpiry, WHERE_LABEL } from '../foodGuide';
 import { Outcome } from '../services/household';
+import { PantryUse } from '../types';
+import { VoiceUseFlow, afterLabel } from './QuickUse';
+import { portionOf } from '../services/quantity';
 
 interface PantryViewProps {
   items: PantryItem[];
@@ -20,6 +23,8 @@ interface PantryViewProps {
   onOpenPlans: () => void;
   onUpdate: (id: string, updates: Partial<PantryItem>) => void;
   onRemove: (id: string, outcome?: Outcome | null) => void;
+  /** Scarico veloce: una parte del prodotto usata o buttata */
+  onUse: (uses: PantryUse[]) => Promise<boolean>;
 }
 
 type FormState = {
@@ -55,7 +60,7 @@ const fieldClass =
   'h-12 w-full rounded-2xl border-0 bg-white px-4 text-[15px] text-ink outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-emerald-500';
 const labelClass = 'mb-1.5 block text-xs font-bold text-muted';
 
-export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroceries, onSetPrice, onOpenPlans, onUpdate, onRemove }) => {
+export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroceries, onSetPrice, onOpenPlans, onUpdate, onRemove, onUse }) => {
   const [filterCategory, setFilterCategory] = useState<Category | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
 
@@ -97,6 +102,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
     fetchIsPremium().then(setPremium);
   }, []);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [useOpen, setUseOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[] | null>(null);
   const [bulkMeta, setBulkMeta] = useState<BulkMeta>({ store: '', date: todayIso(), totalText: '' });
   const [bulkSource, setBulkSource] = useState<'receipt' | 'voice'>('receipt');
@@ -293,6 +299,20 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
       longLife: editForm.longLife,
     });
     setEditing(null);
+  };
+
+  /** "Ne ho usato metà": toglie una parte e lascia il resto in dispensa */
+  const useSome = async (fraction: number) => {
+    if (!editing) return;
+    const item = editing;
+    setEditing(null);
+    const used = portionOf(item, fraction);
+    const ok = await onUse([{ id: item.id, used, outcome: 'consumed' }]);
+    setBulkNotice(
+      ok
+        ? { ok: true, text: `${item.name}: ${afterLabel(item, used).toLowerCase()}.` }
+        : { ok: false, text: 'Non sono riuscito a salvare. Riprova tra poco.' }
+    );
   };
 
   const finishEditing = (outcome: Outcome | null) => {
@@ -591,6 +611,24 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
           <Mic size={19} className="text-emerald-700" /> A voce
         </button>
       </div>
+      {items.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setBulkNotice(null);
+            setUseOpen(true);
+          }}
+          className="flex h-14 items-center gap-3 rounded-2xl bg-mint px-4 text-left text-forest"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest text-white">
+            <Mic size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-bold leading-tight">Cosa hai usato?</span>
+            <span className="block text-[12px] font-semibold opacity-80">Dimmelo a voce e aggiorno la dispensa</span>
+          </span>
+        </button>
+      )}
       <input ref={receiptRef} type="file" accept="image/*" className="hidden" onChange={onReceiptFile} aria-hidden="true" tabIndex={-1} />
       <input
         ref={receiptCameraRef}
@@ -960,6 +998,26 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
               </button>
             </div>
           ) : (
+            <div className="flex flex-col gap-3">
+              {editing && editing.quantity > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-[13px] font-semibold text-muted">Ne hai usato</span>
+                  {[
+                    { f: 0.25, l: '¼' },
+                    { f: 0.5, l: 'metà' },
+                    { f: 0.75, l: '¾' },
+                  ].map((p) => (
+                    <button
+                      key={p.f}
+                      type="button"
+                      onClick={() => useSome(p.f)}
+                      className="h-10 flex-1 rounded-xl bg-mint text-[14px] font-bold text-[#2F4A2C]"
+                    >
+                      {p.l}
+                    </button>
+                  ))}
+                </div>
+              )}
             <div className="flex gap-3">
               <button
                 type="button"
@@ -975,6 +1033,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
               >
                 Salva modifiche
               </button>
+            </div>
             </div>
           )
         }
@@ -1116,6 +1175,7 @@ export const PantryView: React.FC<PantryViewProps> = ({ items, onAdd, onAddGroce
         </div>
       </Sheet>
       <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} onSubmit={onVoiceText} />
+      <VoiceUseFlow open={useOpen} onClose={() => setUseOpen(false)} items={items} onApply={onUse} onDone={setBulkNotice} />
       <BulkReviewSheet
         rows={bulkRows}
         meta={bulkMeta}
