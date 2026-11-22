@@ -472,35 +472,49 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
   const { names: soon } = expiringSentence(items, 20);
   const { data } = await db
     .from("recipes_saved")
-    .select("title, ingredients_used")
+    .select("title, status, ingredients_used, missing_ingredients")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(60);
-  const ingNames = (r: any): string[] =>
-    (Array.isArray(r?.ingredients_used) ? r.ingredients_used : []).map((x: any) => (typeof x === "string" ? x : x?.name ?? "")).filter(Boolean);
-  let best: { title: string; uses: string[]; score: number } | null = null;
+    .limit(80);
+  const names = (v: any): string[] =>
+    (Array.isArray(v) ? v : []).map((x: any) => (typeof x === "string" ? x : x?.name ?? "")).filter((x: string) => x.trim().length > 1);
+  const same = (a: string, b: string) => matchScore(a, b) > 0.5 || matchScore(b, a) > 0.5;
+
+  // la ricetta migliore: quasi tutti gli ingredienti già in casa, meglio se usa quelli che scadono
+  let best: { title: string; status: string; have: string[]; missing: string[]; urgent: string[]; score: number } | null = null;
   for (const r of data ?? []) {
-    const ings = ingNames(r);
+    const ings = [...new Set([...names(r.ingredients_used), ...names(r.missing_ingredients)])];
     if (!ings.length) continue;
-    const inPantry = ings.filter((g) => items.some((i) => matchScore(g, i.name) > 0.5 || matchScore(i.name, g) > 0.5));
-    const urgent = inPantry.filter((g) => soon.some((n) => matchScore(g, n) > 0.5 || matchScore(n, g) > 0.5));
-    const score = urgent.length * 3 + inPantry.length / ings.length;
-    if (inPantry.length && (!best || score > best.score)) best = { title: r.title, uses: (urgent.length ? urgent : inPantry).slice(0, 3), score };
+    const have = ings.filter((g) => items.some((i) => same(g, i.name)));
+    const missing = ings.filter((g) => !have.includes(g));
+    const coverage = have.length / ings.length;
+    if (coverage < 0.6 || missing.length > 2) continue;
+    const urgent = have.filter((g) => soon.some((n) => same(g, n)));
+    const score = urgent.length * 2 + coverage + (r.status === "cooked" ? 0 : 0.2);
+    if (!best || score > best.score) best = { title: r.title, status: r.status, have, missing, urgent, score };
   }
+
   if (best) {
+    const where = best.status === "cooked" ? "La trovi nel ricettario, tra quelle già cucinate." : "La trovi nel ricettario dell'app.";
+    const miss = best.missing.length ? ` Ti manca solo ${listIt(best.missing.map(lower))}.` : " Hai già tutto.";
+    const rest = soon.filter((n) => !best!.urgent.some((u) => same(u, n)));
+    const urgent = best.urgent.length
+      ? ` Così usi ${listIt(best.urgent.map(lower))}, che ${best.urgent.length === 1 ? "scade" : "scadono"} presto.`
+      : "";
+    const also = rest.length ? ` Da usare presto hai anche ${listIt(rest.slice(0, 3).map(lower))}.` : "";
     return {
-      text: `Potresti fare ${best.title}: usi ${listIt(best.uses.map(lower))}. La trovi nel ricettario dell'app.${
-        soon.length ? ` Ricorda che hai da usare presto ${listIt(soon.slice(0, 3).map(lower))}.` : ""
-      }`,
-      card: { title: best.title, content: `Dal tuo ricettario. Usi: ${best.uses.join(", ")}` },
+      text: `Potresti fare ${best.title}.${miss}${urgent} ${where}${also}`,
+      card: { title: best.title, content: `Hai: ${best.have.join(", ")}${best.missing.length ? `\nTi manca: ${best.missing.join(", ")}` : ""}` },
     };
   }
   if (soon.length) {
     return {
-      text: `Hai da usare presto ${listIt(soon.slice(0, 4).map(lower))}. Apri EcoChef nell'app: ti propone una ricetta proprio con questi.`,
+      text: `Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Da usare presto hai ${listIt(
+        soon.slice(0, 4).map(lower)
+      )}: apri EcoChef nell'app e ti propone una ricetta proprio con questi.`,
     };
   }
-  return { text: "Niente scade nei prossimi giorni. Apri EcoChef nell'app e ti propongo una ricetta con quello che hai." };
+  return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
 }
 
 const greeting = () => {
@@ -535,7 +549,7 @@ async function skill(req: Request) {
   if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
 
   const intent = type === "IntentRequest" ? (ev.request.intent?.name as string) : "";
-  if (intent === "AMAZON.StopIntent" || intent === "AMAZON.CancelIntent" || intent === "AMAZON.NavigateHomeIntent") {
+  if (intent === "AMAZON.StopIntent" || intent === "AMAZON.CancelIntent" || intent === "AMAZON.NavigateHomeIntent" || intent === "AMAZON.NoIntent") {
     return alexaResponse({ text: "A presto!" });
   }
   if (intent === "AMAZON.HelpIntent") return alexaResponse(ask(HELP));
@@ -563,8 +577,12 @@ async function skill(req: Request) {
   const { data: member } = await db.from("household_members").select("household_id, display_name").eq("user_id", userId).maybeSingle();
   if (!member?.household_id) return alexaResponse({ text: "Non trovo la tua dispensa. Apri l'app EcoDispensa e riprova." });
   const hh = member.household_id as string;
-  const firstName = (member.display_name ?? "").split(" ")[0];
+  const first = (member.display_name ?? "").trim().split(/\s+/)[0] ?? "";
+  const firstName = first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
 
+  // aperta con "apri eco dispensa": dopo ogni risposta resto in ascolto; frase unica ("chiedi a…"): chiudo
+  const inSession = ev?.session?.new === false;
+  const more = (o: Out): Out => (inSession && o.end !== false ? { ...o, text: `${o.text} Altro?`, reprompt: "Vuoi fare altro? Puoi dire: stop.", end: false } : o);
   const slot = (name: string) => (ev.request.intent?.slots?.[name]?.value as string | undefined)?.trim() ?? "";
 
   try {
@@ -578,21 +596,22 @@ async function skill(req: Request) {
     if (intent === "ExpiringIntent") {
       const items = await loadPantry(hh);
       const { text } = expiringSentence(items, 8);
-      return alexaResponse({ text: text || "Niente scade nei prossimi tre giorni. Bravo!" });
+      return alexaResponse(more({ text: text || "Niente scade nei prossimi tre giorni. Bravo!" }));
     }
     if (intent === "UseIntent" || intent === "WasteIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask(intent === "WasteIntent" ? "Cosa hai buttato?" : "Cosa hai usato?", "Per esempio: 300 grammi di pasta."));
-      return alexaResponse(await takeFromPantry(userId, hh, what, intent === "WasteIntent" ? "wasted" : "consumed"));
+      return alexaResponse(more(await takeFromPantry(userId, hh, what, intent === "WasteIntent" ? "wasted" : "consumed")));
     }
     if (intent === "AddShoppingIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo alla lista della spesa?", "Per esempio: il pane."));
-      return alexaResponse(await addToShopping(userId, hh, what));
+      return alexaResponse(more(await addToShopping(userId, hh, what)));
     }
     if (intent === "CookIntent") {
-      return alexaResponse(await cookIdea(userId, await loadPantry(hh)));
+      return alexaResponse(more(await cookIdea(userId, await loadPantry(hh))));
     }
+    if (intent === "AMAZON.YesIntent") return alexaResponse(ask("Dimmi pure.", "Per esempio: ho usato due uova, oppure: cosa scade."));
     if (intent === "AMAZON.FallbackIntent") return alexaResponse(ask(`Non ho capito. ${HELP}`));
     return alexaResponse(ask(HELP));
   } catch (e) {
