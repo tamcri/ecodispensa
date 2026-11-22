@@ -1619,7 +1619,7 @@ async function skill(req: Request) {
       }
       if (intent === "StartListIntent") return alexaResponse({ text: "La lista è già aperta: dimmi i prodotti.", reprompt: "Quando hai finito di' chiudi lista.", end: false, attrs: { list } });
       // durante la lista ogni frase con un prodotto è un prodotto da segnare (anche se Alexa l'ha presa per un altro comando)
-      const what = slot("prodotti") || slot("prodotto") || slot("piatto") || [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
+      const what = slot("prodotti") || slot("prodotto") || slot("piatto") || [slot("categoria"), slot("categoriadue"), slot("categoriatre")].filter(Boolean).join(" e ");
       console.log("alexa lista:", list.length, "prodotti, ricevuto:", what || "(niente)");
       const keep = (text: string, reprompt = "Altro? Quando hai finito di' chiudi lista."): Response =>
         alexaResponse({ text, reprompt, end: false, attrs: { list } });
@@ -1644,7 +1644,7 @@ async function skill(req: Request) {
     // ---- lo Chef ha proposto le ricette: l'utente sceglie
     if (chef) {
       if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent" || intent === "ListItemsIntent" || intent === "CategoryIntent" || intent === "AMAZON.FallbackIntent" || (intent === "AMAZON.YesIntent" && chef.length === 1)) {
-        const said = intent === "AMAZON.YesIntent" ? "primo" : slot("numero") || slot("piatto") || slot("prodotti") || slot("c1");
+        const said = intent === "AMAZON.YesIntent" ? "primo" : slot("numero") || slot("piatto") || slot("prodotti") || slot("categoria");
         const i = said ? pickRecipe(chef, said) : -1;
         if (i < 0) {
           return alexaResponse({
@@ -1678,7 +1678,7 @@ async function skill(req: Request) {
     }
     // ---- "vuoi tutti i prodotti o una categoria?": la risposta può arrivare come qualunque frase
     if (inventory && !isStop && intent !== "AMAZON.NoIntent") {
-      const cats = [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
+      const cats = [slot("categoria"), slot("categoriadue"), slot("categoriatre")].filter(Boolean).join(" e ");
       const said = [cats, slot("prodotti"), slot("prodotto"), slot("piatto")].filter(Boolean).join(" e ");
       const which = intent === "AMAZON.YesIntent" || (intent === "CategoryIntent" && !cats) ? "all" : categoriesSaid(said);
       if (which) return alexaResponse(more(await inventoryReport(hh, which)));
@@ -1770,7 +1770,7 @@ async function skill(req: Request) {
       return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "InventoryIntent" || intent === "CategoryIntent") {
-      const cats = [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
+      const cats = [slot("categoria"), slot("categoriadue"), slot("categoriatre")].filter(Boolean).join(" e ");
       // CategoryIntent senza categorie = "tutti i prodotti"
       const which = intent === "CategoryIntent" && !cats ? "all" : categoriesSaid(cats);
       if (!which) return alexaResponse(INVENTORY_ASK);

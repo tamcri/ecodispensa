@@ -493,15 +493,15 @@
           "name": "InventoryIntent",
           "slots": [
             {
-              "name": "c1",
+              "name": "categoria",
               "type": "CATEGORIA"
             },
             {
-              "name": "c2",
+              "name": "categoriadue",
               "type": "CATEGORIA"
             },
             {
-              "name": "c3",
+              "name": "categoriatre",
               "type": "CATEGORIA"
             }
           ],
@@ -523,21 +523,19 @@
             "che prodotti ho",
             "quali prodotti ho",
             "cosa ho da mangiare",
-            "cosa ho tra {c1}",
-            "cosa ho tra i {c1}",
-            "cosa ho tra le {c1}",
-            "cosa ho di {c1}",
-            "cosa ho nei {c1}",
-            "cosa ho nella {c1}",
-            "che {c1} ho",
-            "quali {c1} ho",
-            "elencami {c1}",
-            "elencami i {c1}",
-            "leggimi {c1}",
-            "cosa ho tra {c1} e {c2}",
-            "cosa ho di {c1} e {c2}",
-            "cosa ho tra {c1} {c2} e {c3}",
-            "cosa ho di {c1} {c2} e {c3}"
+            "cosa ho tra {categoria}",
+            "cosa ho tra i {categoria}",
+            "cosa ho tra le {categoria}",
+            "cosa ho di {categoria}",
+            "cosa ho nei {categoria}",
+            "cosa ho nella {categoria}",
+            "che {categoria} ho",
+            "quali {categoria} ho",
+            "elencami {categoria}",
+            "elencami i {categoria}",
+            "leggimi {categoria}",
+            "cosa ho tra {categoria} e {categoriadue}",
+            "cosa ho di {categoria} e {categoriadue}"
           ]
         },
         {
@@ -614,32 +612,29 @@
           "name": "CategoryIntent",
           "slots": [
             {
-              "name": "c1",
+              "name": "categoria",
               "type": "CATEGORIA"
             },
             {
-              "name": "c2",
+              "name": "categoriadue",
               "type": "CATEGORIA"
             },
             {
-              "name": "c3",
+              "name": "categoriatre",
               "type": "CATEGORIA"
             }
           ],
           "samples": [
-            "{c1}",
-            "{c1} e {c2}",
-            "{c1} {c2}",
-            "{c1} {c2} e {c3}",
-            "{c1} e {c2} e {c3}",
-            "solo {c1}",
-            "solo {c1} e {c2}",
-            "solo {c1} {c2} e {c3}",
-            "la categoria {c1}",
-            "le categorie {c1} e {c2}",
-            "i {c1}",
-            "i {c1} e i {c2}",
-            "la {c1}",
+            "{categoria}",
+            "{categoria} e {categoriadue}",
+            "{categoria} e {categoriadue} e {categoriatre}",
+            "solo {categoria}",
+            "solo {categoria} e {categoriadue}",
+            "la categoria {categoria}",
+            "le categorie {categoria} e {categoriadue}",
+            "i {categoria}",
+            "i {categoria} e i {categoriadue}",
+            "la {categoria}",
             "tutti",
             "tutti i prodotti",
             "tutto",
