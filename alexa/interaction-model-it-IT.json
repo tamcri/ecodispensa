@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "eco dispensa",
+      "invocationName": "la mia dispensa",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
@@ -117,6 +117,28 @@
             "da comprare {prodotto}",
             "manca {prodotto}",
             "mancano {prodotto}"
+          ],
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "AddPantryIntent",
+          "samples": [
+            "aggiungi {prodotto} in dispensa",
+            "aggiungi {prodotto} alla dispensa",
+            "aggiungi in dispensa {prodotto}",
+            "metti {prodotto} in dispensa",
+            "metti in dispensa {prodotto}",
+            "inserisci {prodotto} in dispensa",
+            "inserisci in dispensa {prodotto}",
+            "carica {prodotto} in dispensa",
+            "ho comprato {prodotto}",
+            "abbiamo comprato {prodotto}",
+            "ho preso al supermercato {prodotto}"
           ],
           "slots": [
             {
