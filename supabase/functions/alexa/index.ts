@@ -1223,6 +1223,142 @@ async function inventoryReport(hh: string, which: string[] | "all"): Promise<Out
   return { text: `${head}${parts.join(" ")}` };
 }
 
+// consigli di conservazione (da /foodGuide.ts dell'app): [parole chiave, dove, giorni, consiglio]
+const TIPS: Array<[string[], string, number, string]> = [
+  [["pasta fresca", "tortellin", "ravioli", "gnocchi", "lasagn"], "frigo", 3, "Se non la cucini entro la data, congelala cruda: si cuoce direttamente da congelata."],
+  [["insalata di riso", "gastronomi", "piatto pronto", "piatti pronti"], "frigo", 2, "I piatti pronti del banco vanno consumati entro 1-2 giorni."],
+  [["fragol", "lampon", "mirtill", "more ", "frutti di bosco", "ribes"], "frigo", 3, "Non lavarli finché non li mangi: l'umidità li fa ammuffire in fretta."],
+  [["banan"], "dispensa", 5, "Tienile lontane dall'altra frutta: rilasciano etilene e fanno maturare tutto prima."],
+  [["mela ", "mele "], "frigo", 21, "In frigo durano settimane. Tienile separate dalla verdura, che farebbero appassire."],
+  [["pera ", "pere "], "frigo", 5, "Falle maturare fuori frigo, poi conservale al fresco e consumale in pochi giorni."],
+  [["aranc", "mandarin", "clementin", "limon", "pompelm", "lime "], "frigo", 14, "Gli agrumi in frigo durano il doppio. Un limone tagliato: appoggialo sulla parte tagliata in un piattino."],
+  [["uva "], "frigo", 5, "In frigo nella sua vaschetta, lavala solo prima di mangiarla."],
+  [["pesca ", "pesche ", "percoc", "albicocc", "nettarin", "susin", "prugn", "cilieg"], "frigo", 4, "Fuori frigo finché maturano, poi in frigo e da consumare in pochi giorni."],
+  [["kiwi"], "frigo", 10, "Duri durano a lungo in frigo; per farli maturare mettili vicino a una mela."],
+  [["ananas", "mango", "papaya"], "dispensa", 4, "Una volta tagliato, in un contenitore chiuso in frigo e da finire in 2-3 giorni."],
+  [["melon", "angur", "cocomer"], "frigo", 5, "Tagliato, copri la polpa con la pellicola e consumalo entro 3 giorni."],
+  [["avocad"], "dispensa", 4, "Mezzo avocado avanzato: lascia il nocciolo e spruzza un po' di limone sulla polpa."],
+  [["fich"], "frigo", 2, "Delicatissimi: in frigo su un piatto, senza sovrapporli, e da mangiare in un paio di giorni."],
+  [["melagran", "melograno"], "frigo", 30, "Intera dura settimane; i chicchi sgranati si conservano in frigo 5 giorni o si congelano."],
+  [["cach", "kaki"], "dispensa", 5, "Falli maturare fuori frigo; quando sono morbidi, in frigo e da mangiare in pochi giorni."],
+  [["castagn", "marron"], "frigo", 7, "In un sacchetto di carta in frigo; se non le usi presto, incidile e congelale."],
+  [["pomodor", "pachin", "datterin", "ciliegin"], "dispensa", 5, "Fuori dal frigo restano più saporiti; mettili in frigo solo se sono già molto maturi."],
+  [["basilic"], "dispensa", 4, "Come un mazzo di fiori: gambi in un bicchiere d'acqua, fuori dal frigo."],
+  [["prezzemol", "coriandol", "erba cipollina", "aneto", "menta", "erbe aromatic"], "frigo", 5, "Gambi in un bicchiere d'acqua in frigo, coperti da un sacchetto. Puoi anche tritarle e congelarle nell'olio."],
+  [["insalat", "lattug", "rucol", "valerian", "songin", "spinaci freschi", "spinac", "radicchi", "indivia", "scarola", "misticanza"], "frigo", 3, "In un contenitore chiuso con un foglio di carta da cucina: assorbe l'umidità e la tiene croccante più a lungo."],
+  [["fungh", "champignon", "porcin"], "frigo", 3, "In un sacchetto di carta in frigo, mai nella plastica: soffocano e diventano viscidi."],
+  [["asparag"], "frigo", 3, "In piedi in un dito d'acqua, in frigo, come un mazzo di fiori."],
+  [["zucchin", "melanzan", "cetriol", "fagiolin", "tacc"], "frigo", 5, "Nel cassetto della verdura, senza lavarle prima."],
+  [["peperon"], "frigo", 7, "Interi nel cassetto del frigo; tagliati, in un contenitore chiuso."],
+  [["broccol", "cavolfior", "cavol", "verza", "cime di rapa", "friariell", "bietol", "catalogn"], "frigo", 5, "Nel cassetto del frigo, in un sacchetto forato. Se iniziano ad ingiallire, cuocili e congelali."],
+  [["carciof"], "frigo", 5, "Con il gambo in un bicchiere d'acqua in frigo; una volta puliti, in acqua e limone."],
+  [["finocch", "porr"], "frigo", 7, "Nel cassetto del frigo, avvolti in un panno umido."],
+  [["sedan"], "frigo", 10, "Avvolto nella carta stagnola resta croccante per settimane."],
+  [["carot"], "frigo", 21, "Togli il ciuffo verde: sottrae umidità alla carota e la fa ammorbidire."],
+  [["ravanell", "rape ", "rapa ", "barbabietol"], "frigo", 7, "Togli le foglie (si cucinano a parte) e conserva le radici nel cassetto del frigo."],
+  [["cipollott", "germogl"], "frigo", 4, "In frigo avvolti in carta da cucina leggermente umida."],
+  [["pisell", "fave ", "fava "], "frigo", 3, "Freschi nel baccello si conservano pochi giorni: sgranali e congela quelli che non usi."],
+  [["pannocch", "mais fresco"], "frigo", 3, "Con le foglie, in frigo: lo zucchero si trasforma in amido in fretta, meglio cuocerle presto."],
+  [["cavolin"], "frigo", 5, "Nel cassetto del frigo, senza lavarli prima."],
+  [["zucca"], "frigo", 7, "Intera dura mesi in un luogo fresco; tagliata, avvolgila nella pellicola e usala entro 5-7 giorni."],
+  [["patat"], "dispensa", 30, "Al buio e al fresco, lontano dalle cipolle: insieme germogliano prima."],
+  [["cipoll", "scalogn"], "dispensa", 30, "In un luogo fresco e asciutto, lontano dalle patate. Mezza cipolla avanzata: in frigo in un contenitore chiuso."],
+  [["agli"], "dispensa", 30, "In un luogo asciutto e arieggiato, non in frigo."],
+  [["zenzer"], "frigo", 21, "In frigo con la buccia; si grattugia benissimo anche da congelato."],
+  [["pane ", "baguette", "ciabatt", "rosett", "filon"], "dispensa", 2, "Se non lo finisci, affettalo e congelalo: si scongela in pochi minuti o direttamente nel tostapane."],
+  [["focacc", "pizza"], "dispensa", 2, "Avvolta nella carta e poi in un sacchetto; il giorno dopo ripassala in forno."],
+  [["cornett", "brioche", "croissant", "pasticcin"], "dispensa", 2, "Si congelano bene: scaldali qualche minuto in forno."],
+  [["macinat", "hamburger", "polpett"], "frigo", 1, "La carne macinata si guasta prima: se non la cucini entro domani, congelala subito."],
+  [["salsicc"], "frigo", 2, "Nella parte più fredda del frigo (il ripiano in basso). Si congela benissimo."],
+  [["pollo", "tacchin", "petto", "cosce", "alett"], "frigo", 2, "Sul ripiano più basso del frigo, in un contenitore chiuso, lontano da cibi pronti."],
+  [["manzo", "vitell", "maial", "braciol", "bistecc", "fettin", "arrost", "spezzatin", "agnell", "carne"], "frigo", 2, "Sul ripiano più basso del frigo. Se non la cucini in tempo, congelala in porzioni."],
+  [["cozz", "vongol", "gamber", "scamp", "calamar", "seppi", "polp", "frutti di mare"], "frigo", 1, "I frutti di mare freschi vanno cucinati in giornata o al massimo il giorno dopo."],
+  [["pesce", "salmon", "orat", "branzin", "spigol", "merluzz", "tonno fresco", "trot", "sogliol", "aliciott", "acciugh", "sardin"], "frigo", 1, "Il pesce fresco va cucinato entro un giorno o congelato subito."],
+  [["prosciutt", "salam", "mortadell", "bresaol", "speck", "affettat", "pancett", "coppa"], "frigo", 3, "Affettati al banco: nella carta del salumiere dentro un contenitore chiuso, entro 3 giorni."],
+  [["mozzarell", "burrat", "stracciatell", "fiordilatte", "bufala"], "frigo", 3, "Nel suo liquido di governo; tirala fuori dal frigo mezz'ora prima di mangiarla."],
+  [["ricott", "stracchin", "crescenz", "squaquerone", "mascarpon"], "frigo", 4, "Una volta aperta, consumala entro 2-3 giorni e chiudi bene la confezione."],
+  [["parmigian", "grana", "pecorin", "formagg"], "frigo", 30, "Avvolto nella carta per alimenti, non nella pellicola: deve respirare."],
+  [["latte"], "frigo", 4, "Una volta aperto, il latte fresco va finito in 3 giorni. Tienilo sui ripiani, non nello sportello."],
+  [["yogurt", "kefir"], "frigo", 10, "Spesso è buono anche qualche giorno dopo la data \"da consumarsi preferibilmente entro\": controlla aspetto e odore."],
+  [["burro"], "frigo", 30, "Ben chiuso, lontano da cibi dall'odore forte. Si congela senza problemi."],
+  [["panna"], "frigo", 3, "Una volta aperta, consumala entro 2-3 giorni."],
+  [["uova", "uovo"], "frigo", 21, "Nella loro confezione sui ripiani del frigo, non nello sportello dove la temperatura cambia."],
+  [["avanz", "sugo", "ragu", "brodo", "minestr", "zupp"], "frigo", 3, "In un contenitore chiuso, in frigo appena raffreddato. Se non lo mangi in 3 giorni, congelalo."],
+];
+
+const tipFor = (name: string) => {
+  const n = foodNorm(name);
+  for (const t of TIPS) for (const k of t[0]) if (n.includes(` ${k}`)) return t;
+  return null;
+};
+
+const WHERE_IT: Record<string, string> = { frigo: "meglio in frigo", dispensa: "meglio fuori dal frigo, in dispensa", freezer: "in freezer" };
+
+/** "Come conservo le fragole?" */
+async function tipReport(hh: string, raw: string): Promise<Out> {
+  const said = productSaid(raw);
+  if (!said) return ask("Di quale alimento vuoi un consiglio?", "Per esempio: come conservo le fragole?");
+  const t = tipFor(said);
+  const mine = matching(await loadPantry(hh), said)[0];
+  const yours = mine?.expiry_date ? ` Quello che hai in dispensa ${expiryPhrase(mine.expiry_date)}.` : "";
+  if (!t) {
+    return { text: `Non ho un consiglio preciso per ${said}. Se è confezionato, segui l'etichetta: una volta aperto di solito va in frigo e si consuma in pochi giorni.${yours}` };
+  }
+  const days = t[2] >= 30 ? "anche qualche settimana" : t[2] >= 14 ? "un paio di settimane" : t[2] === 1 ? "un giorno" : `circa ${t[2]} giorni`;
+  return { text: `Per ${said}: ${WHERE_IT[t[1]] ?? "meglio in frigo"}, e si conserva ${days}. ${t[3]}${yours}` };
+}
+
+/** "Quanti crediti ho?" */
+async function creditsReport(userId: string): Promise<Out> {
+  await db.rpc("refresh_monthly_credits", { p_user_id: userId });
+  const [{ data: c }, premium] = await Promise.all([
+    db.from("user_credits").select("eco_credits, monthly_credits, monthly_period_start").eq("user_id", userId).maybeSingle(),
+    isPremium(userId),
+  ]);
+  const bought = Number(c?.eco_credits ?? 0);
+  const monthly = Number(c?.monthly_credits ?? 0);
+  const total = bought + monthly;
+  const chef = premium ? " Lo Chef a voce non usa i crediti: è incluso nell'abbonamento." : "";
+  if (!total) return { text: `Non hai crediti. Puoi prenderli dall'app, nel Profilo.${chef}` };
+  let reset = "";
+  if (monthly && c?.monthly_period_start) {
+    const d = new Date(Date.parse(String(c.monthly_period_start)));
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    reset = `, che si ricaricano il ${dateIt(d.toISOString().slice(0, 10))}`;
+  }
+  const parts = [monthly ? `${monthly} dell'abbonamento${reset}` : "", bought ? `${bought} ${monthly ? "comprati" : "comprati o regalati"}` : ""].filter(Boolean);
+  return { text: `Hai ${total} ${total === 1 ? "credito" : "crediti"}${parts.length > 1 ? `: ${listIt(parts)}` : parts.length ? `, ${parts[0]}` : ""}.${chef}` };
+}
+
+/** "Come va la mia classe?" (Progetto Scuola) */
+async function classReport(userId: string): Promise<Out> {
+  const { data: m } = await db.from("class_members").select("class_id, consent_at").eq("user_id", userId).maybeSingle();
+  if (!m) return { text: "Non fai parte di una classe del Progetto Scuola. Se la scuola ti ha dato un biglietto con il codice, inseriscilo nell'app." };
+  const { data: cl } = await db.from("school_classes").select("id, name, school_id, students").eq("id", m.class_id).maybeSingle();
+  if (!cl) return { text: "Non trovo la tua classe. Aprila dall'app." };
+  if (!m.consent_at) return { text: `Per far entrare la tua famiglia nella classifica della ${cl.name}, conferma la partecipazione dall'app.` };
+  const { data: sc } = await db.from("schools").select("name").eq("id", cl.school_id).maybeSingle();
+  const from = romeMidnight(`${romeToday().slice(0, 8)}01`);
+  const { data: rank } = await db.rpc("school_ranking_internal", { p_school: cl.school_id, p_from: from });
+  const rows = (Array.isArray(rank) ? rank : []) as any[];
+  const me = rows.find((r) => r.id === cl.id);
+  const where = `La ${cl.name}${sc?.name ? ` della ${sc.name}` : ""}`;
+  if (!me?.qualified) {
+    const active = Number(me?.active ?? 0);
+    const need = Math.max(3, Math.ceil(Number(cl.students ?? 0) * 0.3));
+    return {
+      text: `${where} questo mese non è ancora in classifica: servono almeno ${need} famiglie che segnano cosa usano e buttano, e per ora sono ${active}. Coinvolgi gli altri genitori!`,
+    };
+  }
+  const ranked = rows.filter((r) => r.qualified).length;
+  const pctWaste = Math.round(Number(me.waste_rate ?? 0) * 100);
+  const pos = Number(me.position);
+  const podium = pos === 1 ? "prima" : pos === 2 ? "seconda" : pos === 3 ? "terza" : `al ${pos}° posto`;
+  return {
+    text: `${where} questo mese è ${podium}${ranked > 1 ? ` su ${ranked} classi` : ""}: ha buttato solo il ${pctWaste} per cento del cibo. ${pos === 1 ? "Complimenti!" : "Continuate così!"}`,
+  };
+}
+
 // ---------------------------------------------------------------- spese e risparmio
 
 type Period = { from: string; to: string; label: string; prev: { from: string; to: string; label: string } };
@@ -2114,6 +2250,9 @@ async function skill(req: Request) {
       return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "BoughtAllIntent") return alexaResponse(await askBoughtAll(hh));
+    if (intent === "TipIntent") return alexaResponse(more(await tipReport(hh, slot("alimento"))));
+    if (intent === "CreditsIntent") return alexaResponse(more(await creditsReport(userId)));
+    if (intent === "ClassIntent") return alexaResponse(more(await classReport(userId)));
     if (intent === "SpendingIntent") return alexaResponse(more(await spendingReport(hh, slot("periodo"))));
     if (intent === "SavedIntent") return alexaResponse(more(await savedReport(hh, slot("periodo"))));
     if (intent === "WastedReportIntent") return alexaResponse(more(await wastedReport(hh, slot("periodo"))));
