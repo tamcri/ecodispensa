@@ -493,31 +493,51 @@
           "name": "InventoryIntent",
           "slots": [
             {
-              "name": "posto",
-              "type": "POSTO"
+              "name": "c1",
+              "type": "CATEGORIA"
+            },
+            {
+              "name": "c2",
+              "type": "CATEGORIA"
+            },
+            {
+              "name": "c3",
+              "type": "CATEGORIA"
             }
           ],
           "samples": [
-            "cosa c'è in {posto}",
-            "cosa c'è nel {posto}",
-            "cosa c'è nella {posto}",
-            "che cosa c'è in {posto}",
-            "che cosa c'è nel {posto}",
-            "cosa ho in {posto}",
-            "cosa ho nel {posto}",
-            "cosa abbiamo in {posto}",
-            "cosa abbiamo nel {posto}",
-            "dimmi cosa ho in {posto}",
-            "dimmi cosa c'è nel {posto}",
-            "cosa ho in casa",
+            "cosa c'è in dispensa",
+            "che cosa c'è in dispensa",
+            "cosa ho in dispensa",
+            "cosa abbiamo in dispensa",
             "cosa c'è in casa",
+            "cosa ho in casa",
             "cosa abbiamo in casa",
             "cosa ho",
             "cosa abbiamo",
             "dimmi cosa ho",
+            "dimmi cosa ho in dispensa",
             "leggimi la dispensa",
             "elenca la dispensa",
-            "cosa ho da mangiare"
+            "elencami i prodotti",
+            "che prodotti ho",
+            "quali prodotti ho",
+            "cosa ho da mangiare",
+            "cosa ho tra {c1}",
+            "cosa ho tra i {c1}",
+            "cosa ho tra le {c1}",
+            "cosa ho di {c1}",
+            "cosa ho nei {c1}",
+            "cosa ho nella {c1}",
+            "che {c1} ho",
+            "quali {c1} ho",
+            "elencami {c1}",
+            "elencami i {c1}",
+            "leggimi {c1}",
+            "cosa ho tra {c1} e {c2}",
+            "cosa ho di {c1} e {c2}",
+            "cosa ho tra {c1} {c2} e {c3}",
+            "cosa ho di {c1} {c2} e {c3}"
           ]
         },
         {
@@ -588,6 +608,45 @@
             "cambia la scadenza della {cibo} al {data}",
             "sposta la scadenza del {cibo} al {data}",
             "sposta la scadenza della {cibo} al {data}"
+          ]
+        },
+        {
+          "name": "CategoryIntent",
+          "slots": [
+            {
+              "name": "c1",
+              "type": "CATEGORIA"
+            },
+            {
+              "name": "c2",
+              "type": "CATEGORIA"
+            },
+            {
+              "name": "c3",
+              "type": "CATEGORIA"
+            }
+          ],
+          "samples": [
+            "{c1}",
+            "{c1} e {c2}",
+            "{c1} {c2}",
+            "{c1} {c2} e {c3}",
+            "{c1} e {c2} e {c3}",
+            "solo {c1}",
+            "solo {c1} e {c2}",
+            "solo {c1} {c2} e {c3}",
+            "la categoria {c1}",
+            "le categorie {c1} e {c2}",
+            "i {c1}",
+            "i {c1} e i {c2}",
+            "la {c1}",
+            "tutti",
+            "tutti i prodotti",
+            "tutto",
+            "dimmeli tutti",
+            "elencali tutti",
+            "tutta la dispensa",
+            "tutti quanti"
           ]
         }
       ],
@@ -1263,24 +1322,37 @@
           ]
         },
         {
-          "name": "POSTO",
+          "name": "CATEGORIA",
           "values": [
             {
               "name": {
-                "value": "frigo",
+                "value": "frutta e verdura",
                 "synonyms": [
-                  "frigorifero",
-                  "il frigo"
+                  "frutta",
+                  "verdura",
+                  "verdure",
+                  "ortofrutta",
+                  "ortaggi"
                 ]
               }
             },
             {
               "name": {
-                "value": "freezer",
+                "value": "latticini",
                 "synonyms": [
-                  "congelatore",
-                  "surgelati",
-                  "il freezer"
+                  "formaggi",
+                  "latte e formaggi",
+                  "latticino"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "carne e pesce",
+                "synonyms": [
+                  "carne",
+                  "pesce",
+                  "carni"
                 ]
               }
             },
@@ -1288,19 +1360,39 @@
               "name": {
                 "value": "dispensa",
                 "synonyms": [
-                  "la dispensa",
-                  "credenza",
-                  "casa"
+                  "prodotti secchi",
+                  "scatolame",
+                  "prodotti confezionati"
                 ]
               }
             },
             {
               "name": {
-                "value": "frutta e verdura",
+                "value": "surgelati",
                 "synonyms": [
-                  "frutta",
-                  "verdura",
-                  "ortofrutta"
+                  "congelati",
+                  "freezer",
+                  "surgelato"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "casa",
+                "synonyms": [
+                  "prodotti per la casa",
+                  "pulizia",
+                  "detersivi",
+                  "igiene"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "altro",
+                "synonyms": [
+                  "altri prodotti",
+                  "avanzi"
                 ]
               }
             }

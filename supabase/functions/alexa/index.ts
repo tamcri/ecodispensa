@@ -1054,26 +1054,54 @@ async function setExpiry(hh: string, raw: string, dateSlot: string, daysSlot: st
   return { text: `Fatto: ${lower(it.name)} ora scade il ${dateIt(iso)}.` };
 }
 
-const PLACES: Array<[RegExp, string, string[] | null]> = [
-  [/frigo|frigorifero/, "in frigo", ["Latticini", "Carne & Pesce", "Altro"]],
-  [/freezer|congelator|surgelat/, "in freezer", ["Surgelati"]],
-  [/frutta|verdur|ortofrutta/, "tra frutta e verdura", ["Ortofrutta"]],
+// le categorie dell'app, come si dicono a voce
+const CATEGORIES: Array<[string, string, RegExp]> = [
+  ["Ortofrutta", "frutta e verdura", /frutta|verdur|ortofrutta|ortaggi/],
+  ["Latticini", "latticini", /latticin|formagg|latte e/],
+  ["Carne & Pesce", "carne e pesce", /carne|pesce|carni/],
+  ["Dispensa", "dispensa", /dispensa|secch|scatolam|confezionat/],
+  ["Surgelati", "surgelati", /surgelat|congelat|freezer/],
+  ["Casa", "prodotti per la casa", /casa|pulizi|detersiv|igiene/],
+  ["Altro", "altro", /altro|altri|avanz/],
 ];
 
-/** "Cosa c'è in frigo?", "cosa ho in dispensa?" */
-async function inventoryReport(hh: string, posto: string): Promise<Out> {
-  const n = norm(posto);
-  const place = PLACES.find((p) => p[0].test(n));
-  const where = place?.[1] ?? "in dispensa";
-  const items = (await loadPantry(hh)).filter((i) => (place ? place[2]!.includes(i.category ?? "Altro") : i.category !== "Casa"));
-  if (!items.length) return { text: `${cap(where)} non ho niente segnato.` };
-  items.sort((a, b) => (a.expiry_date ?? "9999").localeCompare(b.expiry_date ?? "9999"));
-  const names = [...new Set(items.map((i) => lower(i.name)))];
-  const shown = names.slice(0, 8);
-  const rest = names.length - shown.length;
-  return {
-    text: `${cap(where)} hai ${items.length === 1 ? "un prodotto" : `${items.length} prodotti`}. Prima quelli da usare presto: ${listIt(shown)}${rest > 0 ? `, e altri ${rest}` : ""}.`,
-  };
+/** "carne pesce e latticini" → ["Carne & Pesce", "Latticini"]; "tutti" → "all"; niente → null */
+function categoriesSaid(text: string): string[] | "all" | null {
+  const n = norm(text);
+  if (!n) return null;
+  if (/\btutt[oiae]\b|\bogni\b|\bintera\b/.test(n)) return "all";
+  const found = CATEGORIES.filter((c) => c[2].test(n)).map((c) => c[0]);
+  return found.length ? found : null;
+}
+
+const INVENTORY_ASK: Out = {
+  text: "Vuoi che ti elenchi tutti i prodotti, o ti interessa una categoria? Per esempio: carne e pesce, latticini, frutta e verdura.",
+  reprompt: "Dimmi tutti i prodotti, oppure una o più categorie, per esempio: carne, pesce e latticini.",
+  end: false,
+  attrs: { inventory: true },
+};
+
+/** Elenco della dispensa: tutta, oppure solo alcune categorie (prima i prodotti da usare presto) */
+async function inventoryReport(hh: string, which: string[] | "all"): Promise<Out> {
+  const all = (await loadPantry(hh)).sort((a, b) => (a.expiry_date ?? "9999").localeCompare(b.expiry_date ?? "9999"));
+  const groups = CATEGORIES.filter((c) => which === "all" || which.includes(c[0]))
+    .map((c) => ({ label: c[1], items: all.filter((i) => (i.category || "Altro") === c[0]) }))
+    .filter((g) => which !== "all" || g.items.length);
+  const total = groups.reduce((a, g) => a + g.items.length, 0);
+  if (!total) {
+    if (which === "all") return { text: "La dispensa è vuota." };
+    return { text: `Non hai niente in ${listIt(groups.map((g) => g.label))}.` };
+  }
+  const perGroup = which === "all" ? 4 : groups.length === 1 ? 10 : 6;
+  const parts = groups.map((g) => {
+    if (!g.items.length) return `${cap(g.label)}: niente.`;
+    const names = [...new Set(g.items.map((i) => lower(i.name)))];
+    const shown = names.slice(0, perGroup);
+    const rest = names.length - shown.length;
+    return `${cap(g.label)}: ${listIt(shown)}${rest > 0 ? `, e altri ${rest}` : ""}.`;
+  });
+  const head = which === "all" ? `Hai ${total === 1 ? "un prodotto" : `${total} prodotti`}, prima quelli da usare presto. ` : "";
+  return { text: `${head}${parts.join(" ")}` };
 }
 
 // ---------------------------------------------------------------- spese e risparmio
@@ -1526,11 +1554,12 @@ async function skill(req: Request) {
   const type = ev.request.type as string;
   const intent = type === "IntentRequest" ? (ev.request.intent?.name as string) : "";
   if (intent) console.log("alexa intent:", intent);
-  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[]; chef?: ChefRecipe[]; missing?: string[] };
+  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[]; chef?: ChefRecipe[]; missing?: string[]; inventory?: boolean };
   const list = Array.isArray(attrs.list) ? attrs.list : null;
   const pending = Array.isArray(attrs.pending) && attrs.pending.length ? attrs.pending : null;
   const chef = Array.isArray(attrs.chef) && attrs.chef.length ? attrs.chef : null;
   const missing = Array.isArray(attrs.missing) && attrs.missing.length ? attrs.missing : null;
+  const inventory = attrs.inventory === true;
   const isStop = ["AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.NavigateHomeIntent"].includes(intent);
 
   // senza niente in sospeso: stop e fine sessione non hanno bisogno dell'account
@@ -1590,7 +1619,7 @@ async function skill(req: Request) {
       }
       if (intent === "StartListIntent") return alexaResponse({ text: "La lista è già aperta: dimmi i prodotti.", reprompt: "Quando hai finito di' chiudi lista.", end: false, attrs: { list } });
       // durante la lista ogni frase con un prodotto è un prodotto da segnare (anche se Alexa l'ha presa per un altro comando)
-      const what = slot("prodotti") || slot("prodotto") || slot("piatto");
+      const what = slot("prodotti") || slot("prodotto") || slot("piatto") || [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
       console.log("alexa lista:", list.length, "prodotti, ricevuto:", what || "(niente)");
       const keep = (text: string, reprompt = "Altro? Quando hai finito di' chiudi lista."): Response =>
         alexaResponse({ text, reprompt, end: false, attrs: { list } });
@@ -1614,8 +1643,8 @@ async function skill(req: Request) {
 
     // ---- lo Chef ha proposto le ricette: l'utente sceglie
     if (chef) {
-      if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent" || intent === "ListItemsIntent" || intent === "AMAZON.FallbackIntent" || (intent === "AMAZON.YesIntent" && chef.length === 1)) {
-        const said = intent === "AMAZON.YesIntent" ? "primo" : slot("numero") || slot("piatto") || slot("prodotti");
+      if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent" || intent === "ListItemsIntent" || intent === "CategoryIntent" || intent === "AMAZON.FallbackIntent" || (intent === "AMAZON.YesIntent" && chef.length === 1)) {
+        const said = intent === "AMAZON.YesIntent" ? "primo" : slot("numero") || slot("piatto") || slot("prodotti") || slot("c1");
         const i = said ? pickRecipe(chef, said) : -1;
         if (i < 0) {
           return alexaResponse({
@@ -1646,6 +1675,16 @@ async function skill(req: Request) {
         return alexaResponse(more(await saveShopping(userId, hh, parts)));
       }
       if (intent === "AMAZON.NoIntent") return alexaResponse(more({ text: "Va bene, non li aggiungo." }));
+    }
+    // ---- "vuoi tutti i prodotti o una categoria?": la risposta può arrivare come qualunque frase
+    if (inventory && !isStop && intent !== "AMAZON.NoIntent") {
+      const cats = [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
+      const said = [cats, slot("prodotti"), slot("prodotto"), slot("piatto")].filter(Boolean).join(" e ");
+      const which = intent === "AMAZON.YesIntent" || (intent === "CategoryIntent" && !cats) ? "all" : categoriesSaid(said);
+      if (which) return alexaResponse(more(await inventoryReport(hh, which)));
+      if (intent === "AMAZON.FallbackIntent" || intent === "ListItemsIntent") {
+        return alexaResponse({ ...INVENTORY_ASK, text: "Non ho capito. Dimmi tutti i prodotti, oppure una categoria: frutta e verdura, latticini, carne e pesce, dispensa, surgelati, casa o altro." });
+      }
     }
     if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent") return alexaResponse(ask("Prima chiedimi cosa posso cucinare, così lo Chef ti fa le sue proposte.", "Cosa vuoi fare?"));
 
@@ -1726,11 +1765,17 @@ async function skill(req: Request) {
         const out = await takeFromPantry(userId, hh, n.slice(verb[0].length), /^(buttat|sprecat)/.test(verb[1]) ? "wasted" : "consumed");
         return alexaResponse(out.end === false ? out : more(out));
       }
-      if (/^(in |nel |nella )?(frigo|frigorifero|freezer|congelatore|dispensa|casa)$/.test(n)) return alexaResponse(more(await inventoryReport(hh, n)));
+      if (/^(in |nel |nella )?(dispensa|casa)$/.test(n)) return alexaResponse(INVENTORY_ASK);
       const out = await haveReport(hh, what);
       return alexaResponse(out.end === false ? out : more(out));
     }
-    if (intent === "InventoryIntent") return alexaResponse(more(await inventoryReport(hh, slot("posto"))));
+    if (intent === "InventoryIntent" || intent === "CategoryIntent") {
+      const cats = [slot("c1"), slot("c2"), slot("c3")].filter(Boolean).join(" e ");
+      // CategoryIntent senza categorie = "tutti i prodotti"
+      const which = intent === "CategoryIntent" && !cats ? "all" : categoriesSaid(cats);
+      if (!which) return alexaResponse(INVENTORY_ASK);
+      return alexaResponse(more(await inventoryReport(hh, which)));
+    }
     if (intent === "WhenExpiresIntent") {
       const out = await whenExpiresReport(hh, slot("prodotto"));
       return alexaResponse(out.end === false ? out : more(out));
