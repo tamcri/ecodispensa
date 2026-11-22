@@ -946,6 +946,191 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
   return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
 }
 
+// ---------------------------------------------------------------- spese e risparmio
+
+type Period = { from: string; to: string; label: string; prev: { from: string; to: string; label: string } };
+
+const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/** "questa settimana", "il mese scorso"… → giorni (YYYY-MM-DD, \"to\" escluso) */
+function periodFrom(said: string): Period {
+  const n = norm(said);
+  const today = romeToday();
+  const weekStart = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
+  const monthStart = `${today.slice(0, 8)}01`;
+  const prevMonthStart = (() => {
+    const [y, m] = today.split("-").map(Number);
+    return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`;
+  })();
+  const week = { from: weekStart, to: addDays(today, 1), label: "questa settimana" };
+  const lastWeek = { from: addDays(weekStart, -7), to: weekStart, label: "la settimana scorsa" };
+  const month = { from: monthStart, to: addDays(today, 1), label: "questo mese" };
+  const lastMonth = { from: prevMonthStart, to: monthStart, label: "il mese scorso" };
+  if (/settiman/.test(n)) return /scors|passat/.test(n) ? { ...lastWeek, prev: addWeekBefore(lastWeek) } : { ...week, prev: lastWeek };
+  if (/oggi/.test(n)) return { from: today, to: addDays(today, 1), label: "oggi", prev: { from: addDays(today, -1), to: today, label: "ieri" } };
+  if (/scors|passat/.test(n)) {
+    const [y, m] = prevMonthStart.split("-").map(Number);
+    const before = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`;
+    return { ...lastMonth, prev: { from: before, to: prevMonthStart, label: "il mese prima" } };
+  }
+  return { ...month, prev: lastMonth };
+}
+const addWeekBefore = (w: { from: string; to: string }) => ({ from: addDays(w.from, -7), to: w.from, label: "la settimana prima" });
+
+/** il periodo precedente, fermo allo stesso giorno (1–22 novembre contro 1–22 ottobre) */
+function samePart(p: Period) {
+  const len = Math.round((Date.parse(p.to) - Date.parse(p.from)) / 86_400_000);
+  const cut = addDays(p.prev.from, len);
+  const partial = cut < p.prev.to;
+  return { from: p.prev.from, to: partial ? cut : p.prev.to, label: partial ? `lo stesso periodo ${p.prev.label === "il mese scorso" ? "del mese scorso" : p.prev.label === "la settimana scorsa" ? "della settimana scorsa" : `di ${p.prev.label}`}` : p.prev.label };
+}
+
+/** mezzanotte a Roma di quel giorno, come istante */
+function romeMidnight(iso: string) {
+  const noon = new Date(`${iso}T12:00:00Z`);
+  const off = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", timeZoneName: "shortOffset" })
+    .formatToParts(noon)
+    .find((p) => p.type === "timeZoneName")?.value.match(/GMT([+-]\d+)?/)?.[1];
+  const h = Number(off ?? 0);
+  return new Date(Date.parse(`${iso}T00:00:00Z`) - h * 3600_000).toISOString();
+}
+
+/** "12,50 euro", "3 euro" */
+const euroIt = (cents: number) => {
+  const e = Math.floor(cents / 100);
+  const c = cents % 100;
+  return c ? `${e} euro e ${c} centesimi` : `${e} euro`;
+};
+
+async function spentIn(hh: string, p: { from: string; to: string }) {
+  const [{ data: rec }, { data: lines }] = await Promise.all([
+    db.from("grocery_receipts").select("id, store, total_cents").eq("household_id", hh).gte("purchased_on", p.from).lt("purchased_on", p.to),
+    db.from("grocery_lines").select("receipt_id, price_cents, category").eq("household_id", hh).gte("purchased_on", p.from).lt("purchased_on", p.to),
+  ]);
+  const byReceipt = new Map<string, number>();
+  let loose = 0;
+  const byCat = new Map<string, number>();
+  for (const l of lines ?? []) {
+    if (l.price_cents == null) continue;
+    if (l.receipt_id) byReceipt.set(l.receipt_id, (byReceipt.get(l.receipt_id) ?? 0) + l.price_cents);
+    else loose += l.price_cents;
+    const c = l.category || "Altro";
+    byCat.set(c, (byCat.get(c) ?? 0) + l.price_cents);
+  }
+  const byStore = new Map<string, number>();
+  let total = loose;
+  for (const r of rec ?? []) {
+    const t = r.total_cents ?? byReceipt.get(r.id) ?? 0;
+    total += t;
+    const s = (r.store ?? "").trim();
+    if (s && t) byStore.set(s, (byStore.get(s) ?? 0) + t);
+  }
+  const top = <T,>(m: Map<T, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+  return { total, receipts: (rec ?? []).length, stores: top(byStore), cats: top(byCat) };
+}
+
+async function eventsIn(hh: string, p: { from: string; to: string }) {
+  const { data } = await db
+    .from("pantry_events")
+    .select("item_name, outcome, value_cents")
+    .eq("household_id", hh)
+    .gte("created_at", romeMidnight(p.from))
+    .lt("created_at", romeMidnight(p.to));
+  const ev = data ?? [];
+  const used = ev.filter((e: any) => e.outcome === "consumed");
+  const wasted = ev.filter((e: any) => e.outcome === "wasted");
+  const sum = (xs: any[]) => xs.reduce((a, e) => a + (e.value_cents ?? 0), 0);
+  const names = new Map<string, number>();
+  for (const e of wasted) names.set(lower(e.item_name), (names.get(lower(e.item_name)) ?? 0) + 1);
+  return {
+    used: used.length,
+    usedValue: sum(used),
+    wasted: wasted.length,
+    wastedValue: sum(wasted),
+    wastedNames: [...names.entries()].sort((a, b) => b[1] - a[1]).map((x) => x[0]),
+  };
+}
+
+async function spendingReport(hh: string, said: string): Promise<Out> {
+  const p = periodFrom(said);
+  const prev = samePart(p);
+  const [now, before] = await Promise.all([spentIn(hh, p), spentIn(hh, prev)]);
+  if (!now.total) {
+    return { text: `${cap(p.label)} non ho spese registrate. Le spese si aggiungono dall'app, fotografando lo scontrino.` };
+  }
+  let cmp = "";
+  if (before.total) {
+    const d = now.total - before.total;
+    if (Math.abs(d) >= 100) cmp = ` Sono ${euroIt(Math.abs(d))} ${d > 0 ? "in più" : "in meno"} rispetto a ${prev.label}.`;
+    else cmp = ` Più o meno come ${prev.label}.`;
+  }
+  const n = now.receipts;
+  const rec = n ? ` con ${n === 1 ? "una spesa" : `${n} spese`}` : "";
+  return { text: `${cap(p.label)} hai speso ${euroIt(now.total)}${rec}.${cmp}` };
+}
+
+async function savedReport(hh: string, said: string): Promise<Out> {
+  const p = periodFrom(said);
+  const e = await eventsIn(hh, p);
+  if (!e.used && !e.wasted) return { text: `${cap(p.label)} non hai ancora segnato prodotti usati o buttati. Dimmi per esempio: ho usato due uova.` };
+  const parts: string[] = [];
+  if (e.usedValue) parts.push(`${cap(p.label)} hai usato cibo per ${euroIt(e.usedValue)} invece di buttarlo: ${e.used === 1 ? "un prodotto" : `${e.used} prodotti`}.`);
+  else parts.push(`${cap(p.label)} hai usato ${e.used === 1 ? "un prodotto" : `${e.used} prodotti`} senza sprecarli.`);
+  if (e.wasted) parts.push(`Ne hai buttati ${e.wasted}${e.wastedValue ? `, per ${euroIt(e.wastedValue)}` : ""}.`);
+  else if (e.used) parts.push("E non hai buttato niente. Bravissimo!");
+  if (!e.usedValue) parts.push("Per sapere quanto vale in euro, aggiungi i prezzi con lo scontrino.");
+  return { text: parts.join(" ") };
+}
+
+async function wastedReport(hh: string, said: string): Promise<Out> {
+  const p = periodFrom(said);
+  const e = await eventsIn(hh, p);
+  if (!e.wasted) return { text: `${cap(p.label)} non hai buttato niente. Ottimo lavoro!` };
+  const value = e.wastedValue ? `, per circa ${euroIt(e.wastedValue)}` : "";
+  const what = e.wastedNames.length ? ` Tra questi: ${listIt(e.wastedNames.slice(0, 3))}.` : "";
+  return { text: `${cap(p.label)} hai buttato ${e.wasted === 1 ? "un prodotto" : `${e.wasted} prodotti`}${value}.${what}` };
+}
+
+async function progressReport(hh: string): Promise<Out> {
+  const p = periodFrom("mese");
+  const [e, now, before] = await Promise.all([eventsIn(hh, p), spentIn(hh, p), spentIn(hh, samePart(p))]);
+  const parts: string[] = [];
+  const tot = e.used + e.wasted;
+  if (tot) {
+    const pct = Math.round((e.used / tot) * 100);
+    const mood = pct >= 90 ? "Benissimo!" : pct >= 70 ? "Bene." : "Si può fare meglio.";
+    parts.push(`${mood} Questo mese hai usato il ${pct} per cento del cibo che hai segnato: ${e.used} prodotti usati e ${e.wasted} buttati.`);
+  } else parts.push("Questo mese non hai ancora segnato prodotti usati o buttati.");
+  if (now.total) {
+    const d = before.total ? now.total - before.total : 0;
+    parts.push(`Di spesa sei a ${euroIt(now.total)}${before.total && Math.abs(d) >= 100 ? `, ${euroIt(Math.abs(d))} ${d > 0 ? "in più" : "in meno"} dello stesso periodo del mese scorso` : ""}.`);
+  }
+  const items = await loadPantry(hh);
+  const soon = items.filter((i) => {
+    const d = daysLeft(i.expiry_date);
+    return d !== null && d >= 0 && d <= 2;
+  }).length;
+  if (soon) parts.push(`In dispensa ${soon === 1 ? "c'è un prodotto" : `ci sono ${soon} prodotti`} da usare entro due giorni.`);
+  return { text: parts.join(" ") };
+}
+
+async function topStoreReport(hh: string, said: string): Promise<Out> {
+  const p = periodFrom(said);
+  const now = await spentIn(hh, p);
+  if (!now.total) return { text: `${cap(p.label)} non ho spese registrate.` };
+  const parts: string[] = [];
+  const [store, cents] = now.stores[0] ?? [];
+  if (store) {
+    parts.push(`${cap(p.label)} hai speso di più da ${store}: ${euroIt(cents!)}.`);
+    if (now.stores[1]) parts.push(`Poi da ${now.stores[1][0]}, ${euroIt(now.stores[1][1])}.`);
+  } else parts.push(`${cap(p.label)} non so in quali negozi hai fatto la spesa.`);
+  const [cat, cc] = now.cats[0] ?? [];
+  if (cat) parts.push(`Il reparto che ti costa di più è ${lower(cat)}, con ${euroIt(cc!)}.`);
+  return { text: parts.join(" ") };
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 // ---------------------------------------------------------------- lo Chef a voce (abbonati)
 
 type ChefRecipe = {
@@ -1186,7 +1371,7 @@ function pickRecipe(recipes: ChefRecipe[], said: string): number {
 }
 
 const HELP =
-  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; oppure cosa posso cucinare.";
+  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; quanto ho speso questo mese; come sto andando; oppure cosa posso cucinare.";
 
 // ---------------------------------------------------------------- skill
 
@@ -1401,6 +1586,11 @@ async function skill(req: Request) {
       const out = await addToPantry(userId, what);
       return alexaResponse(out.end === false ? out : more(out));
     }
+    if (intent === "SpendingIntent") return alexaResponse(more(await spendingReport(hh, slot("periodo"))));
+    if (intent === "SavedIntent") return alexaResponse(more(await savedReport(hh, slot("periodo"))));
+    if (intent === "WastedReportIntent") return alexaResponse(more(await wastedReport(hh, slot("periodo"))));
+    if (intent === "ProgressIntent") return alexaResponse(more(await progressReport(hh)));
+    if (intent === "TopStoreIntent") return alexaResponse(more(await topStoreReport(hh, slot("periodo"))));
     if (intent === "CookIntent") {
       const [items, premium, used] = await Promise.all([loadPantry(hh), isPremium(userId), chefUsedToday(userId)]);
       if (!premium) {

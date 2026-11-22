@@ -113,6 +113,8 @@ export const ALEXA_PHRASES = [
   'Prepariamo la lista della spesa',
   'Ho usato 300 grammi di pasta',
   'Aggiungi una mozzarella in dispensa',
+  'Quanto ho speso questo mese?',
+  'Come sto andando?',
 ];
 
 // una sola richiesta per collegamento, anche se la pagina si ridisegna (lo "state" vale una volta)

@@ -335,6 +335,124 @@
             "cosa cuciniamo oggi"
           ],
           "slots": []
+        },
+        {
+          "name": "SpendingIntent",
+          "slots": [
+            {
+              "name": "periodo",
+              "type": "PERIODO"
+            }
+          ],
+          "samples": [
+            "quanto ho speso",
+            "quanto ho speso {periodo}",
+            "quanto abbiamo speso",
+            "quanto abbiamo speso {periodo}",
+            "quanto ho speso di spesa",
+            "quanto ho speso di spesa {periodo}",
+            "quanto mi è costata la spesa",
+            "quanto mi è costata la spesa {periodo}",
+            "quanto è costata la spesa",
+            "quanto è costata la spesa {periodo}",
+            "quanto ho pagato di spesa",
+            "quanto ho pagato di spesa {periodo}",
+            "{periodo} quanto ho speso",
+            "dimmi quanto ho speso {periodo}",
+            "le mie spese {periodo}",
+            "spese di {periodo}"
+          ]
+        },
+        {
+          "name": "SavedIntent",
+          "slots": [
+            {
+              "name": "periodo",
+              "type": "PERIODO"
+            }
+          ],
+          "samples": [
+            "quanto ho risparmiato",
+            "quanto ho risparmiato {periodo}",
+            "quanto abbiamo risparmiato",
+            "quanto abbiamo risparmiato {periodo}",
+            "quanto cibo ho salvato",
+            "quanto cibo ho salvato {periodo}",
+            "quanto ho salvato dalla spazzatura",
+            "quanto ho salvato dalla spazzatura {periodo}",
+            "quanto cibo ho usato",
+            "quanto cibo ho usato {periodo}",
+            "{periodo} quanto ho risparmiato",
+            "dimmi quanto ho risparmiato {periodo}"
+          ]
+        },
+        {
+          "name": "WastedReportIntent",
+          "slots": [
+            {
+              "name": "periodo",
+              "type": "PERIODO"
+            }
+          ],
+          "samples": [
+            "quanto ho buttato",
+            "quanto ho buttato {periodo}",
+            "quanto abbiamo buttato",
+            "quanto abbiamo buttato {periodo}",
+            "quanto cibo ho buttato",
+            "quanto cibo ho buttato {periodo}",
+            "quanto ho sprecato",
+            "quanto ho sprecato {periodo}",
+            "quanto abbiamo sprecato",
+            "quanto abbiamo sprecato {periodo}",
+            "cosa ho buttato",
+            "cosa ho buttato {periodo}",
+            "quanti prodotti ho buttato",
+            "quanti prodotti ho buttato {periodo}",
+            "{periodo} quanto ho buttato",
+            "dimmi quanto ho sprecato {periodo}"
+          ]
+        },
+        {
+          "name": "ProgressIntent",
+          "samples": [
+            "come sto andando",
+            "come stiamo andando",
+            "come vado",
+            "come va la dispensa",
+            "come va con lo spreco",
+            "come sto andando con lo spreco",
+            "come sto andando questo mese",
+            "fammi il punto",
+            "fammi un riepilogo",
+            "dammi un riepilogo",
+            "riepilogo del mese"
+          ]
+        },
+        {
+          "name": "TopStoreIntent",
+          "slots": [
+            {
+              "name": "periodo",
+              "type": "PERIODO"
+            }
+          ],
+          "samples": [
+            "dove ho speso di più",
+            "dove ho speso di più {periodo}",
+            "in quale negozio ho speso di più",
+            "in quale negozio ho speso di più {periodo}",
+            "in che supermercato ho speso di più",
+            "in che supermercato ho speso di più {periodo}",
+            "dove spendo di più",
+            "dove spendo di più {periodo}",
+            "qual è il negozio dove spendo di più",
+            "qual è il negozio dove spendo di più {periodo}",
+            "su cosa spendo di più",
+            "su cosa spendo di più {periodo}",
+            "cosa mi costa di più",
+            "cosa mi costa di più {periodo}"
+          ]
         }
       ],
       "types": [
@@ -946,6 +1064,63 @@
                 "value": "ultimo",
                 "synonyms": [
                   "ultima"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PERIODO",
+          "values": [
+            {
+              "name": {
+                "value": "questo mese",
+                "synonyms": [
+                  "nel mese",
+                  "del mese",
+                  "in questo mese",
+                  "mese"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "questa settimana",
+                "synonyms": [
+                  "nella settimana",
+                  "della settimana",
+                  "in questa settimana",
+                  "settimana"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "il mese scorso",
+                "synonyms": [
+                  "lo scorso mese",
+                  "nel mese scorso",
+                  "il mese passato",
+                  "del mese scorso"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "la settimana scorsa",
+                "synonyms": [
+                  "la scorsa settimana",
+                  "nella settimana scorsa",
+                  "la settimana passata",
+                  "della settimana scorsa"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "oggi",
+                "synonyms": [
+                  "di oggi"
                 ]
               }
             }
