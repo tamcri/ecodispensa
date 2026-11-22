@@ -84,7 +84,9 @@
             "è finita {prodotto}",
             "sono finiti {prodotto}",
             "sono finite {prodotto}",
-            "usato {prodotto}"
+            "usato {prodotto}",
+            "ho finito tutto {prodotto}",
+            "abbiamo finito tutto {prodotto}"
           ],
           "slots": [
             {
@@ -452,6 +454,140 @@
             "su cosa spendo di più {periodo}",
             "cosa mi costa di più",
             "cosa mi costa di più {periodo}"
+          ]
+        },
+        {
+          "name": "HaveIntent",
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "ho {prodotto}",
+            "ho ancora {prodotto}",
+            "c'è {prodotto}",
+            "c'è ancora {prodotto}",
+            "ci sono {prodotto}",
+            "ci sono ancora {prodotto}",
+            "abbiamo {prodotto}",
+            "abbiamo ancora {prodotto}",
+            "quanto {prodotto} ho",
+            "quanta {prodotto} ho",
+            "quanti {prodotto} ho",
+            "quante {prodotto} ho",
+            "quanto mi è rimasto di {prodotto}",
+            "quanta {prodotto} mi è rimasta",
+            "quanto {prodotto} mi è rimasto",
+            "quanti {prodotto} mi sono rimasti",
+            "quante {prodotto} mi sono rimaste",
+            "mi è rimasto {prodotto}",
+            "mi è rimasta {prodotto}",
+            "controlla se ho {prodotto}",
+            "ho in casa {prodotto}",
+            "abbiamo in casa {prodotto}"
+          ]
+        },
+        {
+          "name": "InventoryIntent",
+          "slots": [
+            {
+              "name": "posto",
+              "type": "POSTO"
+            }
+          ],
+          "samples": [
+            "cosa c'è in {posto}",
+            "cosa c'è nel {posto}",
+            "cosa c'è nella {posto}",
+            "che cosa c'è in {posto}",
+            "che cosa c'è nel {posto}",
+            "cosa ho in {posto}",
+            "cosa ho nel {posto}",
+            "cosa abbiamo in {posto}",
+            "cosa abbiamo nel {posto}",
+            "dimmi cosa ho in {posto}",
+            "dimmi cosa c'è nel {posto}",
+            "cosa ho in casa",
+            "cosa c'è in casa",
+            "cosa abbiamo in casa",
+            "cosa ho",
+            "cosa abbiamo",
+            "dimmi cosa ho",
+            "leggimi la dispensa",
+            "elenca la dispensa",
+            "cosa ho da mangiare"
+          ]
+        },
+        {
+          "name": "WhenExpiresIntent",
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "quando scade {prodotto}",
+            "quando scadono {prodotto}",
+            "che scadenza ha {prodotto}",
+            "che scadenza hanno {prodotto}",
+            "qual è la scadenza di {prodotto}",
+            "qual è la scadenza del {prodotto}",
+            "qual è la scadenza della {prodotto}",
+            "fino a quando dura {prodotto}",
+            "quanto dura ancora {prodotto}",
+            "entro quando devo usare {prodotto}",
+            "entro quando devo consumare {prodotto}",
+            "dimmi quando scade {prodotto}"
+          ]
+        },
+        {
+          "name": "SetExpiryIntent",
+          "slots": [
+            {
+              "name": "cibo",
+              "type": "LISTA_PRODOTTI"
+            },
+            {
+              "name": "data",
+              "type": "AMAZON.DATE"
+            },
+            {
+              "name": "giorni",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "{cibo} scade il {data}",
+            "{cibo} scade tra {giorni} giorni",
+            "{cibo} scade fra {giorni} giorni",
+            "il {cibo} scade il {data}",
+            "la {cibo} scade il {data}",
+            "lo {cibo} scade il {data}",
+            "i {cibo} scadono il {data}",
+            "le {cibo} scadono il {data}",
+            "il {cibo} scade tra {giorni} giorni",
+            "la {cibo} scade tra {giorni} giorni",
+            "la scadenza di {cibo} è il {data}",
+            "la scadenza del {cibo} è il {data}",
+            "la scadenza della {cibo} è il {data}",
+            "cambia la scadenza di {cibo}",
+            "cambia la scadenza del {cibo}",
+            "cambia la scadenza della {cibo}",
+            "cambia la scadenza delle {cibo}",
+            "cambia la scadenza dei {cibo}",
+            "correggi la scadenza di {cibo}",
+            "correggi la scadenza del {cibo}",
+            "correggi la scadenza della {cibo}",
+            "modifica la scadenza di {cibo}",
+            "modifica la scadenza del {cibo}",
+            "modifica la scadenza della {cibo}",
+            "cambia la scadenza del {cibo} al {data}",
+            "cambia la scadenza della {cibo} al {data}",
+            "sposta la scadenza del {cibo} al {data}",
+            "sposta la scadenza della {cibo} al {data}"
           ]
         }
       ],
@@ -1121,6 +1257,50 @@
                 "value": "oggi",
                 "synonyms": [
                   "di oggi"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POSTO",
+          "values": [
+            {
+              "name": {
+                "value": "frigo",
+                "synonyms": [
+                  "frigorifero",
+                  "il frigo"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "freezer",
+                "synonyms": [
+                  "congelatore",
+                  "surgelati",
+                  "il freezer"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "dispensa",
+                "synonyms": [
+                  "la dispensa",
+                  "credenza",
+                  "casa"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "frutta e verdura",
+                "synonyms": [
+                  "frutta",
+                  "verdura",
+                  "ortofrutta"
                 ]
               }
             }

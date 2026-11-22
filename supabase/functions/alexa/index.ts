@@ -720,6 +720,7 @@ async function takeFromPantry(userId: string, householdId: string, text: string,
 
   const done: string[] = [];
   const missing: string[] = [];
+  const finished: string[] = [];
   const left = new Map(items.map((i) => [i.id, i.quantity]));
   const events: any[] = [];
 
@@ -752,7 +753,10 @@ async function takeFromPantry(userId: string, householdId: string, text: string,
       value_cents: valueOf(it, used),
     });
     const n = lower(it.name);
-    if (rest <= 0.0001) done.push(outcome === "wasted" ? `${n} buttato` : `${n} finito`);
+    if (rest <= 0.0001) {
+      done.push(outcome === "wasted" ? `${n} buttato` : `${n} finito`);
+      if (outcome === "consumed" && !finished.includes(n)) finished.push(n);
+    }
     else done.push(`${n}: ne restano ${qtyIt(rest, unitKey(it.unit))}`);
   }
 
@@ -767,7 +771,23 @@ async function takeFromPantry(userId: string, householdId: string, text: string,
   const sentences: string[] = [];
   if (done.length) sentences.push(`Fatto. ${done.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(". ")}.`);
   if (missing.length) sentences.push(`Non trovo in dispensa: ${listIt(missing)}.`);
-  return { text: sentences.join(" "), card: { title: "Dispensa aggiornata", content: sentences.join("\n") } };
+  const card = { title: "Dispensa aggiornata", content: sentences.join("\n") };
+  // finito un prodotto: lo rimetto in lista? (ma non se c'è già)
+  if (finished.length) {
+    const { data: inList } = await db.from("shopping_items").select("name").eq("household_id", householdId).eq("is_checked", false);
+    const listed = new Set((inList ?? []).map((r: any) => norm(r.name)));
+    const again = finished.filter((n) => ![...listed].some((l) => matchScore(n, l) > 0.5));
+    if (again.length) {
+      return {
+        text: `${sentences.join(" ")} Vuoi che ${again.length === 1 ? "lo metta" : "li metta"} nella lista della spesa?`,
+        reprompt: `Metto ${listIt(again)} nella lista della spesa? Dimmi sì o no.`,
+        end: false,
+        card,
+        attrs: { missing: again },
+      };
+    }
+  }
+  return { text: sentences.join(" "), card };
 }
 
 async function addToShopping(userId: string, householdId: string, text: string): Promise<Out> {
@@ -944,6 +964,116 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
     };
   }
   return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
+}
+
+// ---------------------------------------------------------------- cosa c'è in dispensa
+
+/** "la mozzarella in frigo", "pasta mi è rimasta" → "mozzarella", "pasta" */
+function productSaid(raw: string): string {
+  let s = norm(raw)
+    .replace(/^(ancora|se ho|se c'e|se ci sono|in casa)\s+/, "")
+    .replace(/\s+(in casa|in frigo|in frigorifero|in dispensa|in freezer|ancora|ho|abbiamo|mi e rimast[oaie]|mi sono rimast[oaie]|e rimast[oaie]|sono rimast[oaie]|ci sono|c'e)$/g, "")
+    .replace(/^(di|del|della|dello|dei|delle|degli)\s+/, "");
+  const p = parsePart(s);
+  return p?.name ?? s;
+}
+
+const matching = (items: Item[], said: string) =>
+  items
+    .filter((i) => matchScore(said, i.name) > 0.5)
+    .sort((a, b) => (a.expiry_date ?? "9999").localeCompare(b.expiry_date ?? "9999"));
+
+/** "scade domani", "è già scaduto il 3 novembre", "scade il 30 dicembre" */
+function expiryPhrase(iso: string | null): string {
+  const d = daysLeft(iso);
+  if (d === null || !iso) return "non ha una scadenza segnata";
+  if (d < -1) return `è già scaduto il ${dateIt(iso)}`;
+  if (d === -1) return "è scaduto ieri";
+  if (d === 0) return "scade oggi";
+  if (d === 1) return "scade domani";
+  if (d <= 7) return `scade tra ${d} giorni`;
+  return `scade il ${dateIt(iso)}`;
+}
+
+/** quantità totale dei prodotti trovati, nell'unità del primo */
+function totalQty(found: Item[]): string {
+  const unit = unitKey(found[0].unit);
+  let tot = 0;
+  for (const i of found) {
+    const c = convert(i.quantity, i.unit, unit);
+    if (c === null) return "";
+    tot += c;
+  }
+  return qtyIt(tot, unit);
+}
+
+/** "Ho la mozzarella?", "quanta pasta mi è rimasta?" */
+async function haveReport(hh: string, raw: string): Promise<Out> {
+  const said = productSaid(raw);
+  if (!said) return ask("Quale prodotto cerco?", "Per esempio: ho la mozzarella?");
+  const found = matching(await loadPantry(hh), said);
+  if (!found.length) {
+    return {
+      text: `No, non trovo ${said} in dispensa. Vuoi che lo metta nella lista della spesa?`,
+      reprompt: `Metto ${said} nella lista della spesa? Dimmi sì o no.`,
+      end: false,
+      attrs: { missing: [said] },
+    };
+  }
+  const first = found[0];
+  const qty = totalQty(found);
+  if (found.length === 1) return { text: `Sì, hai ${lower(first.name)}${qty ? `: ${qty}` : ""}. ${cap(expiryPhrase(first.expiry_date))}.` };
+  return {
+    text: `Sì, hai ${found.length} confezioni di ${said}${qty ? `, in tutto ${qty}` : ""}. La prima ${expiryPhrase(first.expiry_date).replace(/^è già scaduto/, "è già scaduta")}.`,
+  };
+}
+
+/** "Quando scade il latte?" */
+async function whenExpiresReport(hh: string, raw: string): Promise<Out> {
+  const said = productSaid(raw);
+  if (!said) return ask("Di quale prodotto vuoi sapere la scadenza?", "Per esempio: quando scade il latte?");
+  const found = matching(await loadPantry(hh), said);
+  if (!found.length) return { text: `Non trovo ${said} in dispensa.` };
+  if (found.length === 1 && !found[0].expiry_date) {
+    return askExpiry([{ id: found[0].id, name: found[0].name }], `${cap(lower(found[0].name))} non ha una scadenza segnata.`);
+  }
+  const lines = found.slice(0, 3).map((i, k) => `${k === 0 ? cap(lower(i.name)) : lower(i.name)} ${expiryPhrase(i.expiry_date)}`);
+  const more = found.length > 3 ? ` E ce ne sono altri ${found.length - 3}.` : "";
+  return { text: `${listIt(lines)}.${more}` };
+}
+
+/** "La mozzarella scade il 30 novembre", "cambia la scadenza del latte" */
+async function setExpiry(hh: string, raw: string, dateSlot: string, daysSlot: string): Promise<Out> {
+  const said = productSaid(raw);
+  if (!said) return ask("Di quale prodotto cambio la scadenza?", "Per esempio: la mozzarella scade il 30 novembre.");
+  const it = findItem(await loadPantry(hh), said);
+  if (!it) return { text: `Non trovo ${said} in dispensa.` };
+  const iso = dateSlot || daysSlot ? expiryFrom(dateSlot, daysSlot) : null;
+  if (!iso) return askExpiry([{ id: it.id, name: it.name }], dateSlot || daysSlot ? "Non ho capito la data." : "");
+  await db.from("pantry_items").update({ expiry_date: iso, long_life: false }).eq("id", it.id).eq("household_id", hh);
+  return { text: `Fatto: ${lower(it.name)} ora scade il ${dateIt(iso)}.` };
+}
+
+const PLACES: Array<[RegExp, string, string[] | null]> = [
+  [/frigo|frigorifero/, "in frigo", ["Latticini", "Carne & Pesce", "Altro"]],
+  [/freezer|congelator|surgelat/, "in freezer", ["Surgelati"]],
+  [/frutta|verdur|ortofrutta/, "tra frutta e verdura", ["Ortofrutta"]],
+];
+
+/** "Cosa c'è in frigo?", "cosa ho in dispensa?" */
+async function inventoryReport(hh: string, posto: string): Promise<Out> {
+  const n = norm(posto);
+  const place = PLACES.find((p) => p[0].test(n));
+  const where = place?.[1] ?? "in dispensa";
+  const items = (await loadPantry(hh)).filter((i) => (place ? place[2]!.includes(i.category ?? "Altro") : i.category !== "Casa"));
+  if (!items.length) return { text: `${cap(where)} non ho niente segnato.` };
+  items.sort((a, b) => (a.expiry_date ?? "9999").localeCompare(b.expiry_date ?? "9999"));
+  const names = [...new Set(items.map((i) => lower(i.name)))];
+  const shown = names.slice(0, 8);
+  const rest = names.length - shown.length;
+  return {
+    text: `${cap(where)} hai ${items.length === 1 ? "un prodotto" : `${items.length} prodotti`}. Prima quelli da usare presto: ${listIt(shown)}${rest > 0 ? `, e altri ${rest}` : ""}.`,
+  };
 }
 
 // ---------------------------------------------------------------- spese e risparmio
@@ -1573,7 +1703,8 @@ async function skill(req: Request) {
     if (intent === "UseIntent" || intent === "WasteIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask(intent === "WasteIntent" ? "Cosa hai buttato?" : "Cosa hai usato?", "Per esempio: 300 grammi di pasta."));
-      return alexaResponse(more(await takeFromPantry(userId, hh, what, intent === "WasteIntent" ? "wasted" : "consumed")));
+      const out = await takeFromPantry(userId, hh, what, intent === "WasteIntent" ? "wasted" : "consumed");
+      return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "AddShoppingIntent") {
       const what = slot("prodotto");
@@ -1584,6 +1715,28 @@ async function skill(req: Request) {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti."));
       const out = await addToPantry(userId, what);
+      return alexaResponse(out.end === false ? out : more(out));
+    }
+    if (intent === "HaveIntent") {
+      const what = slot("prodotto");
+      // a volte Alexa prende "ho usato…" o "cosa c'è in frigo" per questa domanda
+      const n = norm(what);
+      const verb = n.match(/^(usat|consumat|finit|mangiat|buttat|sprecat)\w*\s+/);
+      if (verb) {
+        const out = await takeFromPantry(userId, hh, n.slice(verb[0].length), /^(buttat|sprecat)/.test(verb[1]) ? "wasted" : "consumed");
+        return alexaResponse(out.end === false ? out : more(out));
+      }
+      if (/^(in |nel |nella )?(frigo|frigorifero|freezer|congelatore|dispensa|casa)$/.test(n)) return alexaResponse(more(await inventoryReport(hh, n)));
+      const out = await haveReport(hh, what);
+      return alexaResponse(out.end === false ? out : more(out));
+    }
+    if (intent === "InventoryIntent") return alexaResponse(more(await inventoryReport(hh, slot("posto"))));
+    if (intent === "WhenExpiresIntent") {
+      const out = await whenExpiresReport(hh, slot("prodotto"));
+      return alexaResponse(out.end === false ? out : more(out));
+    }
+    if (intent === "SetExpiryIntent") {
+      const out = await setExpiry(hh, slot("cibo"), slot("data"), slot("giorni"));
       return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "SpendingIntent") return alexaResponse(more(await spendingReport(hh, slot("periodo"))));
