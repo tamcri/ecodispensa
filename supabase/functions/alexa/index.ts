@@ -161,11 +161,20 @@ async function verifyAmazon(req: Request, body: string): Promise<string | null> 
 
 // ---------------------------------------------------------------- risposte di Alexa
 
-type Out = { text: string; reprompt?: string; end?: boolean; linkAccount?: boolean; card?: { title: string; content: string } };
+type Out = {
+  text: string;
+  reprompt?: string;
+  end?: boolean;
+  linkAccount?: boolean;
+  card?: { title: string; content: string };
+  /** memoria della conversazione (scadenze da chiedere, lista in preparazione) */
+  attrs?: Record<string, unknown>;
+};
 
 const alexaResponse = (o: Out) =>
   json({
     version: "1.0",
+    ...(o.attrs ? { sessionAttributes: o.attrs } : {}),
     response: {
       outputSpeech: { type: "PlainText", text: o.text },
       ...(o.reprompt ? { reprompt: { outputSpeech: { type: "PlainText", text: o.reprompt } } } : {}),
@@ -370,11 +379,51 @@ function parsePart(raw: string): Said | null {
   return { name: s, amount, unit, fraction };
 }
 
+// inizi di parola dei prodotti più comuni: servono a dividere "latte pane burro" detto senza pause
+const EXTRA_FOOD = ["pasta", "spaghett", "penne", "fusill", "rigaton", "riso", "farina", "zucchero", "sale", "olio", "aceto", "caffe", "biscott", "cracker", "grissin", "cereali", "tonno", "pelati", "passata", "ceci", "fagiol", "lenticch", "marmellat", "miele", "nutella", "cioccolat", "acqua", "vino", "birra", "succo", "bibit", "coca", "aranciata", "carta", "detersiv", "sapone", "dentifric", "shampoo", "sacchett", "gelat", "surgelat", "frutta", "verdura", "uova", "uovo", "wurstel", "pancarre", "piadin", "tortill", "olive", "capperi", "maionese", "ketchup", "senape", "spezie", "pepe", "origano", "lievito", "cacao", "the"];
+let foodStarts: string[] | null = null;
+const isFoodWord = (w: string) => {
+  if (!foodStarts) {
+    foodStarts = [...new Set([...GUIDE.flatMap((g) => g[0]).map((k) => k.trim()).filter((k) => k.length >= 3 && !k.includes(" ")), ...EXTRA_FOOD])];
+  }
+  return w.length >= 3 && foodStarts.some((k) => w.startsWith(k));
+};
+const LINKS = new Set(["di", "del", "dello", "della", "dei", "degli", "delle", "d'", "al", "alla", "allo", "ai", "alle", "con", "in", "da", "per", "senza", "all'", "dell'"]);
+const isQtyWord = (w: string) => /^\d/.test(w) || (w in WORD_NUM && !["un", "uno", "una", "un'"].includes(w));
+
+/** Divide "due litri di latte sei uova pane e burro" in "due litri di latte", "sei uova", "pane", "burro" */
+function splitRun(part: string): string[] {
+  const words = part.split(" ").filter(Boolean);
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let hasFood = false;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const prev = words[i - 1] ?? "";
+    const startsNew =
+      cur.length > 0 &&
+      hasFood &&
+      !LINKS.has(prev) &&
+      (isQtyWord(w) || isFoodWord(w) || ["il", "lo", "la", "i", "gli", "le", "l'"].includes(w) || w.startsWith("l'"));
+    if (startsNew) {
+      out.push(cur);
+      cur = [];
+      hasFood = false;
+    }
+    cur.push(w);
+    if (isFoodWord(w) || (!isQtyWord(w) && !LINKS.has(w) && !(w in UNIT_OF) && w.length > 2 && cur.length > 0 && !hasFood && i === words.length - 1)) hasFood = true;
+    else if (!isQtyWord(w) && !LINKS.has(w) && !(w in UNIT_OF) && !["il", "lo", "la", "i", "gli", "le", "un", "uno", "una"].includes(w)) hasFood = true;
+  }
+  if (cur.length) out.push(cur);
+  return out.map((ws) => ws.join(" "));
+}
+
 const splitParts = (text: string) =>
   norm(text)
-    .split(/\s*,\s*|\s+e\s+|\s+poi\s+/)
+    .split(/\s*,\s*|\s+e\s+|\s+poi\s+|\s+ed\s+/)
     .map((p) => p.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap(splitRun);
 
 // ---------------------------------------------------------------- dispensa
 
@@ -511,6 +560,10 @@ async function takeFromPantry(userId: string, householdId: string, text: string,
 async function addToShopping(userId: string, householdId: string, text: string): Promise<Out> {
   const parts = splitParts(text).map(parsePart).filter((p): p is Said => !!p);
   if (!parts.length) return ask("Cosa aggiungo alla lista della spesa?", "Dimmi per esempio: aggiungi il pane alla lista della spesa.");
+  return saveShopping(userId, householdId, parts);
+}
+
+async function saveShopping(userId: string, householdId: string, parts: Said[]): Promise<Out> {
   const { data: existing } = await db.from("shopping_items").select("name").eq("household_id", householdId).eq("is_checked", false);
   const have = new Set((existing ?? []).map((r: any) => norm(r.name)));
   const added: string[] = [];
@@ -560,14 +613,44 @@ async function addToPantry(userId: string, text: string): Promise<Out> {
     rows.push({ user_id: userId, name, quantity, unit, category, expiry_date: expiry });
     said.push(p.amount !== null ? `${qtyIt(quantity, unit)} di ${p.name}` : p.name);
   }
-  const { error } = await db.from("pantry_items").insert(rows);
+  const { data: saved, error } = await db.from("pantry_items").insert(rows).select("id, name, expiry_date");
   if (error) {
     console.error("alexa add pantry:", error.message);
     return { text: "Non sono riuscito ad aggiungerli. Riprova tra poco." };
   }
-  const date = !noDate ? "" : parts.length === 1 ? " Se ha una scadenza stampata, aggiungila dall'app." : " Se hanno una scadenza stampata, aggiungila dall'app.";
-  return { text: `Ho aggiunto in dispensa ${listIt(said)}.${date}` };
+  // per i prodotti senza scadenza stimata la chiedo, uno alla volta
+  const pending = (saved ?? []).filter((r: any) => !r.expiry_date).map((r: any) => ({ id: r.id, name: r.name }));
+  const done = `Ho aggiunto in dispensa ${listIt(said)}.`;
+  if (!pending.length) return { text: done };
+  return { ...askExpiry(pending, done), attrs: { pending } };
 }
+
+type Pending = { id: string; name: string };
+
+const askExpiry = (pending: Pending[], before = ""): Out => {
+  const n = lower(pending[0].name);
+  return {
+    text: `${before} Quando scade ${n}? Dimmi la data, oppure tra quanti giorni. Se non lo sai di' salta.`.trim(),
+    reprompt: `Quando scade ${n}? Per esempio: il 30 novembre, oppure tra 3 giorni.`,
+    end: false,
+    attrs: { pending },
+  };
+};
+
+/** Data detta ad Alexa: "2026-11-30", "tra 3 giorni" → YYYY-MM-DD (null se non è una data precisa) */
+function expiryFrom(dateSlot: string, daysSlot: string): string | null {
+  const days = parseInt(daysSlot, 10);
+  if (Number.isFinite(days) && days >= 0 && days <= 3650) return isoInDays(days);
+  const m = dateSlot.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  let iso = dateSlot;
+  // "il 3 gennaio" detto a dicembre: Alexa a volte capisce l'anno passato
+  if (iso < romeToday()) iso = `${Number(m[1]) + 1}-${m[2]}-${m[3]}`;
+  return iso;
+}
+
+const dateIt = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString("it-IT", { day: "numeric", month: "long", timeZone: "UTC" });
 
 /** Prodotti scaduti e da usare entro 3 giorni, in una frase */
 function expiringSentence(items: Item[], max = 6): { text: string; names: string[] } {
@@ -650,7 +733,7 @@ const greeting = () => {
 };
 
 const HELP =
-  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; oppure cosa posso cucinare.";
+  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; oppure cosa posso cucinare.";
 
 // ---------------------------------------------------------------- skill
 
@@ -673,13 +756,19 @@ async function skill(req: Request) {
   if (appId !== SKILL_ID) return json({ error: "bad request" }, 400);
 
   const type = ev.request.type as string;
-  if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
-
   const intent = type === "IntentRequest" ? (ev.request.intent?.name as string) : "";
-  if (intent === "AMAZON.StopIntent" || intent === "AMAZON.CancelIntent" || intent === "AMAZON.NavigateHomeIntent" || intent === "AMAZON.NoIntent") {
-    return alexaResponse({ text: "A presto!" });
+  if (intent) console.log("alexa intent:", intent);
+  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[] };
+  const list = Array.isArray(attrs.list) ? attrs.list : null;
+  const pending = Array.isArray(attrs.pending) && attrs.pending.length ? attrs.pending : null;
+  const isStop = ["AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.NavigateHomeIntent"].includes(intent);
+
+  // senza niente in sospeso: stop e fine sessione non hanno bisogno dell'account
+  if (!list?.length) {
+    if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
+    if (isStop || (intent === "AMAZON.NoIntent" && !pending)) return alexaResponse({ text: "A presto!" });
   }
-  if (intent === "AMAZON.HelpIntent") return alexaResponse(ask(HELP));
+  if (intent === "AMAZON.HelpIntent") return alexaResponse({ ...ask(HELP), attrs });
 
   // chi è? (account collegato)
   const token = ev?.context?.System?.user?.accessToken ?? ev?.session?.user?.accessToken;
@@ -696,6 +785,7 @@ async function skill(req: Request) {
     }
   }
   if (!userId) {
+    if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
     return alexaResponse({
       text: "Per usare EcoDispensa collega il tuo account: apri l'app Alexa sul telefono, ti ho mandato una scheda per farlo.",
       linkAccount: true,
@@ -711,9 +801,72 @@ async function skill(req: Request) {
   const inSession = ev?.session?.new === false;
   const more = (o: Out): Out => (inSession && o.end !== false ? { ...o, text: `${o.text} Altro?`, reprompt: "Vuoi fare altro? Puoi dire: stop.", end: false } : o);
   const slot = (name: string) => (ev.request.intent?.slots?.[name]?.value as string | undefined)?.trim() ?? "";
-  if (intent) console.log("alexa intent:", intent);
 
   try {
+    // ---- lista della spesa a voce: i prodotti si accumulano finché l'utente dice "chiudi lista"
+    if (list) {
+      const close = async (prefix = "") => {
+        if (!list.length) return { text: `${prefix}La lista è vuota, non ho salvato niente.` } as Out;
+        const out = await saveShopping(userId!, hh, list);
+        return { text: `${prefix}${out.text}` } as Out;
+      };
+      if (type === "SessionEndedRequest") {
+        await close();
+        return json({ version: "1.0", response: {} });
+      }
+      if (intent === "CloseListIntent" || isStop || intent === "AMAZON.NoIntent") {
+        const out = await close();
+        return alexaResponse(isStop ? out : more(out));
+      }
+      if (intent === "ListItemsIntent" || intent === "AddShoppingIntent") {
+        const what = slot("prodotti") || slot("prodotto");
+        const parts = splitParts(what).map(parsePart).filter((p): p is Said => !!p);
+        if (!parts.length) return alexaResponse({ ...ask("Non ho capito il prodotto, ripetilo.", "Dimmi cosa serve, oppure di' chiudi lista."), attrs: { list } });
+        const next = [...list, ...parts].slice(0, 60);
+        return alexaResponse({
+          text: `Segnato ${listIt(parts.map((p) => p.name))}. Altro? Quando hai finito di' chiudi lista.`,
+          reprompt: "Cos'altro serve? Oppure di' chiudi lista.",
+          end: false,
+          attrs: { list: next },
+        });
+      }
+      if (intent === "AMAZON.FallbackIntent" || intent === "AMAZON.YesIntent") {
+        return alexaResponse({ ...ask("Dimmi i prodotti, anche tutti insieme.", "Quando hai finito di' chiudi lista."), attrs: { list } });
+      }
+      // un altro comando: salvo quello che c'è e vado avanti
+      if (list.length) await saveShopping(userId, hh, list);
+    }
+
+    if (intent === "StartListIntent") {
+      return alexaResponse({
+        text: "Va bene, prepariamo la lista. Dimmi cosa serve, anche tutto insieme. Quando hai finito di' chiudi lista.",
+        reprompt: "Dimmi i prodotti, per esempio: latte, pane e sei uova.",
+        end: false,
+        attrs: { list: [] },
+      });
+    }
+    if (intent === "CloseListIntent") return alexaResponse(more({ text: "Non c'è una lista aperta. Per cominciare di' prepariamo la lista della spesa." }));
+
+    // ---- scadenza dei prodotti appena aggiunti
+    if (pending) {
+      if (intent === "ExpiryIntent") {
+        const iso = expiryFrom(slot("data"), slot("giorni"));
+        if (!iso) return alexaResponse(askExpiry(pending, "Non ho capito la data."));
+        await db.from("pantry_items").update({ expiry_date: iso }).eq("id", pending[0].id).eq("household_id", hh);
+        const rest = pending.slice(1);
+        const ok = `Va bene, ${lower(pending[0].name)} scade il ${dateIt(iso)}.`;
+        return alexaResponse(rest.length ? askExpiry(rest, ok) : more({ text: ok }));
+      }
+      if (intent === "AMAZON.NoIntent" || intent === "AMAZON.FallbackIntent") {
+        const rest = pending.slice(1);
+        const skip = `Va bene, la scadenza di ${lower(pending[0].name)} la puoi aggiungere dall'app.`;
+        return alexaResponse(rest.length ? askExpiry(rest, skip) : more({ text: skip }));
+      }
+      if (isStop) return alexaResponse({ text: "A presto!" });
+    }
+    if (intent === "ExpiryIntent") return alexaResponse(more({ text: "Per dirmi una scadenza, prima aggiungi il prodotto: per esempio, aggiungi una mozzarella in dispensa." }));
+    if (intent === "ListItemsIntent") return alexaResponse(ask("Vuoi fare la lista della spesa? Di' prepariamo la lista della spesa.", "Cosa vuoi fare?"));
+
     if (type === "LaunchRequest") {
       const items = await loadPantry(hh);
       const { text } = expiringSentence(items);
@@ -739,11 +892,14 @@ async function skill(req: Request) {
     if (intent === "AddPantryIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti."));
-      return alexaResponse(more(await addToPantry(userId, what)));
+      const out = await addToPantry(userId, what);
+      return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "CookIntent") {
       return alexaResponse(more(await cookIdea(userId, await loadPantry(hh))));
     }
+    if (isStop || intent === "AMAZON.NoIntent") return alexaResponse({ text: "A presto!" });
+    if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
     if (intent === "AMAZON.YesIntent") return alexaResponse(ask("Dimmi pure.", "Per esempio: ho usato due uova, oppure: cosa scade."));
     if (intent === "AMAZON.FallbackIntent") return alexaResponse(ask(`Non ho capito. ${HELP}`));
     return alexaResponse(ask(HELP));
