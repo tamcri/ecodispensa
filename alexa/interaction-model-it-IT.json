@@ -951,7 +951,12 @@
             }
           ]
         }
-      ]
+      ],
+      "modelConfiguration": {
+        "fallbackIntentSensitivity": {
+          "level": "LOW"
+        }
+      }
     }
   }
 }

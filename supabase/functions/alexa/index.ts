@@ -585,7 +585,13 @@ async function saveShopping(userId: string, householdId: string, parts: Said[]):
     });
     added.push(p.name);
   }
-  if (rows.length) await db.from("shopping_items").insert(rows);
+  if (rows.length) {
+    const { error } = await db.from("shopping_items").insert(rows);
+    if (error) {
+      console.error("alexa shopping insert:", error.message);
+      return { text: "Non sono riuscito a salvare la lista. Riprova tra poco." };
+    }
+  }
   const s: string[] = [];
   if (added.length) s.push(`Ho aggiunto ${listIt(added)} alla lista della spesa.`);
   if (already.length) s.push(`${listIt(already)} ${already.length === 1 ? "c'era già" : "c'erano già"}.`);
@@ -1054,23 +1060,28 @@ async function skill(req: Request) {
         const out = await close();
         return alexaResponse(isStop ? out : more(out));
       }
-      if (intent === "ListItemsIntent" || intent === "AddShoppingIntent") {
-        const what = slot("prodotti") || slot("prodotto");
+      if (intent === "StartListIntent") return alexaResponse({ text: "La lista è già aperta: dimmi i prodotti.", reprompt: "Quando hai finito di' chiudi lista.", end: false, attrs: { list } });
+      // durante la lista ogni frase con un prodotto è un prodotto da segnare (anche se Alexa l'ha presa per un altro comando)
+      const what = slot("prodotti") || slot("prodotto") || slot("piatto");
+      console.log("alexa lista:", list.length, "prodotti, ricevuto:", what || "(niente)");
+      const keep = (text: string, reprompt = "Altro? Quando hai finito di' chiudi lista."): Response =>
+        alexaResponse({ text, reprompt, end: false, attrs: { list } });
+      if (what) {
         const parts = splitParts(what).map(parsePart).filter((p): p is Said => !!p);
-        if (!parts.length) return alexaResponse({ ...ask("Non ho capito il prodotto, ripetilo.", "Dimmi cosa serve, oppure di' chiudi lista."), attrs: { list } });
+        if (!parts.length) return keep("Non ho capito, ripeti.");
         const next = [...list, ...parts].slice(0, 60);
+        // risposta corta: Alexa riascolta subito
         return alexaResponse({
-          text: `Segnato ${listIt(parts.map((p) => p.name))}. Altro? Quando hai finito di' chiudi lista.`,
-          reprompt: "Cos'altro serve? Oppure di' chiudi lista.",
+          text: `Segnato ${listIt(parts.map((p) => p.name))}.`,
+          reprompt: "Altro? Quando hai finito di' chiudi lista.",
           end: false,
           attrs: { list: next },
         });
       }
-      if (intent === "AMAZON.FallbackIntent" || intent === "AMAZON.YesIntent") {
-        return alexaResponse({ ...ask("Dimmi i prodotti, anche tutti insieme.", "Quando hai finito di' chiudi lista."), attrs: { list } });
-      }
-      // un altro comando: salvo quello che c'è e vado avanti
-      if (list.length) await saveShopping(userId, hh, list);
+      if (intent === "AMAZON.FallbackIntent") return keep("Non ho capito, ripeti.");
+      if (intent === "AMAZON.YesIntent") return keep("Dimmi pure.");
+      // altri comandi: la lista resta aperta finché non dici chiudi lista
+      return keep("Stiamo facendo la lista: dimmi un prodotto, oppure chiudi lista.");
     }
 
     // ---- lo Chef ha proposto le ricette: l'utente sceglie
@@ -1112,8 +1123,8 @@ async function skill(req: Request) {
 
     if (intent === "StartListIntent") {
       return alexaResponse({
-        text: "Va bene, prepariamo la lista. Dimmi cosa serve, anche tutto insieme. Quando hai finito di' chiudi lista.",
-        reprompt: "Dimmi i prodotti, per esempio: latte, pane e sei uova.",
+        text: "Va bene, dimmi cosa serve. Quando hai finito di' chiudi lista.",
+        reprompt: "Dimmi i prodotti, per esempio: latte, pane e sei uova. Quando hai finito di' chiudi lista.",
         end: false,
         attrs: { list: [] },
       });
