@@ -1,0 +1,144 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "eco dispensa",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "ExpiringIntent",
+          "samples": [
+            "cosa scade",
+            "cosa sta per scadere",
+            "cosa ho in scadenza",
+            "cosa c'è in scadenza",
+            "quali prodotti scadono",
+            "quali prodotti stanno per scadere",
+            "dimmi le scadenze",
+            "dimmi cosa scade",
+            "dimmi se ho prodotti in scadenza",
+            "se ho prodotti in scadenza",
+            "le scadenze",
+            "scadenze",
+            "cosa devo consumare",
+            "cosa devo usare presto",
+            "cosa scade oggi",
+            "cosa scade domani"
+          ],
+          "slots": []
+        },
+        {
+          "name": "UseIntent",
+          "samples": [
+            "ho usato {prodotto}",
+            "ho consumato {prodotto}",
+            "ho finito {prodotto}",
+            "ho mangiato {prodotto}",
+            "ho preso {prodotto}",
+            "togli {prodotto}",
+            "togli dalla dispensa {prodotto}",
+            "rimuovi {prodotto}",
+            "scala {prodotto}",
+            "abbiamo usato {prodotto}",
+            "abbiamo finito {prodotto}",
+            "è finito {prodotto}",
+            "è finita {prodotto}",
+            "sono finiti {prodotto}",
+            "sono finite {prodotto}",
+            "usato {prodotto}"
+          ],
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "WasteIntent",
+          "samples": [
+            "ho buttato {prodotto}",
+            "abbiamo buttato {prodotto}",
+            "butta {prodotto}",
+            "è scaduto {prodotto}",
+            "è scaduta {prodotto}",
+            "è andato a male {prodotto}",
+            "è andata a male {prodotto}",
+            "si è rovinato {prodotto}",
+            "si è rovinata {prodotto}",
+            "ho gettato via {prodotto}"
+          ],
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "AddShoppingIntent",
+          "samples": [
+            "aggiungi {prodotto} alla lista della spesa",
+            "aggiungi {prodotto} alla spesa",
+            "aggiungi {prodotto} alla lista",
+            "metti {prodotto} nella lista della spesa",
+            "metti {prodotto} nella lista",
+            "inserisci {prodotto} nella lista della spesa",
+            "inserisci {prodotto} nella lista",
+            "segna {prodotto} nella lista della spesa",
+            "segna {prodotto} nella lista",
+            "devo comprare {prodotto}",
+            "da comprare {prodotto}",
+            "manca {prodotto}",
+            "mancano {prodotto}"
+          ],
+          "slots": [
+            {
+              "name": "prodotto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "CookIntent",
+          "samples": [
+            "cosa posso cucinare",
+            "cosa posso cucinare oggi",
+            "dimmi cosa posso cucinare oggi",
+            "cosa cucino",
+            "cosa cucino oggi",
+            "cosa faccio da mangiare",
+            "cosa preparo per cena",
+            "cosa preparo per pranzo",
+            "dammi un'idea per cena",
+            "dammi un'idea per pranzo",
+            "dammi un'idea per cucinare",
+            "una ricetta",
+            "consigliami una ricetta",
+            "cosa ci cucino"
+          ],
+          "slots": []
+        }
+      ],
+      "types": []
+    }
+  }
+}

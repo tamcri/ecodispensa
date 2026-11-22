@@ -2,6 +2,7 @@ import { supabase } from "./services/supabaseClient";
 import AuthView from "./components/AuthView";
 import { ComingSoonView, shouldShowComingSoon } from "./components/ComingSoonView";
 import { LegalPage } from "./components/LegalViews";
+import { AlexaLinkView, alexaLinkFromUrl } from "./components/AlexaLinkView";
 import { legalDocFromUrl, LegalDocId } from "./legal/documents";
 import React, { useState, useEffect } from "react";
 import { Refrigerator, ShoppingCart, ChefHat, BookOpen, Home, Loader2 } from "lucide-react";
@@ -30,7 +31,9 @@ const normalizeShoppingKey = (name: string, unit?: string | null) =>
 const App = () => {
   // Sul dominio pubblico, finché siamo in prova: pagina "Presto online" con il pulsante Area riservata.
   // Va letto per primo, prima che i link di ricette e inviti vengano tolti dall'indirizzo.
-  const [comingSoon, setComingSoon] = useState(shouldShowComingSoon);
+  // Collegamento con Alexa (ecodispensa.it/app/alexa?…): si entra e si conferma, senza "Presto online"
+  const [alexaLink] = useState(alexaLinkFromUrl);
+  const [comingSoon, setComingSoon] = useState(() => !alexaLink && shouldShowComingSoon());
   // ?pagina=privacy|termini|cookie|scuola: documento legale pubblico, anche senza account
   const [legalPage, setLegalPage] = useState<LegalDocId | null>(legalDocFromUrl);
   // ?view=chef (es. dalla notifica di scadenza) apre direttamente quella schermata
@@ -821,6 +824,11 @@ const App = () => {
         <div className="text-sm font-semibold text-muted">Caricamento…</div>
       </div>
     );
+  }
+
+  if (alexaLink) {
+    if (!session) return <AuthView />;
+    return <AlexaLinkView req={alexaLink} email={session.user?.email} />;
   }
 
   if (shared) {
