@@ -29,7 +29,14 @@
         },
         {
           "name": "AMAZON.NoIntent",
-          "samples": []
+          "samples": [
+            "salta",
+            "non lo so",
+            "non c'è la data",
+            "non c'è scadenza",
+            "lascia stare",
+            "no grazie"
+          ]
         },
         {
           "name": "ExpiringIntent",
@@ -148,6 +155,95 @@
           ]
         },
         {
+          "name": "StartListIntent",
+          "slots": [],
+          "samples": [
+            "prepariamo la lista della spesa",
+            "prepariamo lista della spesa",
+            "prepariamo la lista",
+            "facciamo la lista della spesa",
+            "facciamo la spesa",
+            "fare la lista della spesa",
+            "nuova lista della spesa",
+            "prepara la lista della spesa",
+            "iniziamo la lista",
+            "iniziamo la lista della spesa",
+            "apri la lista della spesa",
+            "detto la lista della spesa",
+            "ti detto la lista della spesa"
+          ]
+        },
+        {
+          "name": "CloseListIntent",
+          "slots": [],
+          "samples": [
+            "chiudi lista",
+            "chiudi la lista",
+            "chiudi la lista della spesa",
+            "fine lista",
+            "finito con la lista",
+            "basta così",
+            "salva la lista",
+            "pubblica la lista",
+            "manda la lista",
+            "la lista è finita",
+            "è tutto",
+            "nient'altro"
+          ]
+        },
+        {
+          "name": "ListItemsIntent",
+          "slots": [
+            {
+              "name": "prodotti",
+              "type": "LISTA_PRODOTTI"
+            }
+          ],
+          "samples": [
+            "{prodotti}",
+            "poi {prodotti}",
+            "anche {prodotti}",
+            "e poi {prodotti}",
+            "serve {prodotti}",
+            "servono {prodotti}",
+            "ci vuole {prodotti}",
+            "ci vogliono {prodotti}",
+            "prendi {prodotti}",
+            "prendere {prodotti}",
+            "comprare {prodotti}",
+            "manca anche {prodotti}"
+          ]
+        },
+        {
+          "name": "ExpiryIntent",
+          "slots": [
+            {
+              "name": "data",
+              "type": "AMAZON.DATE"
+            },
+            {
+              "name": "giorni",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "{data}",
+            "il {data}",
+            "scade il {data}",
+            "scade {data}",
+            "scadenza {data}",
+            "la scadenza è il {data}",
+            "{giorni} giorni",
+            "tra {giorni} giorni",
+            "fra {giorni} giorni",
+            "scade tra {giorni} giorni",
+            "scade fra {giorni} giorni",
+            "dura {giorni} giorni",
+            "si conserva {giorni} giorni",
+            "ancora {giorni} giorni"
+          ]
+        },
+        {
           "name": "CookIntent",
           "samples": [
             "cosa posso cucinare",
@@ -168,7 +264,578 @@
           "slots": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "LISTA_PRODOTTI",
+          "values": [
+            {
+              "name": {
+                "value": "latte"
+              }
+            },
+            {
+              "name": {
+                "value": "pane"
+              }
+            },
+            {
+              "name": {
+                "value": "uova"
+              }
+            },
+            {
+              "name": {
+                "value": "sei uova"
+              }
+            },
+            {
+              "name": {
+                "value": "burro"
+              }
+            },
+            {
+              "name": {
+                "value": "yogurt"
+              }
+            },
+            {
+              "name": {
+                "value": "mozzarella"
+              }
+            },
+            {
+              "name": {
+                "value": "parmigiano"
+              }
+            },
+            {
+              "name": {
+                "value": "prosciutto cotto"
+              }
+            },
+            {
+              "name": {
+                "value": "prosciutto crudo"
+              }
+            },
+            {
+              "name": {
+                "value": "salame"
+              }
+            },
+            {
+              "name": {
+                "value": "mortadella"
+              }
+            },
+            {
+              "name": {
+                "value": "pasta"
+              }
+            },
+            {
+              "name": {
+                "value": "spaghetti"
+              }
+            },
+            {
+              "name": {
+                "value": "penne"
+              }
+            },
+            {
+              "name": {
+                "value": "riso"
+              }
+            },
+            {
+              "name": {
+                "value": "farina"
+              }
+            },
+            {
+              "name": {
+                "value": "zucchero"
+              }
+            },
+            {
+              "name": {
+                "value": "sale"
+              }
+            },
+            {
+              "name": {
+                "value": "olio"
+              }
+            },
+            {
+              "name": {
+                "value": "olio extravergine"
+              }
+            },
+            {
+              "name": {
+                "value": "aceto"
+              }
+            },
+            {
+              "name": {
+                "value": "caffè"
+              }
+            },
+            {
+              "name": {
+                "value": "tè"
+              }
+            },
+            {
+              "name": {
+                "value": "biscotti"
+              }
+            },
+            {
+              "name": {
+                "value": "fette biscottate"
+              }
+            },
+            {
+              "name": {
+                "value": "cereali"
+              }
+            },
+            {
+              "name": {
+                "value": "marmellata"
+              }
+            },
+            {
+              "name": {
+                "value": "miele"
+              }
+            },
+            {
+              "name": {
+                "value": "nutella"
+              }
+            },
+            {
+              "name": {
+                "value": "cioccolato"
+              }
+            },
+            {
+              "name": {
+                "value": "tonno"
+              }
+            },
+            {
+              "name": {
+                "value": "pelati"
+              }
+            },
+            {
+              "name": {
+                "value": "passata di pomodoro"
+              }
+            },
+            {
+              "name": {
+                "value": "ceci"
+              }
+            },
+            {
+              "name": {
+                "value": "fagioli"
+              }
+            },
+            {
+              "name": {
+                "value": "lenticchie"
+              }
+            },
+            {
+              "name": {
+                "value": "mele"
+              }
+            },
+            {
+              "name": {
+                "value": "banane"
+              }
+            },
+            {
+              "name": {
+                "value": "arance"
+              }
+            },
+            {
+              "name": {
+                "value": "limoni"
+              }
+            },
+            {
+              "name": {
+                "value": "pere"
+              }
+            },
+            {
+              "name": {
+                "value": "uva"
+              }
+            },
+            {
+              "name": {
+                "value": "fragole"
+              }
+            },
+            {
+              "name": {
+                "value": "kiwi"
+              }
+            },
+            {
+              "name": {
+                "value": "pomodori"
+              }
+            },
+            {
+              "name": {
+                "value": "insalata"
+              }
+            },
+            {
+              "name": {
+                "value": "lattuga"
+              }
+            },
+            {
+              "name": {
+                "value": "rucola"
+              }
+            },
+            {
+              "name": {
+                "value": "zucchine"
+              }
+            },
+            {
+              "name": {
+                "value": "melanzane"
+              }
+            },
+            {
+              "name": {
+                "value": "peperoni"
+              }
+            },
+            {
+              "name": {
+                "value": "carote"
+              }
+            },
+            {
+              "name": {
+                "value": "patate"
+              }
+            },
+            {
+              "name": {
+                "value": "cipolle"
+              }
+            },
+            {
+              "name": {
+                "value": "aglio"
+              }
+            },
+            {
+              "name": {
+                "value": "basilico"
+              }
+            },
+            {
+              "name": {
+                "value": "prezzemolo"
+              }
+            },
+            {
+              "name": {
+                "value": "funghi"
+              }
+            },
+            {
+              "name": {
+                "value": "spinaci"
+              }
+            },
+            {
+              "name": {
+                "value": "broccoli"
+              }
+            },
+            {
+              "name": {
+                "value": "finocchi"
+              }
+            },
+            {
+              "name": {
+                "value": "sedano"
+              }
+            },
+            {
+              "name": {
+                "value": "pollo"
+              }
+            },
+            {
+              "name": {
+                "value": "petto di pollo"
+              }
+            },
+            {
+              "name": {
+                "value": "carne macinata"
+              }
+            },
+            {
+              "name": {
+                "value": "salsicce"
+              }
+            },
+            {
+              "name": {
+                "value": "bistecche"
+              }
+            },
+            {
+              "name": {
+                "value": "hamburger"
+              }
+            },
+            {
+              "name": {
+                "value": "pesce"
+              }
+            },
+            {
+              "name": {
+                "value": "salmone"
+              }
+            },
+            {
+              "name": {
+                "value": "merluzzo"
+              }
+            },
+            {
+              "name": {
+                "value": "gamberi"
+              }
+            },
+            {
+              "name": {
+                "value": "acqua"
+              }
+            },
+            {
+              "name": {
+                "value": "acqua frizzante"
+              }
+            },
+            {
+              "name": {
+                "value": "vino"
+              }
+            },
+            {
+              "name": {
+                "value": "birra"
+              }
+            },
+            {
+              "name": {
+                "value": "succo di frutta"
+              }
+            },
+            {
+              "name": {
+                "value": "coca cola"
+              }
+            },
+            {
+              "name": {
+                "value": "detersivo"
+              }
+            },
+            {
+              "name": {
+                "value": "carta igienica"
+              }
+            },
+            {
+              "name": {
+                "value": "sapone"
+              }
+            },
+            {
+              "name": {
+                "value": "dentifricio"
+              }
+            },
+            {
+              "name": {
+                "value": "shampoo"
+              }
+            },
+            {
+              "name": {
+                "value": "sacchetti"
+              }
+            },
+            {
+              "name": {
+                "value": "panna"
+              }
+            },
+            {
+              "name": {
+                "value": "ricotta"
+              }
+            },
+            {
+              "name": {
+                "value": "stracchino"
+              }
+            },
+            {
+              "name": {
+                "value": "grana"
+              }
+            },
+            {
+              "name": {
+                "value": "formaggio"
+              }
+            },
+            {
+              "name": {
+                "value": "pizza"
+              }
+            },
+            {
+              "name": {
+                "value": "focaccia"
+              }
+            },
+            {
+              "name": {
+                "value": "gnocchi"
+              }
+            },
+            {
+              "name": {
+                "value": "tortellini"
+              }
+            },
+            {
+              "name": {
+                "value": "surgelati"
+              }
+            },
+            {
+              "name": {
+                "value": "piselli"
+              }
+            },
+            {
+              "name": {
+                "value": "gelato"
+              }
+            },
+            {
+              "name": {
+                "value": "crackers"
+              }
+            },
+            {
+              "name": {
+                "value": "grissini"
+              }
+            },
+            {
+              "name": {
+                "value": "pane in cassetta"
+              }
+            },
+            {
+              "name": {
+                "value": "latte di soia"
+              }
+            },
+            {
+              "name": {
+                "value": "due litri di latte"
+              }
+            },
+            {
+              "name": {
+                "value": "un chilo di mele"
+              }
+            },
+            {
+              "name": {
+                "value": "mezzo chilo di pane"
+              }
+            },
+            {
+              "name": {
+                "value": "un etto di prosciutto"
+              }
+            },
+            {
+              "name": {
+                "value": "latte pane e uova"
+              }
+            },
+            {
+              "name": {
+                "value": "pasta riso e farina"
+              }
+            },
+            {
+              "name": {
+                "value": "mele banane e arance"
+              }
+            },
+            {
+              "name": {
+                "value": "due litri di latte e sei uova"
+              }
+            },
+            {
+              "name": {
+                "value": "pane latte burro e marmellata"
+              }
+            },
+            {
+              "name": {
+                "value": "pomodori insalata e cetrioli"
+              }
+            },
+            {
+              "name": {
+                "value": "carta igienica e detersivo"
+              }
+            },
+            {
+              "name": {
+                "value": "acqua e birra"
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
