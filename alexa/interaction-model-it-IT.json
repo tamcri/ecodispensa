@@ -845,6 +845,69 @@
         {
           "name": "AMAZON.RepeatIntent",
           "samples": []
+        },
+        {
+          "name": "TipIntent",
+          "slots": [
+            {
+              "name": "alimento",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "come conservo {alimento}",
+            "come si conserva {alimento}",
+            "come si conservano {alimento}",
+            "come devo conservare {alimento}",
+            "dove metto {alimento}",
+            "dove conservo {alimento}",
+            "quanto dura {alimento}",
+            "quanto durano {alimento}",
+            "quanto si conserva {alimento}",
+            "quanto si conservano {alimento}",
+            "consiglio per conservare {alimento}",
+            "dammi un consiglio per {alimento}",
+            "un consiglio per conservare {alimento}",
+            "va in frigo {alimento}",
+            "vanno in frigo {alimento}",
+            "posso congelare {alimento}",
+            "si può congelare {alimento}",
+            "si possono congelare {alimento}"
+          ]
+        },
+        {
+          "name": "CreditsIntent",
+          "samples": [
+            "quanti crediti ho",
+            "quanti crediti mi restano",
+            "quanti crediti ho ancora",
+            "quanti eco crediti ho",
+            "i miei crediti",
+            "saldo crediti",
+            "il saldo dei crediti",
+            "ho ancora crediti",
+            "quanti crediti mi rimangono",
+            "dimmi i miei crediti"
+          ]
+        },
+        {
+          "name": "ClassIntent",
+          "samples": [
+            "come va la mia classe",
+            "come sta andando la mia classe",
+            "come va la classe",
+            "a che posto è la mia classe",
+            "in che posizione è la mia classe",
+            "come va la classifica",
+            "come siamo in classifica",
+            "com'è la classifica",
+            "la classifica della scuola",
+            "la classifica della classe",
+            "dimmi la classifica",
+            "come va il progetto scuola",
+            "come va la classe di mio figlio",
+            "come va la classe di mia figlia"
+          ]
         }
       ],
       "types": [
