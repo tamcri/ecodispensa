@@ -212,6 +212,92 @@ const qtyIt = (n: number, unit: string) => {
   return `${numIt(n)} ${n === 1 ? w[0] : w[1]}`;
 };
 
+// ---------------------------------------------------------------- guida di conservazione (da /foodGuide.ts dell'app)
+
+// [parole chiave (inizio parola), categoria, giorni di conservazione, fresco senza data stampata]
+const GUIDE: Array<[string[], string, number, boolean]> = [
+  [["pasta fresca", "tortellin", "ravioli", "gnocchi", "lasagn"], "Dispensa", 3, false],
+  [["insalata di riso", "gastronomi", "piatto pronto", "piatti pronti"], "Altro", 2, true],
+  [["fragol", "lampon", "mirtill", "more ", "frutti di bosco", "ribes"], "Ortofrutta", 3, true],
+  [["banan"], "Ortofrutta", 5, true],
+  [["mela ", "mele "], "Ortofrutta", 21, true],
+  [["pera ", "pere "], "Ortofrutta", 5, true],
+  [["aranc", "mandarin", "clementin", "limon", "pompelm", "lime "], "Ortofrutta", 14, true],
+  [["uva "], "Ortofrutta", 5, true],
+  [["pesca ", "pesche ", "percoc", "albicocc", "nettarin", "susin", "prugn", "cilieg"], "Ortofrutta", 4, true],
+  [["kiwi"], "Ortofrutta", 10, true],
+  [["ananas", "mango", "papaya"], "Ortofrutta", 4, true],
+  [["melon", "angur", "cocomer"], "Ortofrutta", 5, true],
+  [["avocad"], "Ortofrutta", 4, true],
+  [["fich"], "Ortofrutta", 2, true],
+  [["melagran", "melograno"], "Ortofrutta", 30, true],
+  [["cach", "kaki"], "Ortofrutta", 5, true],
+  [["castagn", "marron"], "Ortofrutta", 7, true],
+  [["pomodor", "pachin", "datterin", "ciliegin"], "Ortofrutta", 5, true],
+  [["basilic"], "Ortofrutta", 4, true],
+  [["prezzemol", "coriandol", "erba cipollina", "aneto", "menta", "erbe aromatic"], "Ortofrutta", 5, true],
+  [["insalat", "lattug", "rucol", "valerian", "songin", "spinaci freschi", "spinac", "radicchi", "indivia", "scarola", "misticanza"], "Ortofrutta", 3, true],
+  [["fungh", "champignon", "porcin"], "Ortofrutta", 3, true],
+  [["asparag"], "Ortofrutta", 3, true],
+  [["zucchin", "melanzan", "cetriol", "fagiolin", "tacc"], "Ortofrutta", 5, true],
+  [["peperon"], "Ortofrutta", 7, true],
+  [["broccol", "cavolfior", "cavol", "verza", "cime di rapa", "friariell", "bietol", "catalogn"], "Ortofrutta", 5, true],
+  [["carciof"], "Ortofrutta", 5, true],
+  [["finocch", "porr"], "Ortofrutta", 7, true],
+  [["sedan"], "Ortofrutta", 10, true],
+  [["carot"], "Ortofrutta", 21, true],
+  [["ravanell", "rape ", "rapa ", "barbabietol"], "Ortofrutta", 7, true],
+  [["cipollott", "germogl"], "Ortofrutta", 4, true],
+  [["pisell", "fave ", "fava "], "Ortofrutta", 3, true],
+  [["pannocch", "mais fresco"], "Ortofrutta", 3, true],
+  [["cavolin"], "Ortofrutta", 5, true],
+  [["zucca"], "Ortofrutta", 7, true],
+  [["patat"], "Ortofrutta", 30, true],
+  [["cipoll", "scalogn"], "Ortofrutta", 30, true],
+  [["agli"], "Ortofrutta", 30, true],
+  [["zenzer"], "Ortofrutta", 21, true],
+  [["pane ", "baguette", "ciabatt", "rosett", "filon"], "Dispensa", 2, true],
+  [["focacc", "pizza"], "Dispensa", 2, true],
+  [["cornett", "brioche", "croissant", "pasticcin"], "Dispensa", 2, true],
+  [["macinat", "hamburger", "polpett"], "Carne & Pesce", 1, true],
+  [["salsicc"], "Carne & Pesce", 2, true],
+  [["pollo", "tacchin", "petto", "cosce", "alett"], "Carne & Pesce", 2, true],
+  [["manzo", "vitell", "maial", "braciol", "bistecc", "fettin", "arrost", "spezzatin", "agnell", "carne"], "Carne & Pesce", 2, true],
+  [["cozz", "vongol", "gamber", "scamp", "calamar", "seppi", "polp", "frutti di mare"], "Carne & Pesce", 1, true],
+  [["pesce", "salmon", "orat", "branzin", "spigol", "merluzz", "tonno fresco", "trot", "sogliol", "aliciott", "acciugh", "sardin"], "Carne & Pesce", 1, true],
+  [["prosciutt", "salam", "mortadell", "bresaol", "speck", "affettat", "pancett", "coppa"], "Carne & Pesce", 3, true],
+  [["mozzarell", "burrat", "stracciatell", "fiordilatte", "bufala"], "Latticini", 3, false],
+  [["ricott", "stracchin", "crescenz", "squaquerone", "mascarpon"], "Latticini", 4, false],
+  [["parmigian", "grana", "pecorin", "formagg"], "Latticini", 30, false],
+  [["latte"], "Latticini", 4, false],
+  [["yogurt", "kefir"], "Latticini", 10, false],
+  [["burro"], "Latticini", 30, false],
+  [["panna"], "Latticini", 3, false],
+  [["uova", "uovo"], "Latticini", 21, false],
+  [["avanz", "sugo", "ragu", "brodo", "minestr", "zupp"], "Altro", 3, true],
+];
+const PROCESSED = [' passat', ' pelat', ' polpa ', ' salsa', ' succo', ' succhi', ' marmellat', ' confettur', ' surgel', ' scatol', ' secch', ' sott', ' affumicat', ' liofilizz', ' in polvere', ' crackers', ' biscott', ' grissin', ' fette biscottate', ' pan carre', ' pancarre', ' uht', ' a lunga conservazione'];
+const foodNorm = (name: string) => ` ${norm(name).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim()} `;
+function guideFor(name: string) {
+  const n = foodNorm(name);
+  if (n.trim().length < 2 || PROCESSED.some((w) => n.includes(w))) return null;
+  for (const g of GUIDE) for (const k of g[0]) if (n.includes(` ${k}`)) return { category: g[1], days: g[2], fresh: g[3] };
+  return null;
+}
+const looksProcessed = (name: string) => PROCESSED.some((w) => foodNorm(name).includes(w));
+const isoInDays = (days: number) => {
+  const d = new Date(Date.parse(romeToday()) + days * 86_400_000);
+  return d.toISOString().slice(0, 10);
+};
+/** Scadenza stimata solo per i freschi senza etichetta (come nell'app) */
+function suggestedExpiry(name: string, category: string): string | null {
+  const g = guideFor(name);
+  if (g) return g.fresh ? isoInDays(g.days) : null;
+  if (looksProcessed(name)) return null;
+  const days = category === "Ortofrutta" ? 5 : category === "Carne & Pesce" ? 2 : 0;
+  return days ? isoInDays(days) : null;
+}
+
 // ---------------------------------------------------------------- quantità dette a voce
 
 const WORD_NUM: Record<string, number> = {
@@ -429,7 +515,7 @@ async function addToShopping(userId: string, householdId: string, text: string):
     rows.push({
       user_id: userId,
       name,
-      category: "Altro",
+      category: guideFor(name)?.category ?? (PANTRY_WORDS.test(norm(name)) ? "Dispensa" : "Altro"),
       quantity: p.amount !== null && p.unit ? p.amount : null,
       unit: p.amount !== null && p.unit ? p.unit : null,
     });
@@ -440,6 +526,36 @@ async function addToShopping(userId: string, householdId: string, text: string):
   if (added.length) s.push(`Ho aggiunto ${listIt(added)} alla lista della spesa.`);
   if (already.length) s.push(`${listIt(already)} ${already.length === 1 ? "c'era già" : "c'erano già"}.`);
   return { text: s.join(" ") };
+}
+
+// prodotti da dispensa che la guida non conosce (non freschi, di solito con la data stampata)
+const PANTRY_WORDS = /\b(pasta|spaghett|penne|fusill|rigaton|linguine|tagliatell|maccheron|riso|farina|zucchero|sale|olio|aceto|caffe|te\b|tisan|biscott|cracker|grissin|fette biscottate|cereali|tonno|pelati|passata|legumi|ceci|fagiol|lenticch|marmellat|miele|nutella|cioccolat|pane in cassetta|pancarre)/;
+
+/** "Aggiungi 500 grammi di spaghetti in dispensa": prodotti nuovi, con categoria e scadenza stimata se freschi */
+async function addToPantry(userId: string, text: string): Promise<Out> {
+  const parts = splitParts(text).map(parsePart).filter((p): p is Said => !!p);
+  if (!parts.length) return ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti.");
+  const rows: any[] = [];
+  const said: string[] = [];
+  let noDate = 0;
+  for (const p of parts) {
+    const name = p.name.charAt(0).toUpperCase() + p.name.slice(1);
+    const g = guideFor(name);
+    const category = g?.category ?? (looksProcessed(name) || PANTRY_WORDS.test(norm(name)) ? "Dispensa" : "Altro");
+    const expiry = suggestedExpiry(name, category);
+    if (!expiry) noDate++;
+    const unit = p.amount !== null && p.unit ? p.unit : "pz";
+    const quantity = p.amount !== null && p.amount > 0 ? p.amount : 1;
+    rows.push({ user_id: userId, name, quantity, unit, category, expiry_date: expiry });
+    said.push(p.amount !== null ? `${qtyIt(quantity, unit)} di ${p.name}` : p.name);
+  }
+  const { error } = await db.from("pantry_items").insert(rows);
+  if (error) {
+    console.error("alexa add pantry:", error.message);
+    return { text: "Non sono riuscito ad aggiungerli. Riprova tra poco." };
+  }
+  const date = !noDate ? "" : parts.length === 1 ? " Se ha una scadenza stampata, aggiungila dall'app." : " Se hanno una scadenza stampata, aggiungila dall'app.";
+  return { text: `Ho aggiunto in dispensa ${listIt(said)}.${date}` };
 }
 
 /** Prodotti scaduti e da usare entro 3 giorni, in una frase */
@@ -511,7 +627,7 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
     return {
       text: `Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Da usare presto hai ${listIt(
         soon.slice(0, 4).map(lower)
-      )}: apri EcoChef nell'app e ti propone una ricetta proprio con questi.`,
+      )}: apri EcoChef nell'app e ti propone una ricetta proprio con ${soon.length === 1 ? "questo" : "questi"}.`,
     };
   }
   return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
@@ -523,7 +639,7 @@ const greeting = () => {
 };
 
 const HELP =
-  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi il pane alla lista della spesa; oppure cosa posso cucinare.";
+  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; oppure cosa posso cucinare.";
 
 // ---------------------------------------------------------------- skill
 
@@ -607,6 +723,11 @@ async function skill(req: Request) {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo alla lista della spesa?", "Per esempio: il pane."));
       return alexaResponse(more(await addToShopping(userId, hh, what)));
+    }
+    if (intent === "AddPantryIntent") {
+      const what = slot("prodotto");
+      if (!what) return alexaResponse(ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti."));
+      return alexaResponse(more(await addToPantry(userId, what)));
     }
     if (intent === "CookIntent") {
       return alexaResponse(more(await cookIdea(userId, await loadPantry(hh))));
