@@ -3,15 +3,35 @@ import { supabase } from "./supabaseClient";
 const functionsUrl = () => `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/+$/, "")}/functions/v1`;
 const anonKey = () => import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-/** Alexa è collegata a questo account? (null se non si riesce a saperlo) */
+async function callLink(path: string): Promise<any | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const r = await fetch(`${functionsUrl()}/alexa/collega/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: anonKey(), Authorization: `Bearer ${token}` },
+      body: "{}",
+    });
+    return r.ok ? await r.json().catch(() => null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Alexa è collegata a questo account? Chiede ad Amazon se la skill è ancora attiva (null se non si riesce a saperlo) */
 export async function alexaLinked(): Promise<boolean | null> {
+  const body = await callLink("stato");
+  if (body && typeof body.linked === "boolean") return body.linked;
   const { data, error } = await supabase.rpc("alexa_status");
   if (error) return null;
   return !!data;
 }
 
-/** Scollega Alexa: la skill non potrà più leggere la dispensa finché non si ricollega */
+/** Scollega Alexa: toglie l'accesso alla dispensa e disattiva la skill anche nell'app Alexa */
 export async function alexaUnlink(): Promise<boolean> {
+  const body = await callLink("scollega");
+  if (body?.ok) return true;
   const { error } = await supabase.rpc("alexa_unlink");
   return !error;
 }
