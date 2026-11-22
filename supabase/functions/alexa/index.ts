@@ -727,10 +727,244 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
   return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
 }
 
-const greeting = () => {
-  const h = Number(new Date().toLocaleString("en-GB", { timeZone: "Europe/Rome", hour: "2-digit", hour12: false }));
-  return h < 12 ? "Buongiorno" : h < 18 ? "Buon pomeriggio" : "Buonasera";
+// ---------------------------------------------------------------- lo Chef a voce (abbonati)
+
+type ChefRecipe = {
+  title: string;
+  course: string;
+  difficulty: string;
+  time: string;
+  servings: number;
+  description: string;
+  expiresSoonUsed: string[];
+  ingredientsUsed: Array<{ name: string; quantity: number; unit: string }>;
+  missingIngredients: string[];
 };
+
+const CHEF_DAILY_LIMIT = 15;
+const CHEF_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
+
+async function isPremium(userId: string): Promise<boolean> {
+  const { data } = await db.from("user_profiles").select("plan_type, premium_until").eq("user_id", userId).maybeSingle();
+  const until = data?.premium_until ? Date.parse(String(data.premium_until)) : NaN;
+  return data?.plan_type === "premium" && Number.isFinite(until) && until > Date.now();
+}
+
+async function chefUsedToday(userId: string): Promise<number> {
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { count } = await db.from("ai_usage").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "alexa_chef").gte("created_at", since);
+  return count ?? 0;
+}
+
+async function logUsage(userId: string, kind: string, data: any) {
+  try {
+    const u = data?.usage ?? {};
+    await db.rpc("srv_log_ai_usage", {
+      p_user: userId,
+      p_kind: kind,
+      p_model: String(data?.model || CHEF_MODEL),
+      p_input: Number(u.input_tokens ?? 0) || 0,
+      p_output: Number(u.output_tokens ?? 0) || 0,
+    });
+  } catch {
+    /* il registro dei costi non deve fermare Alexa */
+  }
+}
+
+const outputText = (data: any): string =>
+  typeof data?.output_text === "string" && data.output_text
+    ? data.output_text
+    : (data?.output ?? []).flatMap((o: any) => (o?.content ?? []).filter((c: any) => c?.type === "output_text").map((c: any) => c.text)).join("");
+
+async function openai(body: unknown, ms: number): Promise<any | null> {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      console.error("alexa chef openai:", data?.error?.message ?? r.status);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error("alexa chef openai:", (e as Error)?.message ?? e);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Alexa dice subito una frase mentre lo Chef lavora (risposta progressiva) */
+async function speakNow(ev: any, speech: string) {
+  try {
+    const sys = ev?.context?.System;
+    if (!sys?.apiEndpoint || !sys?.apiAccessToken) return;
+    await fetch(`${sys.apiEndpoint}/v1/directives`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sys.apiAccessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ header: { requestId: ev.request.requestId }, directive: { type: "VoicePlayer.Speak", speech } }),
+    });
+  } catch {
+    /* se non riesce, pazienza: la risposta arriva comunque */
+  }
+}
+
+/** Tre proposte veloci dello Chef: solo nomi e ingredienti (il procedimento arriva dopo, nel ricettario) */
+async function chefProposals(userId: string, items: Item[]): Promise<ChefRecipe[] | null> {
+  const today = items.filter((i) => (daysLeft(i.expiry_date) ?? 99) >= 0);
+  const soon = today.filter((i) => (daysLeft(i.expiry_date) ?? 99) <= 3).map((i) => i.name);
+  const pantry = today.slice(0, 80).map((i) => `- ${i.name} (${numIt(i.quantity)} ${i.unit})`).join("\n");
+  const prompt = `Sei EcoChef, chef di cucina italiana quotidiana e anti-spreco.
+Proponi 3 ricette diverse tra loro (per esempio un primo, un secondo e un'alternativa veloce) per 2 persone, da fare con soprattutto gli ingredienti della dispensa, dando la precedenza a quelli in scadenza.
+Titoli brevi e riconoscibili, da leggere ad alta voce (massimo 6 parole, niente virgolette).
+"ingredientsUsed": solo ingredienti presenti nella dispensa, con quantità per la ricetta.
+"missingIngredients": gli ingredienti necessari che NON sono in dispensa, con quantità indicativa (es. "200 g spaghetti", "1 spicchio aglio"); sale, olio e acqua solo se non ci sono.
+Niente ingredienti scaduti. Ricette realistiche e coerenti.
+
+DISPENSA:
+${pantry || "vuota"}
+${soon.length ? `\nIN SCADENZA (da usare per primi): ${soon.join(", ")}` : ""}`;
+  const data = await openai(
+    {
+      model: CHEF_MODEL,
+      input: prompt,
+      max_output_tokens: 900,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "chef",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["recipes"],
+            properties: {
+              recipes: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["title", "course", "difficulty", "time", "servings", "description", "expiresSoonUsed", "ingredientsUsed", "missingIngredients"],
+                  properties: {
+                    title: { type: "string" },
+                    course: { type: "string", enum: ["primo", "secondo", "contorno", "dolce", "altro"] },
+                    difficulty: { type: "string", enum: ["Facile", "Media", "Difficile"] },
+                    time: { type: "string" },
+                    servings: { type: "integer" },
+                    description: { type: "string" },
+                    expiresSoonUsed: { type: "array", items: { type: "string" } },
+                    ingredientsUsed: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["name", "quantity", "unit"],
+                        properties: { name: { type: "string" }, quantity: { type: "number" }, unit: { type: "string" } },
+                      },
+                    },
+                    missingIngredients: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    6000
+  );
+  if (!data) return null;
+  await logUsage(userId, "alexa_chef", data);
+  try {
+    const out = JSON.parse(outputText(data));
+    const recipes = (Array.isArray(out?.recipes) ? out.recipes : []).filter((r: any) => typeof r?.title === "string" && r.title.trim()).slice(0, 3);
+    return recipes.length ? recipes : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Salva la ricetta scelta nel ricettario e prepara il procedimento in sottofondo */
+async function saveChefRecipe(userId: string, r: ChefRecipe): Promise<void> {
+  const recipe = { ...r, steps: [] as string[] };
+  const { data: row, error } = await db
+    .from("recipes_saved")
+    .insert({
+      user_id: userId,
+      source: "suggest",
+      title: r.title,
+      course: r.course,
+      difficulty: r.difficulty,
+      time: r.time,
+      servings: r.servings,
+      description: r.description,
+      ingredients_used: r.ingredientsUsed,
+      missing_ingredients: r.missingIngredients,
+      steps: [],
+      recipe_json: recipe,
+    })
+    .select("id")
+    .single();
+  if (error || !row) {
+    console.error("alexa chef save:", error?.message);
+    return;
+  }
+  const work = (async () => {
+    const ings = [...r.ingredientsUsed.map((i) => `${numIt(i.quantity)} ${i.unit} ${i.name}`), ...r.missingIngredients].join(", ");
+    const data = await openai(
+      {
+        model: CHEF_MODEL,
+        input: `Sei EcoChef. Scrivi il procedimento della ricetta "${r.title}" (${r.servings} persone) con questi ingredienti: ${ings}.
+Almeno 7 passaggi pratici e ordinati, ognuno autonomo e concreto, con tempi, fiamma, temperatura o segnali visivi quando serve. L'ultimo spiega come servire.`,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "steps",
+            strict: true,
+            schema: { type: "object", additionalProperties: false, required: ["steps"], properties: { steps: { type: "array", items: { type: "string" } } } },
+          },
+        },
+      },
+      40000
+    );
+    if (!data) return;
+    await logUsage(userId, "recipes", data);
+    try {
+      const steps = (JSON.parse(outputText(data))?.steps ?? []).filter((x: any) => typeof x === "string" && x.trim());
+      if (steps.length) await db.from("recipes_saved").update({ steps, recipe_json: { ...recipe, steps } }).eq("id", row.id);
+    } catch {
+      /* il procedimento si può rigenerare dall'app */
+    }
+  })();
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(work);
+}
+
+/** "il secondo", "la terza", "spaghetti al pesto" → indice della proposta */
+const ORDINALS: Record<string, number> = { primo: 0, prima: 0, uno: 0, "1": 0, secondo: 1, seconda: 1, due: 1, "2": 1, terzo: 2, terza: 2, tre: 2, "3": 2 };
+function pickRecipe(recipes: ChefRecipe[], said: string): number {
+  const n = norm(said);
+  for (const w of n.split(" ")) if (w in ORDINALS && ORDINALS[w] < recipes.length) return ORDINALS[w];
+  if (/\bultim/.test(n)) return recipes.length - 1;
+  let best = -1;
+  let bestScore = 0.3;
+  recipes.forEach((r, i) => {
+    const sc = matchScore(n, r.title);
+    if (sc > bestScore) {
+      best = i;
+      bestScore = sc;
+    }
+  });
+  return best;
+}
 
 const HELP =
   "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; oppure cosa posso cucinare.";
@@ -758,15 +992,17 @@ async function skill(req: Request) {
   const type = ev.request.type as string;
   const intent = type === "IntentRequest" ? (ev.request.intent?.name as string) : "";
   if (intent) console.log("alexa intent:", intent);
-  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[] };
+  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[]; chef?: ChefRecipe[]; missing?: string[] };
   const list = Array.isArray(attrs.list) ? attrs.list : null;
   const pending = Array.isArray(attrs.pending) && attrs.pending.length ? attrs.pending : null;
+  const chef = Array.isArray(attrs.chef) && attrs.chef.length ? attrs.chef : null;
+  const missing = Array.isArray(attrs.missing) && attrs.missing.length ? attrs.missing : null;
   const isStop = ["AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.NavigateHomeIntent"].includes(intent);
 
   // senza niente in sospeso: stop e fine sessione non hanno bisogno dell'account
   if (!list?.length) {
     if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
-    if (isStop || (intent === "AMAZON.NoIntent" && !pending)) return alexaResponse({ text: "A presto!" });
+    if (isStop || (intent === "AMAZON.NoIntent" && !pending && !missing)) return alexaResponse({ text: "A presto!" });
   }
   if (intent === "AMAZON.HelpIntent") return alexaResponse({ ...ask(HELP), attrs });
 
@@ -837,6 +1073,43 @@ async function skill(req: Request) {
       if (list.length) await saveShopping(userId, hh, list);
     }
 
+    // ---- lo Chef ha proposto le ricette: l'utente sceglie
+    if (chef) {
+      if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent" || intent === "ListItemsIntent" || intent === "AMAZON.FallbackIntent" || (intent === "AMAZON.YesIntent" && chef.length === 1)) {
+        const said = intent === "AMAZON.YesIntent" ? "primo" : slot("numero") || slot("piatto") || slot("prodotti");
+        const i = said ? pickRecipe(chef, said) : -1;
+        if (i < 0) {
+          return alexaResponse({
+            text: `Non ho capito quale. Le proposte sono: ${listIt(chef.map((r) => r.title))}. Quale preferisci?`,
+            reprompt: "Puoi dire il primo, il secondo o il terzo, oppure il nome del piatto.",
+            end: false,
+            attrs: { chef },
+          });
+        }
+        const r = chef[i];
+        await saveChefRecipe(userId, r);
+        const saved = `Ottima scelta: ${r.title}. L'ho salvata nel ricettario, il procedimento lo trovi nell'app.`;
+        if (r.missingIngredients.length) {
+          return alexaResponse({
+            text: `${saved} Per questa ricetta ${r.missingIngredients.length === 1 ? "manca" : "mancano"} ${listIt(r.missingIngredients.map((x) => parsePart(x)?.name ?? x))}. Vuoi che li metta nella lista della spesa?`,
+            reprompt: "Li metto nella lista della spesa? Dimmi sì o no.",
+            end: false,
+            attrs: { missing: r.missingIngredients },
+          });
+        }
+        return alexaResponse(more({ text: `${saved} Hai già tutto quello che serve. Buon appetito!` }));
+      }
+      if (isStop || intent === "AMAZON.NoIntent") return alexaResponse({ text: "Va bene, a presto!" });
+    }
+    if (missing) {
+      if (intent === "AMAZON.YesIntent") {
+        const parts = missing.map(parsePart).filter((p): p is Said => !!p);
+        return alexaResponse(more(await saveShopping(userId, hh, parts)));
+      }
+      if (intent === "AMAZON.NoIntent") return alexaResponse(more({ text: "Va bene, non li aggiungo." }));
+    }
+    if (intent === "ChooseRecipeIntent" || intent === "ChooseDishIntent") return alexaResponse(ask("Prima chiedimi cosa posso cucinare, così lo Chef ti fa le sue proposte.", "Cosa vuoi fare?"));
+
     if (intent === "StartListIntent") {
       return alexaResponse({
         text: "Va bene, prepariamo la lista. Dimmi cosa serve, anche tutto insieme. Quando hai finito di' chiudi lista.",
@@ -868,11 +1141,20 @@ async function skill(req: Request) {
     if (intent === "ListItemsIntent") return alexaResponse(ask("Vuoi fare la lista della spesa? Di' prepariamo la lista della spesa.", "Cosa vuoi fare?"));
 
     if (type === "LaunchRequest") {
+      return alexaResponse({
+        text: `Ciao${firstName ? ` ${firstName}` : ""}, come posso aiutarti?`,
+        reprompt: "Puoi chiedermi cosa scade, cosa posso cucinare, oppure di preparare la lista della spesa.",
+        end: false,
+      });
+    }
+    if (intent === "ExpiringTodayIntent") {
       const items = await loadPantry(hh);
-      const { text } = expiringSentence(items);
-      const hello = `${greeting()}${firstName ? ` ${firstName}` : ""}!`;
-      if (!items.length) return alexaResponse(ask(`${hello} La tua dispensa è vuota: aggiungi i prodotti dall'app.`, "Vuoi aggiungere qualcosa alla lista della spesa?"));
-      return alexaResponse(ask(`${hello} ${text || "Niente scade nei prossimi tre giorni."}`, "Cosa vuoi fare? Per esempio: ho usato due uova."));
+      const today = items.filter((i) => daysLeft(i.expiry_date) === 0).map((i) => lower(i.name));
+      const expired = items.filter((i) => (daysLeft(i.expiry_date) ?? 1) < 0).map((i) => lower(i.name));
+      const parts: string[] = [];
+      parts.push(today.length ? `Oggi ${today.length === 1 ? "scade" : "scadono"} ${listIt(today.slice(0, 6))}.` : "Oggi non scade niente.");
+      if (expired.length) parts.push(`${expired.length === 1 ? "È già scaduto" : "Sono già scaduti"} ${listIt(expired.slice(0, 4))}.`);
+      return alexaResponse(more({ text: parts.join(" ") }));
     }
     if (intent === "ExpiringIntent") {
       const items = await loadPantry(hh);
@@ -896,7 +1178,33 @@ async function skill(req: Request) {
       return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "CookIntent") {
-      return alexaResponse(more(await cookIdea(userId, await loadPantry(hh))));
+      const [items, premium, used] = await Promise.all([loadPantry(hh), isPremium(userId), chefUsedToday(userId)]);
+      if (!premium) {
+        const idea = await cookIdea(userId, items);
+        return alexaResponse(more({ ...idea, text: `Lo Chef a voce è incluso nell'abbonamento; dall'app puoi usarlo con i crediti. Intanto, dal tuo ricettario: ${idea.text}` }));
+      }
+      if (used >= CHEF_DAILY_LIMIT) {
+        return alexaResponse(more({ text: "Per oggi lo Chef ha già proposto tante ricette. Riprova domani, oppure aprilo nell'app." }));
+      }
+      const [, recipes] = await Promise.all([speakNow(ev, "Bene, vediamo cosa ci propone lo Chef."), chefProposals(userId, items)]);
+      if (!recipes) {
+        const idea = await cookIdea(userId, items);
+        return alexaResponse(more({ ...idea, text: `Lo Chef in questo momento non risponde. ${idea.text}` }));
+      }
+      if (recipes.length === 1) {
+        return alexaResponse({
+          text: `Lo Chef propone ${recipes[0].title}. Ti va?`,
+          reprompt: "Ti va questa ricetta? Dimmi il primo per sceglierla, oppure stop.",
+          end: false,
+          attrs: { chef: recipes },
+        });
+      }
+      return alexaResponse({
+        text: `Lo Chef propone: ${listIt(recipes.map((r) => r.title))}. Quale preferisci?`,
+        reprompt: "Puoi dire il primo, il secondo o il terzo, oppure il nome del piatto.",
+        end: false,
+        attrs: { chef: recipes },
+      });
     }
     if (isStop || intent === "AMAZON.NoIntent") return alexaResponse({ text: "A presto!" });
     if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });

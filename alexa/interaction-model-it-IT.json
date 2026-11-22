@@ -55,8 +55,14 @@
             "scadenze",
             "cosa devo consumare",
             "cosa devo usare presto",
-            "cosa scade oggi",
-            "cosa scade domani"
+            "cosa scade domani",
+            "abbiamo prodotti che scadono nei prossimi giorni",
+            "ci sono prodotti che scadono nei prossimi giorni",
+            "cosa scade nei prossimi giorni",
+            "ci sono prodotti in scadenza",
+            "abbiamo prodotti in scadenza",
+            "cosa scade questa settimana",
+            "cosa sta scadendo"
           ],
           "slots": []
         },
@@ -244,6 +250,65 @@
           ]
         },
         {
+          "name": "ExpiringTodayIntent",
+          "slots": [],
+          "samples": [
+            "cosa scade oggi",
+            "cosa scade oggi in dispensa",
+            "cosa devo consumare oggi",
+            "cosa devo usare oggi",
+            "c'è qualcosa che scade oggi",
+            "scade qualcosa oggi",
+            "le scadenze di oggi",
+            "cosa va usato oggi"
+          ]
+        },
+        {
+          "name": "ChooseRecipeIntent",
+          "slots": [
+            {
+              "name": "numero",
+              "type": "ORDINALE"
+            }
+          ],
+          "samples": [
+            "il {numero}",
+            "la {numero}",
+            "{numero}",
+            "scelgo il {numero}",
+            "scelgo la {numero}",
+            "voglio il {numero}",
+            "preferisco il {numero}",
+            "preferisco la {numero}",
+            "facciamo il {numero}",
+            "facciamo la {numero}",
+            "il {numero} piatto",
+            "la {numero} ricetta",
+            "quella {numero}",
+            "quello {numero}"
+          ]
+        },
+        {
+          "name": "ChooseDishIntent",
+          "slots": [
+            {
+              "name": "piatto",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "scelgo {piatto}",
+            "voglio {piatto}",
+            "preferisco {piatto}",
+            "facciamo {piatto}",
+            "mi piace {piatto}",
+            "prendo {piatto}",
+            "va bene {piatto}",
+            "cuciniamo {piatto}",
+            "proviamo {piatto}"
+          ]
+        },
+        {
           "name": "CookIntent",
           "samples": [
             "cosa posso cucinare",
@@ -259,7 +324,15 @@
             "dammi un'idea per cucinare",
             "una ricetta",
             "consigliami una ricetta",
-            "cosa ci cucino"
+            "cosa ci cucino",
+            "cosa ci propone lo chef",
+            "cosa propone lo chef",
+            "chiedi allo chef",
+            "sentiamo lo chef",
+            "cosa mi consiglia lo chef",
+            "cosa facciamo da mangiare",
+            "cosa possiamo cucinare oggi",
+            "cosa cuciniamo oggi"
           ],
           "slots": []
         }
@@ -831,6 +904,49 @@
             {
               "name": {
                 "value": "acqua e birra"
+              }
+            }
+          ]
+        },
+        {
+          "name": "ORDINALE",
+          "values": [
+            {
+              "name": {
+                "value": "primo",
+                "synonyms": [
+                  "prima",
+                  "uno",
+                  "numero uno"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "secondo",
+                "synonyms": [
+                  "seconda",
+                  "due",
+                  "numero due"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "terzo",
+                "synonyms": [
+                  "terza",
+                  "tre",
+                  "numero tre"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "ultimo",
+                "synonyms": [
+                  "ultima"
+                ]
               }
             }
           ]
