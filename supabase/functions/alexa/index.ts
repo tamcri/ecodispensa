@@ -966,6 +966,125 @@ async function cookIdea(userId: string, items: Item[]): Promise<Out> {
   return { text: "Nel tuo ricettario non c'è una ricetta che puoi fare con quello che hai. Apri EcoChef nell'app e ti propongo qualcosa." };
 }
 
+// ---------------------------------------------------------------- lista della spesa: leggere, togliere, comprato
+
+type ShopRow = { id: string; name: string; is_checked: boolean };
+
+async function loadShopping(hh: string): Promise<ShopRow[]> {
+  const { data } = await db.from("shopping_items").select("id, name, is_checked").eq("household_id", hh).order("created_at", { ascending: true });
+  return (data ?? []) as ShopRow[];
+}
+
+/** "Leggimi la lista" */
+async function readList(hh: string): Promise<Out> {
+  const rows = await loadShopping(hh);
+  const todo = rows.filter((r) => !r.is_checked).map((r) => lower(r.name));
+  const inCart = rows.filter((r) => r.is_checked).length;
+  if (!todo.length) {
+    return { text: inCart ? `Hai già preso tutto: ${inCart === 1 ? "un prodotto è" : `${inCart} prodotti sono`} nel carrello.` : "La lista della spesa è vuota." };
+  }
+  const shown = todo.slice(0, 12);
+  const rest = todo.length - shown.length;
+  const cart = inCart ? ` Nel carrello ne hai già ${inCart}.` : "";
+  return {
+    text: `Nella lista ${todo.length === 1 ? "c'è" : `ci sono ${todo.length} prodotti`}: ${listIt(shown)}${rest > 0 ? `, e altri ${rest}` : ""}.${cart}`,
+    card: { title: "Lista della spesa", content: todo.join("\n") },
+  };
+}
+
+const findRow = (rows: ShopRow[], said: string) => {
+  let best: ShopRow | null = null;
+  let score = 0.5;
+  for (const r of rows) {
+    const s = matchScore(said, r.name);
+    if (s > score) {
+      best = r;
+      score = s;
+    }
+  }
+  return best;
+};
+
+/** "Togli il pane dalla lista" */
+async function removeFromList(hh: string, text: string): Promise<Out> {
+  const clean = norm(text).replace(/\s+(dalla|dall'|nella|della)\s*(lista|spesa).*$/, "").replace(/\s+dalla$/, "");
+  const parts = splitParts(clean).map(parsePart).filter((p): p is Said => !!p);
+  if (!parts.length) return ask("Cosa tolgo dalla lista?", "Per esempio: togli il pane dalla lista.");
+  const rows = await loadShopping(hh);
+  const removed: string[] = [];
+  const missing: string[] = [];
+  const ids: string[] = [];
+  for (const p of parts) {
+    const r = findRow(rows.filter((x) => !ids.includes(x.id)), p.name);
+    if (!r) missing.push(p.name);
+    else {
+      ids.push(r.id);
+      removed.push(lower(r.name));
+    }
+  }
+  if (ids.length) await db.from("shopping_items").delete().in("id", ids).eq("household_id", hh);
+  const s: string[] = [];
+  if (removed.length) s.push(`Ho tolto ${listIt(removed)} dalla lista.`);
+  if (missing.length) s.push(`Non trovo ${listIt(missing)} nella lista.`);
+  return { text: s.join(" ") };
+}
+
+/** Comprato e messo in dispensa: se era nella lista della spesa lo tolgo (senza dirlo) */
+async function dropFromList(hh: string, text: string) {
+  const parts = splitParts(text).map(parsePart).filter((p): p is Said => !!p);
+  const rows = (await loadShopping(hh)).filter((r) => !r.is_checked);
+  const ids = parts.map((p) => findRow(rows, p.name)?.id).filter((x): x is string => !!x);
+  if (ids.length) await db.from("shopping_items").delete().in("id", ids).eq("household_id", hh);
+}
+
+const ALL_WORDS = /^(tutto|la spesa|tutta la lista|tutta la spesa|tutto quanto|tutti|tutte|tutto della lista|tutta)$/;
+
+/** "Ho comprato il latte": lo segna come preso (nel carrello) */
+async function boughtItems(hh: string, text: string): Promise<Out> {
+  const n = norm(text).replace(/\s+(della|dalla|nella)\s+lista.*$/, "");
+  if (!n || ALL_WORDS.test(n)) return askBoughtAll(hh);
+  const parts = splitParts(n).map(parsePart).filter((p): p is Said => !!p);
+  const rows = (await loadShopping(hh)).filter((r) => !r.is_checked);
+  const done: string[] = [];
+  const missing: string[] = [];
+  const ids: string[] = [];
+  for (const p of parts) {
+    const r = findRow(rows.filter((x) => !ids.includes(x.id)), p.name);
+    if (!r) missing.push(p.name);
+    else {
+      ids.push(r.id);
+      done.push(lower(r.name));
+    }
+  }
+  if (ids.length) await db.from("shopping_items").update({ is_checked: true }).in("id", ids).eq("household_id", hh);
+  const s: string[] = [];
+  if (done.length) s.push(`Segnato come preso: ${listIt(done)}.`);
+  if (missing.length) s.push(`${cap(listIt(missing))} non ${missing.length === 1 ? "era" : "erano"} nella lista.`);
+  if (!s.length) s.push("Non ho capito cosa hai comprato.");
+  return { text: s.join(" ") };
+}
+
+/** "Ho comprato tutto": prima chiedo conferma */
+async function askBoughtAll(hh: string): Promise<Out> {
+  const todo = (await loadShopping(hh)).filter((r) => !r.is_checked);
+  if (!todo.length) return { text: "Nella lista non c'è niente da prendere." };
+  return {
+    text: `Segno come presi ${todo.length === 1 ? `${lower(todo[0].name)}, l'unico prodotto della lista` : `tutti i ${todo.length} prodotti della lista`}?`,
+    reprompt: "Li segno tutti come presi? Dimmi sì o no.",
+    end: false,
+    attrs: { boughtAll: true },
+  };
+}
+
+async function boughtAll(hh: string): Promise<Out> {
+  const { data } = await db.from("shopping_items").update({ is_checked: true }).eq("household_id", hh).eq("is_checked", false).select("id");
+  const n = (data ?? []).length;
+  if (!n) return { text: "Nella lista non c'era niente da prendere." };
+  return {
+    text: `Fatto: ${n === 1 ? "un prodotto è" : `${n} prodotti sono`} nel carrello. A casa apri la lista nell'app e premi «Metti in dispensa», così li aggiungi con le scadenze.`,
+  };
+}
+
 // ---------------------------------------------------------------- cosa c'è in dispensa
 
 /** "la mozzarella in frigo", "pasta mi è rimasta" → "mozzarella", "pasta" */
@@ -1529,7 +1648,7 @@ function pickRecipe(recipes: ChefRecipe[], said: string): number {
 }
 
 const HELP =
-  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; quanto ho speso questo mese; come sto andando; oppure cosa posso cucinare.";
+  "Puoi chiedermi: cosa scade; ho usato 300 grammi di pasta; ho buttato l'insalata; aggiungi 500 grammi di spaghetti in dispensa; aggiungi il pane alla lista della spesa; prepariamo la lista della spesa; leggimi la lista; quanto ho speso questo mese; come sto andando; oppure cosa posso cucinare.";
 
 // ---------------------------------------------------------------- skill
 
@@ -1554,18 +1673,19 @@ async function skill(req: Request) {
   const type = ev.request.type as string;
   const intent = type === "IntentRequest" ? (ev.request.intent?.name as string) : "";
   if (intent) console.log("alexa intent:", intent);
-  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[]; chef?: ChefRecipe[]; missing?: string[]; inventory?: boolean };
+  const attrs = (ev?.session?.attributes ?? {}) as { pending?: Pending[]; list?: Said[]; chef?: ChefRecipe[]; missing?: string[]; inventory?: boolean; boughtAll?: boolean };
   const list = Array.isArray(attrs.list) ? attrs.list : null;
   const pending = Array.isArray(attrs.pending) && attrs.pending.length ? attrs.pending : null;
   const chef = Array.isArray(attrs.chef) && attrs.chef.length ? attrs.chef : null;
   const missing = Array.isArray(attrs.missing) && attrs.missing.length ? attrs.missing : null;
   const inventory = attrs.inventory === true;
+  const confirmBought = attrs.boughtAll === true;
   const isStop = ["AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.NavigateHomeIntent"].includes(intent);
 
   // senza niente in sospeso: stop e fine sessione non hanno bisogno dell'account
   if (!list?.length) {
     if (type === "SessionEndedRequest") return json({ version: "1.0", response: {} });
-    if (isStop || (intent === "AMAZON.NoIntent" && !pending && !missing)) return alexaResponse({ text: "A presto!" });
+    if (isStop || (intent === "AMAZON.NoIntent" && !pending && !missing && !confirmBought)) return alexaResponse({ text: "A presto!" });
   }
   if (intent === "AMAZON.HelpIntent") return alexaResponse({ ...ask(HELP), attrs });
 
@@ -1669,6 +1789,10 @@ async function skill(req: Request) {
       }
       if (isStop || intent === "AMAZON.NoIntent") return alexaResponse({ text: "Va bene, a presto!" });
     }
+    if (confirmBought) {
+      if (intent === "AMAZON.YesIntent") return alexaResponse(more(await boughtAll(hh)));
+      if (intent === "AMAZON.NoIntent") return alexaResponse(more({ text: "Va bene, non cambio niente." }));
+    }
     if (missing) {
       if (intent === "AMAZON.YesIntent") {
         const parts = missing.map(parsePart).filter((p): p is Said => !!p);
@@ -1742,6 +1866,9 @@ async function skill(req: Request) {
     if (intent === "UseIntent" || intent === "WasteIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask(intent === "WasteIntent" ? "Cosa hai buttato?" : "Cosa hai usato?", "Per esempio: 300 grammi di pasta."));
+      // "togli il pane dalla lista" a volte arriva qui
+      if (/\b(dalla|nella|della) (lista|spesa)\b|\blista della spesa\b/.test(norm(what))) return alexaResponse(more(await removeFromList(hh, what)));
+      if (ALL_WORDS.test(norm(what))) return alexaResponse(await askBoughtAll(hh));
       const out = await takeFromPantry(userId, hh, what, intent === "WasteIntent" ? "wasted" : "consumed");
       return alexaResponse(out.end === false ? out : more(out));
     }
@@ -1753,7 +1880,9 @@ async function skill(req: Request) {
     if (intent === "AddPantryIntent") {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti."));
+      if (ALL_WORDS.test(norm(what))) return alexaResponse(await askBoughtAll(hh));
       const out = await addToPantry(userId, what);
+      await dropFromList(hh, what);
       return alexaResponse(out.end === false ? out : more(out));
     }
     if (intent === "HaveIntent") {
@@ -1784,6 +1913,17 @@ async function skill(req: Request) {
       const out = await setExpiry(hh, slot("cibo"), slot("data"), slot("giorni"));
       return alexaResponse(out.end === false ? out : more(out));
     }
+    if (intent === "ReadListIntent") return alexaResponse(more(await readList(hh)));
+    if (intent === "RemoveShoppingIntent") {
+      const what = slot("prodotto");
+      if (!what) return alexaResponse(ask("Cosa tolgo dalla lista?", "Per esempio: togli il pane dalla lista."));
+      return alexaResponse(more(await removeFromList(hh, what)));
+    }
+    if (intent === "BoughtIntent") {
+      const out = await boughtItems(hh, slot("prodotto"));
+      return alexaResponse(out.end === false ? out : more(out));
+    }
+    if (intent === "BoughtAllIntent") return alexaResponse(await askBoughtAll(hh));
     if (intent === "SpendingIntent") return alexaResponse(more(await spendingReport(hh, slot("periodo"))));
     if (intent === "SavedIntent") return alexaResponse(more(await savedReport(hh, slot("periodo"))));
     if (intent === "WastedReportIntent") return alexaResponse(more(await wastedReport(hh, slot("periodo"))));
