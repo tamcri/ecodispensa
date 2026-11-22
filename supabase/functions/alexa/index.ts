@@ -124,15 +124,14 @@ const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replac
 async function linkStart(req: Request) {
   const clientId = Deno.env.get("ALEXA_A2A_CLIENT_ID");
   if (!clientId) return cors({ error: "NOT_CONFIGURED" }, 503);
-  const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-  const { data: u } = await db.auth.getUser(jwt);
-  if (!u?.user) return cors({ error: "UNAUTHORIZED" }, 401);
+  const userId = await userFromJwt(req);
+  if (!userId) return cors({ error: "UNAUTHORIZED" }, 401);
 
   const state = randomToken();
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   await db.from("alexa_link_states").delete().lt("created_at", new Date(Date.now() - 3600_000).toISOString());
-  const { error } = await db.from("alexa_link_states").insert({ state_hash: await sha256(state), user_id: u.user.id, verifier });
+  const { error } = await db.from("alexa_link_states").insert({ state_hash: await sha256(state), user_id: userId, verifier });
   if (error) return cors({ error: "SERVER_ERROR" }, 500);
 
   const common = {
@@ -151,6 +150,99 @@ async function linkStart(req: Request) {
   })}`;
   const lwaUrl = `https://www.amazon.com/ap/oa?${new URLSearchParams(common)}`;
   return cors({ alexaUrl, lwaUrl });
+}
+
+// il token di rinnovo di Amazon (serve a sapere se la skill è ancora attiva e a scollegarla) è salvato cifrato
+async function refreshKey(): Promise<CryptoKey> {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${Deno.env.get("ALEXA_A2A_CLIENT_SECRET") ?? ""}|ecodispensa-refresh`));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+async function seal(text: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await refreshKey(), new TextEncoder().encode(text)));
+  return `${b64url(iv)}.${b64url(enc)}`;
+}
+const unb64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+async function unseal(sealed: string): Promise<string | null> {
+  try {
+    const [iv, data] = sealed.split(".");
+    const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64url(iv) }, await refreshKey(), unb64url(data));
+    return new TextDecoder().decode(dec);
+  } catch {
+    return null;
+  }
+}
+
+/** Token di Amazon nuovo per l'utente (dal token di rinnovo salvato al collegamento) */
+async function amazonAccess(userId: string): Promise<{ token: string; host: string } | null> {
+  const { data: row } = await db.from("alexa_amazon_links").select("refresh_enc, api_host").eq("user_id", userId).maybeSingle();
+  if (!row) return null;
+  const refresh = await unseal(row.refresh_enc);
+  if (!refresh) return null;
+  const r = await fetch("https://api.amazon.com/auth/o2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refresh,
+      client_id: Deno.env.get("ALEXA_A2A_CLIENT_ID") ?? "",
+      client_secret: Deno.env.get("ALEXA_A2A_CLIENT_SECRET") ?? "",
+    }),
+  });
+  const t = await r.json().catch(() => null);
+  if (!r.ok || !t?.access_token) {
+    console.error("alexa stato: rinnovo token Amazon", r.status, t?.error ?? "");
+    // l'utente ha tolto il permesso ad Amazon: il collegamento non c'è più
+    if (t?.error === "invalid_grant") await db.from("alexa_amazon_links").delete().eq("user_id", userId);
+    return null;
+  }
+  if (t.refresh_token && t.refresh_token !== refresh) {
+    await db.from("alexa_amazon_links").update({ refresh_enc: await seal(t.refresh_token), updated_at: new Date().toISOString() }).eq("user_id", userId);
+  }
+  return { token: t.access_token, host: row.api_host };
+}
+
+async function userFromJwt(req: Request): Promise<string | null> {
+  const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const { data } = await db.auth.getUser(jwt);
+  return data?.user?.id ?? null;
+}
+
+/** Stato vero del collegamento: chiede ad Amazon se la skill è ancora attiva e collegata */
+async function linkStatus(req: Request) {
+  const userId = await userFromJwt(req);
+  if (!userId) return cors({ error: "UNAUTHORIZED" }, 401);
+  const { count } = await db.from("alexa_tokens").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  const ours = (count ?? 0) > 0;
+  const amazon = await amazonAccess(userId);
+  if (!amazon) return cors({ linked: ours, checked: false });
+  const r = await fetch(`${amazon.host}/v1/users/~current/skills/${SKILL_ID}/enablement`, { headers: { Authorization: `Bearer ${amazon.token}` } });
+  if (r.status !== 200 && r.status !== 404) return cors({ linked: ours, checked: false });
+  const st = r.status === 200 ? await r.json().catch(() => null) : null;
+  const linked = st?.status === "ENABLED" && st?.accountLink?.status === "LINKED";
+  if (!linked) {
+    // disattivata dall'app Alexa: puliamo anche da noi
+    await db.from("alexa_tokens").delete().eq("user_id", userId);
+    await db.from("alexa_amazon_links").delete().eq("user_id", userId);
+  }
+  return cors({ linked, checked: true });
+}
+
+/** Scollega da EcoDispensa: disattiva anche la skill nell'app Alexa (se il collegamento è nato dall'app) */
+async function linkRemove(req: Request) {
+  const userId = await userFromJwt(req);
+  if (!userId) return cors({ error: "UNAUTHORIZED" }, 401);
+  const amazon = await amazonAccess(userId);
+  if (amazon) {
+    const r = await fetch(`${amazon.host}/v1/users/~current/skills/${SKILL_ID}/enablement`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${amazon.token}` },
+    });
+    if (!r.ok && r.status !== 404) console.error("alexa scollega: disattivazione", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  }
+  await db.from("alexa_tokens").delete().eq("user_id", userId);
+  await db.from("alexa_amazon_links").delete().eq("user_id", userId);
+  return cors({ ok: true });
 }
 
 async function linkFinish(req: Request) {
@@ -208,7 +300,14 @@ async function linkFinish(req: Request) {
       headers: { Authorization: `Bearer ${tok.access_token}`, "Content-Type": "application/json" },
       body: payload,
     });
-    if (r.status === 201 || r.status === 200) return cors({ ok: true });
+    if (r.status === 201 || r.status === 200) {
+      if (tok.refresh_token) {
+        await db
+          .from("alexa_amazon_links")
+          .upsert({ user_id: st.user_id, refresh_enc: await seal(tok.refresh_token), api_host: host, updated_at: new Date().toISOString() });
+      }
+      return cors({ ok: true });
+    }
     const t = await r.text().catch(() => "");
     console.error("alexa collega: abilitazione", host, r.status, t.slice(0, 300));
   }
@@ -1349,6 +1448,8 @@ Deno.serve(async (req) => {
     try {
       if (path.endsWith("/collega/start")) return await linkStart(req);
       if (path.endsWith("/collega/finish")) return await linkFinish(req);
+      if (path.endsWith("/collega/stato")) return await linkStatus(req);
+      if (path.endsWith("/collega/scollega")) return await linkRemove(req);
     } catch (e) {
       console.error("alexa collega:", e);
       return cors({ error: "SERVER_ERROR" }, 500);
