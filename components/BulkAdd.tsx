@@ -43,7 +43,9 @@ const CATEGORIES = Object.values(Category) as string[];
 export function toBulkRows(read: ShoppingItemRead[]): BulkRow[] {
   return read.map((r, i) => {
     const g = findFoodGuide(r.name);
-    const category = (CATEGORIES.includes(r.category) ? r.category : g?.category ?? Category.OTHER) as Category;
+    // se la prima parola del nome è un prodotto che la guida conosce, vale la guida ("Ciabatta alla patata" → Dispensa)
+    const head = findFoodGuide(`${r.name.trim().split(/\s+/)[0] ?? ''} `);
+    const category = (head && g ? head.category : CATEGORIES.includes(r.category) ? r.category : g?.category ?? Category.OTHER) as Category;
     const longLife = r.storage === 'long_life' || category === Category.HOUSEHOLD;
     let expiryDate = '';
     if (!longLife) {

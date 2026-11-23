@@ -30,7 +30,7 @@ async function identifyHandler(req: VercelRequest, res: VercelResponse) {
     const prompt = `Analizza la foto di un prodotto alimentare o per la casa.
 Rispondi con:
 - name: nome breve e descrittivo in italiano (es. "Latte parzialmente scremato", "Mele Golden"). Se non è un prodotto riconoscibile, name vuoto.
-- category: una tra ${CATEGORIES.join(", ")}.
+- category: una tra ${CATEGORIES.join(", ")}. Pane, panini, focacce, cornetti e prodotti da forno vanno in Dispensa (non in Ortofrutta, anche se nel nome c'è una verdura, es. "Ciabatta alla patata"); uova in Latticini; salumi in Carne & Pesce.
 - quantity: quantità stimata (numero), 1 se non chiaro.
 - unit: una tra pz, kg, g, l.
 - expiryDate: scadenza stimata in formato YYYY-MM-DD supponendo l'acquisto oggi (${today}). Se è leggibile sulla confezione usa quella. Stringa vuota per prodotti a lunga conservazione o non alimentari.`;
@@ -317,7 +317,7 @@ async function itemsHandler(req: VercelRequest, res: VercelResponse) {
 
     const rules = `Per ogni prodotto alimentare o per la casa rispondi con:
 - name: nome chiaro in italiano, con la maiuscola iniziale (es. "Latte parzialmente scremato", "Mozzarella fior di latte", "Banane"). Niente marche se non servono a capire il prodotto.
-- category: una tra ${CATEGORIES.join(", ")}.
+- category: una tra ${CATEGORIES.join(", ")}. Pane, panini, focacce, cornetti e prodotti da forno vanno in Dispensa (non in Ortofrutta, anche se nel nome c'è una verdura, es. "Ciabatta alla patata"); uova in Latticini; salumi in Carne & Pesce.
 - quantity: numero di pezzi o confezioni (es. "x3" o "3 vasetti" → 3); per i prodotti al peso il peso; 1 se non è chiaro.
 - unit: "pz" per pezzi e confezioni, "kg" o "g" per i prodotti al peso, "l" per i liquidi sfusi.
 - storage: "fresh" per frutta, verdura, pane, carne, pesce e gastronomia senza data stampata; "packaged" per i confezionati con una data stampata (latte, yogurt, formaggi, salumi, uova, pasta fresca); "long_life" per pasta secca, riso, farina, scatolame, olio, sale, caffè, biscotti, bevande a lunga conservazione e prodotti per la casa.
