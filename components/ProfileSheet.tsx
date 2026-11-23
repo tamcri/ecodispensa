@@ -25,8 +25,10 @@ import {
   Receipt,
   KeyRound,
   Mic,
+  LifeBuoy,
 } from "lucide-react";
 import { AlexaSection } from "./AlexaSection";
+import { GuideView } from "./GuideView";
 import { RecoveryCodeCard } from "./RecoveryCodeCard";
 import { PrivacySection } from "./PrivacySection";
 import { PlansPanel, type PlanProduct } from "./PlansPanel";
@@ -36,7 +38,7 @@ import { displayNameFromEmail } from "../services/household";
 type Diet = "omnivore" | "veg" | "vegan";
 
 /** Pagine del Profilo: la principale a righe raggruppate, ogni riga apre la sua */
-type Page = "home" | "piano" | "codici" | "acquisti" | "famiglia" | "preferenze" | "alexa" | "password" | "recupero" | "privacy";
+type Page = "home" | "piano" | "codici" | "acquisti" | "famiglia" | "preferenze" | "alexa" | "password" | "recupero" | "privacy" | "guida";
 
 const PAGE_TITLE: Record<Exclude<Page, "home">, string> = {
   piano: "Piano e crediti",
@@ -48,6 +50,7 @@ const PAGE_TITLE: Record<Exclude<Page, "home">, string> = {
   password: "Cambia password",
   recupero: "Codice di recupero",
   privacy: "Privacy e i miei dati",
+  guida: "Aiuto e guida",
 };
 
 const Row = ({ icon, title, value, onClick }: { icon: React.ReactNode; title: string; value?: string; onClick: () => void }) => (
@@ -813,6 +816,10 @@ const getPurchaseTitle = (purchase: Purchase) => {
                 <Row icon={<Shield size={18} />} title="Privacy e i miei dati" onClick={() => go("privacy")} />
               </Group>
 
+              <Group title="Aiuto">
+                <Row icon={<LifeBuoy size={18} />} title="Aiuto e guida" value="domande frequenti" onClick={() => go("guida")} />
+              </Group>
+
               <button
                 onClick={onLogout}
                 className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-white font-bold text-[#8E3418]"
@@ -823,6 +830,8 @@ const getPurchaseTitle = (purchase: Purchase) => {
               </button>
             </>
           )}
+
+          {page === "guida" && <GuideView />}
 
           {page === "piano" && (
             <div className="rounded-2xl bg-white p-4">
