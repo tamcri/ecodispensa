@@ -1357,7 +1357,7 @@ async function creditsReport(userId: string): Promise<Out> {
   const monthly = Number(c?.monthly_credits ?? 0);
   const total = bought + monthly;
   const chef = premium ? " Lo Chef a voce non usa i crediti: è incluso nell'abbonamento." : "";
-  if (!total) return { text: `Non hai crediti. Puoi prenderli dall'app, nel Profilo.${chef}` };
+  if (!total) return { text: `Non hai crediti.${chef}` };
   let reset = "";
   if (monthly && c?.monthly_period_start) {
     const d = new Date(Date.parse(String(c.monthly_period_start)));
@@ -2340,7 +2340,7 @@ async function skill(req: Request) {
       if (r) return alexaResponse(await startRecipe(userId, r));
       if (!said) return alexaResponse(more({ text: "Il tuo ricettario è vuoto. Chiedimi cosa posso cucinare, e lo Chef ti propone qualcosa." }));
       const [premium, used] = await Promise.all([isPremium(userId), chefUsedToday(userId)]);
-      if (!premium) return alexaResponse(more({ text: `Non trovo ${said} nel tuo ricettario. Con l'abbonamento lo Chef te la spiega a voce; dall'app puoi chiederla con i crediti.` }));
+      if (!premium) return alexaResponse(more({ text: `Non trovo ${said} nel tuo ricettario. Puoi chiederla a EcoChef nell'app.` }));
       if (used >= CHEF_DAILY_LIMIT) return alexaResponse(more({ text: "Per oggi lo Chef ha già scritto tante ricette. Riprova domani, oppure chiedila nell'app." }));
       const [, made] = await Promise.all([speakNow(ev, `Non ce l'hai nel ricettario: chiedo allo Chef come si fa ${said}.`), chefRecipe(userId, said, await loadPantry(hh))]);
       if (!made) return alexaResponse(more({ text: "Lo Chef in questo momento non risponde. Riprova tra poco." }));
@@ -2370,14 +2370,14 @@ async function skill(req: Request) {
       const what = productSaid(slot("ingrediente"));
       const titles = what ? await recipesWith(userId, what) : [];
       if (titles.length) return alexaResponse(more({ text: `Nel tuo ricettario con ${what} hai: ${listIt(titles)}. Per cominciare di' leggimi la ricetta di ${titles[0]}.` }));
-      return alexaResponse(more({ text: `Nel tuo ricettario non c'è una ricetta con ${what || "questo ingrediente"}. Lo Chef a voce è incluso nell'abbonamento; dall'app puoi usarlo con i crediti.` }));
+      return alexaResponse(more({ text: `Nel tuo ricettario non c'è una ricetta con ${what || "questo ingrediente"}. Puoi chiederne una a EcoChef nell'app.` }));
     }
     if (intent === "CookIntent" || intent === "CookWithIntent") {
       const focus = intent === "CookWithIntent" ? productSaid(slot("ingrediente")) : "";
       const [items, premium, used] = await Promise.all([loadPantry(hh), isPremium(userId), chefUsedToday(userId)]);
       if (!premium) {
         const idea = await cookIdea(userId, items);
-        return alexaResponse(more({ ...idea, text: `Lo Chef a voce è incluso nell'abbonamento; dall'app puoi usarlo con i crediti. Intanto, dal tuo ricettario: ${idea.text}` }));
+        return alexaResponse(more({ ...idea, text: `${idea.text}` }));
       }
       if (used >= CHEF_DAILY_LIMIT) {
         return alexaResponse(more({ text: "Per oggi lo Chef ha già proposto tante ricette. Riprova domani, oppure aprilo nell'app." }));

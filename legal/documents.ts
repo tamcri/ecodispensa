@@ -15,7 +15,7 @@ export const LEGAL = {
   /** Email per privacy e assistenza */
   email: "info@ecodispensa.it",
   /** Data dell'ultima modifica, mostrata in fondo ai documenti */
-  updated: "17 novembre 2026",
+  updated: "23 novembre 2026",
   /** Versioni salvate quando l'utente accetta */
   termsVersion: "2026-11-17",
   schoolConsentVersion: "scuola-2026-11-17",
@@ -91,7 +91,20 @@ const PRIVACY: LegalDoc = {
       ],
     },
     {
-      title: "5. A chi affidiamo i dati",
+      title: "5. EcoDispensa su Alexa",
+      blocks: [
+        "Se attivi la skill EcoDispensa su Alexa e colleghi il tuo account, puoi usare la dispensa a voce. È facoltativo e puoi scollegarla quando vuoi.",
+        [
+          "Cosa riceviamo da Amazon: il testo della richiesta come Alexa l'ha capita (per esempio «ho usato due uova») e un codice tecnico che collega il tuo account Alexa a quello di EcoDispensa. Non riceviamo le registrazioni della tua voce, né il tuo nome, la tua email o altri dati del tuo account Amazon.",
+          "Cosa salviamo: i codici del collegamento, solo in forma cifrata; se hai collegato Alexa dall'app, un codice di Amazon (cifrato) che ci permette di sapere se la skill è ancora attiva e di disattivarla quando scolleghi; il passaggio della ricetta che stai seguendo, per riprendere da lì (per 12 ore).",
+          "Quello che chiedi a voce modifica la tua dispensa e la tua lista come se lo facessi nell'app. Le richieste allo Chef a voce sono trattate da OpenAI come descritto sopra.",
+          "La voce è registrata ed elaborata da Amazon, come titolare autonomo, secondo l'informativa di Amazon e le impostazioni privacy dell'app Alexa, dove puoi anche ascoltare e cancellare le registrazioni.",
+          "Per scollegare: Profilo → Alexa → Scollega, oppure disattiva la skill dall'app Alexa. Cancelliamo subito i codici del collegamento.",
+        ],
+      ],
+    },
+    {
+      title: "6. A chi affidiamo i dati",
       blocks: [
         "Usiamo fornitori affidabili che trattano i dati per nostro conto, come responsabili del trattamento, solo per far funzionare l'app:",
         [
@@ -101,12 +114,12 @@ const PRIVACY: LegalDoc = {
           "Servizi di notifica del tuo dispositivo (Google, Apple, Mozilla), solo se attivi le notifiche.",
           "Open Food Facts: quando leggi un codice a barre, inviamo solo il numero del codice per trovare il nome del prodotto.",
         ],
-        "Stripe tratta i dati di pagamento come titolare autonomo, secondo la propria informativa (stripe.com/it/privacy).",
+        "Stripe tratta i dati di pagamento come titolare autonomo, secondo la propria informativa (stripe.com/it/privacy). Lo stesso vale per Amazon se usi Alexa.",
         "Quando i dati vanno fuori dall'Unione europea (Stati Uniti), il trasferimento è protetto dal Data Privacy Framework UE-USA o dalle Clausole contrattuali standard approvate dalla Commissione europea.",
       ],
     },
     {
-      title: "6. Chi può vedere i tuoi dati",
+      title: "7. Chi può vedere i tuoi dati",
       blocks: [
         [
           "Le persone della tua casa condivisa vedono dispensa, spesa e ricette comuni.",
@@ -117,7 +130,7 @@ const PRIVACY: LegalDoc = {
       ],
     },
     {
-      title: "7. Per quanto tempo li conserviamo",
+      title: "8. Per quanto tempo li conserviamo",
       blocks: [
         [
           "Finché hai l'account. Se lo elimini dal Profilo, cancelliamo subito account, dispensa, spesa, ricette, foto e crediti; le copie di sicurezza si cancellano da sole entro 30 giorni. Se condividi la casa, gli altri membri mantengono la dispensa comune.",
@@ -129,7 +142,7 @@ const PRIVACY: LegalDoc = {
       ],
     },
     {
-      title: "8. I tuoi diritti",
+      title: "9. I tuoi diritti",
       blocks: [
         "Puoi chiedere in ogni momento di accedere ai tuoi dati, correggerli, cancellarli, limitarne l'uso, riceverli in un formato leggibile (portabilità), opporti ai trattamenti basati sul legittimo interesse e revocare i consensi dati, senza conseguenze su quanto fatto prima.",
         `Puoi eliminare l'account da solo, dal Profilo → Privacy e i miei dati. Per tutto il resto scrivi a ${LEGAL.email}: rispondiamo entro 30 giorni. Poiché l'app non chiede l'email, potremmo chiederti di dimostrare che l'account è tuo (per esempio con il codice di recupero).`,
@@ -137,26 +150,26 @@ const PRIVACY: LegalDoc = {
       ],
     },
     {
-      title: "9. Minori",
+      title: "10. Minori",
       blocks: [
         "EcoDispensa è riservata ai maggiorenni. Nel Progetto Scuola l'account è sempre del genitore: non raccogliamo dati degli alunni, nemmeno il nome.",
       ],
     },
     {
-      title: "10. Sicurezza",
+      title: "11. Sicurezza",
       blocks: [
         "Le comunicazioni sono cifrate (HTTPS), le password sono salvate in forma cifrata e ogni casa può leggere solo i propri dati. Nessun sistema è sicuro al 100%: in caso di violazione dei dati informeremo il Garante e, quando previsto, anche te.",
       ],
     },
     {
-      title: "11. Modulo «Diventa partner» del sito",
+      title: "12. Modulo «Diventa partner» del sito",
       blocks: [
         "Se compili il modulo per diventare partner (Comuni, aziende, scuole), trattiamo i dati che inserisci: ente, nome e cognome, ruolo, email, telefono, città, numero indicativo di famiglie e messaggio.",
         "Li usiamo solo per risponderti e valutare insieme il progetto (misure precontrattuali, art. 6.1.b GDPR), non per newsletter o pubblicità. Li conserviamo per 24 mesi dall'ultimo contatto, salvo che nasca un accordo.",
       ],
     },
     {
-      title: "12. Modifiche",
+      title: "13. Modifiche",
       blocks: [
         "Se cambiamo questa informativa in modo importante te lo diremo nell'app. La data dell'ultima modifica è in fondo alla pagina.",
       ],
@@ -246,31 +259,43 @@ const TERMS: LegalDoc = {
       ],
     },
     {
-      title: "9. Uso corretto",
+      title: "9. EcoDispensa su Alexa",
+      blocks: [
+        [
+          "La skill EcoDispensa per Alexa è gratuita e facoltativa: per usarla colleghi il tuo account EcoDispensa dall'app Alexa o dal Profilo.",
+          "A voce puoi consultare e aggiornare dispensa, scadenze e lista della spesa, sentire le tue ricette passo passo e sapere quanto spendi e quanto butti.",
+          "Lo Chef a voce (proposte di ricette e ricette nuove) è disponibile per chi ha il piano Premium, entro un limite giornaliero, e non consuma crediti.",
+          "Valgono le stesse regole dell'app, comprese quelle sulle ricette generate dall'intelligenza artificiale. Alexa capisce a volte male: controlla nell'app quello che hai detto.",
+          "Alexa e i marchi collegati sono di Amazon.com, Inc. o delle sue affiliate. Amazon non è responsabile della skill EcoDispensa.",
+        ],
+      ],
+    },
+    {
+      title: "10. Uso corretto",
       blocks: [
         "Non puoi usare EcoDispensa per scopi illeciti, cercare di accedere ai dati di altri, sovraccaricare il servizio o aggirare limiti e pagamenti. Per proteggere il servizio ci sono limiti giornalieri all'uso dell'intelligenza artificiale. In caso di violazioni gravi possiamo sospendere o chiudere l'account.",
       ],
     },
     {
-      title: "10. I tuoi contenuti",
+      title: "11. I tuoi contenuti",
       blocks: [
         "Foto, ricette e note che inserisci restano tue. Ci autorizzi a conservarle e mostrarle solo per far funzionare l'app, per esempio quando condividi una ricetta con un link. Non caricare foto di altre persone senza il loro permesso.",
       ],
     },
     {
-      title: "11. Disponibilità e responsabilità",
+      title: "12. Disponibilità e responsabilità",
       blocks: [
         "Facciamo il possibile perché EcoDispensa funzioni sempre, ma possono esserci interruzioni, errori o modifiche alle funzioni. Rispondiamo dei danni causati da nostro dolo o colpa grave e in tutti i casi in cui la legge non permette di escludere la responsabilità; restano sempre salvi i tuoi diritti di consumatore.",
       ],
     },
     {
-      title: "12. Modifiche ai termini",
+      title: "13. Modifiche ai termini",
       blocks: [
         "Se cambiamo questi termini in modo importante te lo diremo nell'app prima che le modifiche valgano. Se non sei d'accordo puoi disdire l'abbonamento ed eliminare l'account.",
       ],
     },
     {
-      title: "13. Legge e contatti",
+      title: "14. Legge e contatti",
       blocks: [
         "Questi termini sono regolati dalla legge italiana. Per i consumatori è competente il tribunale del luogo in cui vivono.",
         `Contatti: ${contact}.`,
