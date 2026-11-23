@@ -77,7 +77,7 @@ export const FOOD_GUIDE: FoodGuideEntry[] = [
   { keys: ['zenzer'], category: F, days: 21, where: 'frigo', fresh: true, tip: 'In frigo con la buccia; si grattugia benissimo anche da congelato.' },
 
   // --- Pane e forno ---
-  { keys: ['pane ', 'baguette', 'ciabatt', 'rosett', 'filon'], category: P, days: 2, where: 'dispensa', fresh: true, tip: 'Se non lo finisci, affettalo e congelalo: si scongela in pochi minuti o direttamente nel tostapane.' },
+  { keys: ['pane ', 'panin', 'pagnott', 'baguette', 'ciabatt', 'rosett', 'filon', 'michett', 'francesin', 'tartarug'], category: P, days: 2, where: 'dispensa', fresh: true, tip: 'Se non lo finisci, affettalo e congelalo: si scongela in pochi minuti o direttamente nel tostapane.' },
   { keys: ['focacc', 'pizza'], category: P, days: 2, where: 'dispensa', fresh: true, tip: 'Avvolta nella carta e poi in un sacchetto; il giorno dopo ripassala in forno.' },
   { keys: ['cornett', 'brioche', 'croissant', 'pasticcin'], category: P, days: 2, where: 'dispensa', fresh: true, tip: 'Si congelano bene: scaldali qualche minuto in forno.' },
 
@@ -122,13 +122,20 @@ export function findFoodGuide(name: string): FoodGuideEntry | null {
   const n = normalizeFoodName(name);
   if (n.trim().length < 2) return null;
   if (PROCESSED.some((w) => n.includes(w))) return null;
+  // la chiave deve iniziare una parola del nome; se ne trovo più d'una vince quella che viene prima
+  // ("ciabatta alla patata" è pane, non patate)
+  let best: FoodGuideEntry | null = null;
+  let at = Infinity;
   for (const entry of FOOD_GUIDE) {
     for (const key of entry.keys) {
-      // la chiave deve iniziare una parola del nome
-      if (n.includes(` ${key}`)) return entry;
+      const i = n.indexOf(` ${key}`);
+      if (i >= 0 && i < at) {
+        best = entry;
+        at = i;
+      }
     }
   }
-  return null;
+  return best;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');

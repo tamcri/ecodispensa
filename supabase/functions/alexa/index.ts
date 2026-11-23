@@ -387,7 +387,8 @@ type Out = {
 const alexaResponse = (o: Out) =>
   json({
     version: "1.0",
-    ...(o.attrs ? { sessionAttributes: o.attrs } : {}),
+    // sempre: senza, Alexa si ricorda la lista o la ricetta di prima anche quando sono finite
+    sessionAttributes: o.attrs ?? {},
     response: {
       outputSpeech: { type: "PlainText", text: o.text },
       ...(o.reprompt ? { reprompt: { outputSpeech: { type: "PlainText", text: o.reprompt } } } : {}),
@@ -478,7 +479,7 @@ const GUIDE: Array<[string[], string, number, boolean]> = [
   [["cipoll", "scalogn"], "Ortofrutta", 30, true],
   [["agli"], "Ortofrutta", 30, true],
   [["zenzer"], "Ortofrutta", 21, true],
-  [["pane ", "baguette", "ciabatt", "rosett", "filon"], "Dispensa", 2, true],
+  [["pane ", "panin", "pagnott", "baguette", "ciabatt", "rosett", "filon", "michett", "francesin", "tartarug"], "Dispensa", 2, true],
   [["focacc", "pizza"], "Dispensa", 2, true],
   [["cornett", "brioche", "croissant", "pasticcin"], "Dispensa", 2, true],
   [["macinat", "hamburger", "polpett"], "Carne & Pesce", 1, true],
@@ -503,8 +504,18 @@ const foodNorm = (name: string) => ` ${norm(name).replace(/[^a-z0-9 ]+/g, " ").r
 function guideFor(name: string) {
   const n = foodNorm(name);
   if (n.trim().length < 2 || PROCESSED.some((w) => n.includes(w))) return null;
-  for (const g of GUIDE) for (const k of g[0]) if (n.includes(` ${k}`)) return { category: g[1], days: g[2], fresh: g[3] };
-  return null;
+  // vince la parola che viene prima nel nome: "ciabatta alla patata" è pane, non patate
+  let best: (typeof GUIDE)[number] | null = null;
+  let at = Infinity;
+  for (const g of GUIDE)
+    for (const k of g[0]) {
+      const i = n.indexOf(` ${k}`);
+      if (i >= 0 && i < at) {
+        best = g;
+        at = i;
+      }
+    }
+  return best ? { category: best[1], days: best[2], fresh: best[3] } : null;
 }
 const looksProcessed = (name: string) => PROCESSED.some((w) => foodNorm(name).includes(w));
 const isoInDays = (days: number) => {
@@ -835,7 +846,23 @@ async function saveShopping(userId: string, householdId: string, parts: Said[]):
 const PANTRY_WORDS = /\b(pasta|spaghett|penne|fusill|rigaton|linguine|tagliatell|maccheron|riso|farina|zucchero|sale|olio|aceto|caffe|te\b|tisan|biscott|cracker|grissin|fette biscottate|cereali|tonno|pelati|passata|legumi|ceci|fagiol|lenticch|marmellat|miele|nutella|cioccolat|pane in cassetta|pancarre)/;
 
 /** "Aggiungi 500 grammi di spaghetti in dispensa": prodotti nuovi, con categoria e scadenza stimata se freschi */
-async function addToPantry(userId: string, text: string): Promise<Out> {
+const sameName = (a: string, b: string) => norm(a) === norm(b) || (matchScore(a, b) >= 1 && matchScore(b, a) >= 1);
+
+/** Se c'è già lo stesso prodotto con la stessa scadenza, unisco le quantità (true se l'ho unito) */
+async function mergeIntoExisting(hh: string, id: string): Promise<boolean> {
+  const { data: me } = await db.from("pantry_items").select("id, name, quantity, unit, expiry_date").eq("id", id).eq("household_id", hh).maybeSingle();
+  if (!me) return false;
+  const { data: others } = await db.from("pantry_items").select("id, name, quantity, unit, expiry_date").eq("household_id", hh).neq("id", id);
+  const twin = (others ?? []).find(
+    (o: any) => sameName(o.name, me.name) && unitKey(o.unit) === unitKey(me.unit) && (o.expiry_date ?? null) === (me.expiry_date ?? null)
+  );
+  if (!twin) return false;
+  await db.from("pantry_items").update({ quantity: Number(twin.quantity) + Number(me.quantity) }).eq("id", twin.id);
+  await db.from("pantry_items").delete().eq("id", me.id);
+  return true;
+}
+
+async function addToPantry(userId: string, hh: string, text: string): Promise<Out> {
   const parts = splitParts(text).map(parsePart).filter((p): p is Said => !!p);
   if (!parts.length) return ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti.");
   const rows: any[] = [];
@@ -857,6 +884,8 @@ async function addToPantry(userId: string, text: string): Promise<Out> {
     console.error("alexa add pantry:", error.message);
     return { text: "Non sono riuscito ad aggiungerli. Riprova tra poco." };
   }
+  // quelli con la scadenza stimata: se c'era già lo stesso prodotto con la stessa data, una sola voce
+  for (const r of saved ?? []) if (r.expiry_date) await mergeIntoExisting(hh, r.id);
   // per i prodotti senza scadenza stimata la chiedo, uno alla volta
   const pending = (saved ?? []).filter((r: any) => !r.expiry_date).map((r: any) => ({ id: r.id, name: r.name }));
   const done = `Ho aggiunto in dispensa ${listIt(said)}.`;
@@ -1288,8 +1317,17 @@ const TIPS: Array<[string[], string, number, string]> = [
 
 const tipFor = (name: string) => {
   const n = foodNorm(name);
-  for (const t of TIPS) for (const k of t[0]) if (n.includes(` ${k}`)) return t;
-  return null;
+  let best: (typeof TIPS)[number] | null = null;
+  let at = Infinity;
+  for (const t of TIPS)
+    for (const k of t[0]) {
+      const i = n.indexOf(` ${k}`);
+      if (i >= 0 && i < at) {
+        best = t;
+        at = i;
+      }
+    }
+  return best;
 };
 
 const WHERE_IT: Record<string, string> = { frigo: "meglio in frigo", dispensa: "meglio fuori dal frigo, in dispensa", freezer: "in freezer" };
@@ -1638,22 +1676,18 @@ async function speakNow(ev: any, speech: string) {
 async function chefProposals(userId: string, items: Item[], focus = ""): Promise<ChefRecipe[] | null> {
   const today = items.filter((i) => (daysLeft(i.expiry_date) ?? 99) >= 0);
   const soon = today.filter((i) => (daysLeft(i.expiry_date) ?? 99) <= 3).map((i) => i.name);
-  const pantry = today.slice(0, 80).map((i) => `- ${i.name} (${numIt(i.quantity)} ${i.unit})`).join("\n");
+  const pantry = [...new Set(today.slice(0, 70).map((i) => i.name))].join(", ");
+  // risposta corta: Alexa aspetta al massimo 8 secondi. Quantità e procedimento arrivano dopo la scelta.
   const prompt = `Sei EcoChef, chef di cucina italiana quotidiana e anti-spreco.
-Proponi 3 ricette diverse tra loro (per esempio un primo, un secondo e un'alternativa veloce) per 2 persone, da fare con soprattutto gli ingredienti della dispensa, dando la precedenza a quelli in scadenza.${focus ? `\nOgni ricetta deve usare come ingrediente principale: ${focus}.` : ""}
-Titoli brevi e riconoscibili, da leggere ad alta voce (massimo 6 parole, niente virgolette).
-"ingredientsUsed": solo ingredienti presenti nella dispensa, con quantità per la ricetta.
-"missingIngredients": gli ingredienti necessari che NON sono in dispensa, con quantità indicativa (es. "200 g spaghetti", "1 spicchio aglio"); sale, olio e acqua solo se non ci sono.
-Niente ingredienti scaduti. Ricette realistiche e coerenti.
-
-DISPENSA:
-${pantry || "vuota"}
-${soon.length ? `\nIN SCADENZA (da usare per primi): ${soon.join(", ")}` : ""}`;
+Proponi 3 ricette diverse tra loro (un primo, un secondo e un'alternativa veloce) per 2 persone, con soprattutto gli ingredienti della dispensa, dando la precedenza a quelli in scadenza.${focus ? `\nOgni ricetta deve usare come ingrediente principale: ${focus}.` : ""}
+Per ogni ricetta: "title" breve e riconoscibile da leggere ad alta voce (massimo 5 parole, niente virgolette); "uses" i nomi degli ingredienti della dispensa che usa (massimo 6); "missing" i nomi degli ingredienti che mancano (massimo 3; sale, olio e acqua no).
+Ricette realistiche, niente ingredienti scaduti.
+DISPENSA: ${pantry || "vuota"}${soon.length ? `\nIN SCADENZA: ${soon.join(", ")}` : ""}`;
   const data = await openai(
     {
       model: CHEF_MODEL,
       input: prompt,
-      max_output_tokens: 900,
+      max_output_tokens: 320,
       text: {
         format: {
           type: "json_schema",
@@ -1669,25 +1703,12 @@ ${soon.length ? `\nIN SCADENZA (da usare per primi): ${soon.join(", ")}` : ""}`;
                 items: {
                   type: "object",
                   additionalProperties: false,
-                  required: ["title", "course", "difficulty", "time", "servings", "description", "expiresSoonUsed", "ingredientsUsed", "missingIngredients"],
+                  required: ["title", "course", "uses", "missing"],
                   properties: {
                     title: { type: "string" },
                     course: { type: "string", enum: ["primo", "secondo", "contorno", "dolce", "altro"] },
-                    difficulty: { type: "string", enum: ["Facile", "Media", "Difficile"] },
-                    time: { type: "string" },
-                    servings: { type: "integer" },
-                    description: { type: "string" },
-                    expiresSoonUsed: { type: "array", items: { type: "string" } },
-                    ingredientsUsed: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        additionalProperties: false,
-                        required: ["name", "quantity", "unit"],
-                        properties: { name: { type: "string" }, quantity: { type: "number" }, unit: { type: "string" } },
-                      },
-                    },
-                    missingIngredients: { type: "array", items: { type: "string" } },
+                    uses: { type: "array", items: { type: "string" } },
+                    missing: { type: "array", items: { type: "string" } },
                   },
                 },
               },
@@ -1696,20 +1717,35 @@ ${soon.length ? `\nIN SCADENZA (da usare per primi): ${soon.join(", ")}` : ""}`;
         },
       },
     },
-    6000
+    7000
   );
   if (!data) return null;
   await logUsage(userId, "alexa_chef", data);
   try {
     const out = JSON.parse(outputText(data));
-    const recipes = (Array.isArray(out?.recipes) ? out.recipes : []).filter((r: any) => typeof r?.title === "string" && r.title.trim()).slice(0, 3);
+    const recipes = (Array.isArray(out?.recipes) ? out.recipes : [])
+      .filter((r: any) => typeof r?.title === "string" && r.title.trim())
+      .slice(0, 3)
+      .map(
+        (r: any): ChefRecipe => ({
+          title: r.title.trim(),
+          course: r.course,
+          difficulty: "Facile",
+          time: "",
+          servings: 2,
+          description: "",
+          expiresSoonUsed: (r.uses ?? []).filter((u: string) => soon.some((s) => matchScore(u, s) > 0.5 || matchScore(s, u) > 0.5)),
+          ingredientsUsed: (r.uses ?? []).map((u: string) => ({ name: u, quantity: 0, unit: "" })),
+          missingIngredients: (r.missing ?? []).filter((x: any) => typeof x === "string" && x.trim()),
+        })
+      );
     return recipes.length ? recipes : null;
   } catch {
     return null;
   }
 }
 
-/** Salva la ricetta scelta nel ricettario e prepara il procedimento in sottofondo */
+/** Salva la ricetta scelta nel ricettario e la completa in sottofondo (quantità, tempi, procedimento) */
 async function saveChefRecipe(userId: string, r: ChefRecipe): Promise<void> {
   const recipe = { ...r, steps: [] as string[] };
   const { data: row, error } = await db
@@ -1735,28 +1771,67 @@ async function saveChefRecipe(userId: string, r: ChefRecipe): Promise<void> {
     return;
   }
   const work = (async () => {
-    const ings = [...r.ingredientsUsed.map((i) => `${numIt(i.quantity)} ${i.unit} ${i.name}`), ...r.missingIngredients].join(", ");
+    const have = r.ingredientsUsed.map((i) => i.name).join(", ");
     const data = await openai(
       {
         model: CHEF_MODEL,
-        input: `Sei EcoChef. Scrivi il procedimento della ricetta "${r.title}" (${r.servings} persone) con questi ingredienti: ${ings}.
-Almeno 7 passaggi pratici e ordinati, ognuno autonomo e concreto, con tempi, fiamma, temperatura o segnali visivi quando serve. L'ultimo spiega come servire.`,
+        input: `Sei EcoChef. Completa la ricetta "${r.title}" per ${r.servings} persone.
+Ingredienti che l'utente ha in dispensa: ${have || "nessuno"}. Ingredienti da comprare: ${r.missingIngredients.join(", ") || "nessuno"}.
+"ingredientsUsed": quelli della dispensa con la quantità per la ricetta (unità g, ml, pz…); "missingIngredients": quelli da comprare con quantità indicativa (es. "200 g guanciale").
+"steps": almeno 7 passaggi pratici e ordinati, ognuno autonomo e concreto, con tempi, fiamma, temperatura o segnali visivi quando serve; l'ultimo spiega come servire. Scritti per essere letti ad alta voce.
+"description" una frase; "time" per esempio "25 minuti".`,
         text: {
           format: {
             type: "json_schema",
-            name: "steps",
+            name: "ricetta",
             strict: true,
-            schema: { type: "object", additionalProperties: false, required: ["steps"], properties: { steps: { type: "array", items: { type: "string" } } } },
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["description", "difficulty", "time", "ingredientsUsed", "missingIngredients", "steps"],
+              properties: {
+                description: { type: "string" },
+                difficulty: { type: "string", enum: ["Facile", "Media", "Difficile"] },
+                time: { type: "string" },
+                ingredientsUsed: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["name", "quantity", "unit"],
+                    properties: { name: { type: "string" }, quantity: { type: "number" }, unit: { type: "string" } },
+                  },
+                },
+                missingIngredients: { type: "array", items: { type: "string" } },
+                steps: { type: "array", items: { type: "string" } },
+              },
+            },
           },
         },
       },
-      40000
+      45000
     );
     if (!data) return;
     await logUsage(userId, "recipes", data);
     try {
-      const steps = (JSON.parse(outputText(data))?.steps ?? []).filter((x: any) => typeof x === "string" && x.trim());
-      if (steps.length) await db.from("recipes_saved").update({ steps, recipe_json: { ...recipe, steps } }).eq("id", row.id);
+      const full = JSON.parse(outputText(data));
+      const steps = (full?.steps ?? []).filter((x: any) => typeof x === "string" && x.trim());
+      if (!steps.length) return;
+      const ingredientsUsed = Array.isArray(full.ingredientsUsed) && full.ingredientsUsed.length ? full.ingredientsUsed : r.ingredientsUsed;
+      const missingIngredients = Array.isArray(full.missingIngredients) ? full.missingIngredients : r.missingIngredients;
+      const done = { ...recipe, description: full.description ?? "", difficulty: full.difficulty ?? "Facile", time: full.time ?? "", ingredientsUsed, missingIngredients, steps };
+      await db
+        .from("recipes_saved")
+        .update({
+          steps,
+          description: done.description,
+          difficulty: done.difficulty,
+          time: done.time,
+          ingredients_used: ingredientsUsed,
+          missing_ingredients: missingIngredients,
+          recipe_json: done,
+        })
+        .eq("id", row.id);
     } catch {
       /* il procedimento si può rigenerare dall'app */
     }
@@ -1894,10 +1969,10 @@ async function chefRecipe(userId: string, title: string, items: Item[]): Promise
     {
       model: CHEF_MODEL,
       input: `Sei EcoChef, chef di cucina italiana. Scrivi la ricetta "${title}" per 2 persone, da leggere ad alta voce mentre si cucina.
-Massimo 8 passaggi, ognuno una o due frasi brevi e pratiche (tempi e fiamma quando servono).
+Massimo 7 passaggi, ognuno una frase breve e pratica (tempi e fiamma quando servono). "description" una frase corta.
 "ingredientsUsed": gli ingredienti che l'utente ha già in dispensa; "missingIngredients": gli altri, con quantità indicativa (es. "200 g guanciale").
 In dispensa ha: ${pantry || "niente"}.`,
-      max_output_tokens: 650,
+      max_output_tokens: 520,
       text: {
         format: {
           type: "json_schema",
@@ -1930,7 +2005,7 @@ In dispensa ha: ${pantry || "niente"}.`,
         },
       },
     },
-    6500
+    7000
   );
   if (!data) return null;
   await logUsage(userId, "alexa_chef", data);
@@ -2075,7 +2150,7 @@ async function skill(req: Request) {
         const next = [...list, ...parts].slice(0, 60);
         // risposta corta: Alexa riascolta subito
         return alexaResponse({
-          text: `Segnato ${listIt(parts.map((p) => p.name))}.`,
+          text: parts.length > 1 ? "Ok, segnati." : "Ok.",
           reprompt: "Altro? Quando hai finito di' chiudi lista.",
           end: false,
           attrs: { list: next },
@@ -2140,7 +2215,7 @@ async function skill(req: Request) {
 
     if (intent === "StartListIntent") {
       return alexaResponse({
-        text: "Va bene, dimmi cosa serve. Quando hai finito di' chiudi lista.",
+        text: "Dimmi cosa serve, anche più prodotti insieme. Quando hai finito di' chiudi lista.",
         reprompt: "Dimmi i prodotti, per esempio: latte, pane e sei uova. Quando hai finito di' chiudi lista.",
         end: false,
         attrs: { list: [] },
@@ -2154,8 +2229,9 @@ async function skill(req: Request) {
         const iso = expiryFrom(slot("data"), slot("giorni"));
         if (!iso) return alexaResponse(askExpiry(pending, "Non ho capito la data."));
         await db.from("pantry_items").update({ expiry_date: iso }).eq("id", pending[0].id).eq("household_id", hh);
+        const merged = await mergeIntoExisting(hh, pending[0].id);
         const rest = pending.slice(1);
-        const ok = `Va bene, ${lower(pending[0].name)} scade il ${dateIt(iso)}.`;
+        const ok = `Va bene, ${lower(pending[0].name)} scade il ${dateIt(iso)}.${merged ? " Li ho uniti a quelli che avevi già con la stessa scadenza." : ""}`;
         return alexaResponse(rest.length ? askExpiry(rest, ok) : more({ text: ok }));
       }
       if (intent === "AMAZON.NoIntent" || intent === "AMAZON.FallbackIntent") {
@@ -2207,7 +2283,7 @@ async function skill(req: Request) {
       const what = slot("prodotto");
       if (!what) return alexaResponse(ask("Cosa aggiungo in dispensa?", "Per esempio: 500 grammi di spaghetti."));
       if (ALL_WORDS.test(norm(what))) return alexaResponse(await askBoughtAll(hh));
-      const out = await addToPantry(userId, what);
+      const out = await addToPantry(userId, hh, what);
       await dropFromList(hh, what);
       return alexaResponse(out.end === false ? out : more(out));
     }
