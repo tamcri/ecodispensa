@@ -17,7 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { openApp, PrimaryButton, SiteLink } from "./SiteApp";
-import { HomeScreen, PantryScreen, PaperReceipt, Phone, ReceiptScreen, RecipeScreen } from "./PhoneMockups";
+import { PaperReceipt, Phone, Screen } from "./PhoneMockups";
 
 /** Colori del sito: più decisi dell'app, stessa famiglia */
 export const C = {
@@ -46,9 +46,9 @@ export const H2 = ({ children, light = false, className = "" }: { children: Reac
 );
 
 const STEPS = [
-  { title: "Fotografi lo scontrino", text: "O detti la spesa a voce. I prodotti entrano in dispensa con prezzo e scadenza.", screen: <ReceiptScreen /> },
-  { title: "Vedi cosa scade", text: "Ogni prodotto ha i suoi giorni. La mattina ti arriva l'avviso di cosa usare.", screen: <PantryScreen /> },
-  { title: "Cucini quello che hai", text: "EcoChef propone ricette partendo da ciò che scade prima, per le persone che vuoi.", screen: <RecipeScreen /> },
+  { title: "Fotografi lo scontrino", text: "O detti la spesa a voce. I prodotti entrano in dispensa con prezzo e scadenza.", screen: <Screen name="scontrino" alt="EcoDispensa: fotografa lo scontrino o sceglilo dalla galleria" /> },
+  { title: "Vedi cosa scade", text: "Ogni prodotto ha i suoi giorni. La mattina ti arriva l'avviso di cosa usare.", screen: <Screen name="dispensa" alt="EcoDispensa: la dispensa con i prodotti da usare subito" /> },
+  { title: "Cucini quello che hai", text: "EcoChef propone ricette partendo da ciò che scade prima, per le persone che vuoi.", screen: <Screen name="ecochef" alt="EcoChef propone 3 ricette partendo da quello che scade prima" /> },
 ];
 
 const FEATURES = [
@@ -175,7 +175,7 @@ export const SiteHome = () => (
 
         <div className="relative mx-auto h-[600px] w-[300px] md:mr-0 md:h-[640px] md:w-[320px]">
           <Phone className="absolute inset-0">
-            <HomeScreen animate />
+            <Screen name="oggi" alt="EcoDispensa, schermata Oggi: 7 prodotti scadono entro 3 giorni" eager />
           </Phone>
           <PaperReceipt className="absolute -left-56 top-28 hidden md:block" />
         </div>
