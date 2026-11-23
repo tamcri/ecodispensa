@@ -43,7 +43,8 @@ export const SiteGuide = () => (
           id={id}
           className="scroll-mt-20 rounded-[28px] border-2 border-[#14231A]/10 bg-white p-6 md:p-9"
         >
-          <div className={shots?.length ? "flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10" : ""}>
+          {/* una schermata: accanto al testo; più schermate: in fila sotto il testo */}
+          <div className={shots?.length === 1 ? "flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10" : ""}>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F3F6EE] text-[#2F7D3A]">
@@ -64,13 +65,18 @@ export const SiteGuide = () => (
               </ol>
               {tip && <p className="mt-5 max-w-prose rounded-2xl bg-[#F3F6EE] p-4 text-[14px] leading-relaxed text-[#3D4A3B]">{tip}</p>}
             </div>
-            {shots?.length ? (
-              <div className="-mx-6 flex snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-2 md:-mx-9 md:px-9 lg:mx-0 lg:max-w-[500px] lg:flex-wrap lg:justify-end lg:overflow-visible lg:px-0">
+            {shots?.length === 1 && (
+              <div className="flex justify-center lg:justify-end">
+                <Phone s={shots[0]} />
+              </div>
+            )}
+            {shots && shots.length > 1 && (
+              <div className="-mx-6 mt-8 flex snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-2 md:-mx-9 md:justify-center md:px-9">
                 {shots.map((s) => (
                   <Phone key={s.src} s={s} />
                 ))}
               </div>
-            ) : null}
+            )}
           </div>
         </section>
       ))}
